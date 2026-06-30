@@ -1,0 +1,200 @@
+import { formatDistance, formatEta, geocode, getRoute, LngLat, RouteResult } from '@/lib/utils/directions';
+import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import Mapbox from '@rnmapbox/maps';
+import * as Location from 'expo-location';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
+import { Button, Icon, IconButton, MD3Theme, Text, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+Mapbox.setAccessToken('pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA');
+
+const TEAL = '#0E6E73';
+
+export default function RoutePreview() {
+    const theme = useTheme();
+    const colorScheme = useColorScheme();
+    const styles = getStyles(theme);
+    const mapStyle = colorScheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
+
+    const { destination } = useLocalSearchParams<{ destination?: string }>();
+
+    const [from, setFrom] = useState<LngLat | null>(null);
+    const [to, setTo] = useState<LngLat | null>(null);
+    const [route, setRoute] = useState<RouteResult | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        let active = true;
+        (async () => {
+            try {
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    setError('Location permission is needed to generate a route.');
+                    return;
+                }
+                const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                const origin: LngLat = [pos.coords.longitude, pos.coords.latitude];
+                if (!active) return;
+                setFrom(origin);
+
+                const dest = await geocode(destination ?? '', origin);
+                if (!active) return;
+                if (!dest) {
+                    setError(`Couldn't find "${destination}". Try a more specific place.`);
+                    return;
+                }
+                setTo(dest);
+
+                const r = await getRoute(origin, dest);
+                if (!active) return;
+                if (!r) {
+                    setError("Couldn't generate a route to that destination.");
+                    return;
+                }
+                setRoute(r);
+            } catch {
+                if (active) setError('Something went wrong generating the route.');
+            } finally {
+                if (active) setLoading(false);
+            }
+        })();
+        return () => {
+            active = false;
+        };
+    }, [destination]);
+
+    const lineShape = useMemo(
+        () =>
+            route
+                ? { type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: route.coordinates } }
+                : null,
+        [route]
+    );
+
+    const bounds = useMemo(() => {
+        if (!route || route.coordinates.length === 0) return null;
+        const lons = route.coordinates.map(c => c[0]);
+        const lats = route.coordinates.map(c => c[1]);
+        return {
+            ne: [Math.max(...lons), Math.max(...lats)] as LngLat,
+            sw: [Math.min(...lons), Math.min(...lats)] as LngLat,
+        };
+    }, [route]);
+
+    return (
+        <SafeAreaView style={styles.safe} edges={['top']}>
+            <View style={styles.header}>
+                <IconButton icon="chevron-left" size={sizes.size32} onPress={() => router.back()} />
+                <Text style={styles.headerTitle}>Route Preview</Text>
+                <View style={{ width: sizes.size48 }} />
+            </View>
+
+            <View style={styles.mapWrap}>
+                <Mapbox.MapView style={StyleSheet.absoluteFill} styleURL={mapStyle} logoEnabled={false} attributionEnabled={false}>
+                    <Mapbox.Camera
+                        bounds={bounds ? { ne: bounds.ne, sw: bounds.sw, paddingLeft: 40, paddingRight: 40, paddingTop: 60, paddingBottom: 60 } : undefined}
+                        followUserLocation={!route}
+                        followZoomLevel={14}
+                    />
+                    <Mapbox.LocationPuck />
+                    {lineShape && (
+                        <Mapbox.ShapeSource id="routeSource" shape={lineShape}>
+                            <Mapbox.LineLayer
+                                id="routeLine"
+                                style={{ lineColor: TEAL, lineWidth: 5, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                        </Mapbox.ShapeSource>
+                    )}
+                    {to && (
+                        <Mapbox.PointAnnotation id="dest" coordinate={to}>
+                            <Icon source="map-marker" size={sizes.size32} color="#DC2626" />
+                        </Mapbox.PointAnnotation>
+                    )}
+                </Mapbox.MapView>
+
+                {loading && (
+                    <View style={styles.mapOverlay}>
+                        <ActivityIndicator color={TEAL} />
+                        <Text style={styles.overlayText}>Generating shortest route…</Text>
+                    </View>
+                )}
+                {!loading && error !== '' && (
+                    <View style={styles.mapOverlay}>
+                        <Icon source="alert-circle-outline" size={sizes.size32} color={theme.colors.error} />
+                        <Text style={styles.overlayText}>{error}</Text>
+                    </View>
+                )}
+            </View>
+
+            <View style={styles.footer}>
+                <View style={styles.etaRow}>
+                    <View style={styles.etaItem}>
+                        <Text style={styles.etaValue}>{route ? formatEta(route.durationSec) : '—'}</Text>
+                        <Text style={styles.etaLabel}>ETA</Text>
+                    </View>
+                    <View style={styles.etaDivider} />
+                    <View style={styles.etaItem}>
+                        <Text style={styles.etaValue}>{route ? formatDistance(route.distanceM) : '—'}</Text>
+                        <Text style={styles.etaLabel}>Distance</Text>
+                    </View>
+                </View>
+
+                <Button
+                    mode="contained"
+                    buttonColor={TEAL}
+                    textColor="#ffffff"
+                    style={styles.button}
+                    contentStyle={styles.buttonContent}
+                    labelStyle={styles.buttonLabel}
+                    disabled={!route}
+                    onPress={() =>
+                        router.push({
+                            pathname: '/main/(tabs)/record',
+                            params: from && to ? { destination: destination ?? '', etaSec: String(route?.durationSec ?? 0) } : {},
+                        })
+                    }
+                >
+                    Start Trip
+                </Button>
+            </View>
+        </SafeAreaView>
+    );
+}
+
+const getStyles = (theme: MD3Theme) =>
+    StyleSheet.create({
+        safe: { flex: 1, backgroundColor: theme.colors.background },
+        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: sizes.small },
+        headerTitle: { flex: 1, textAlign: 'center', fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.regular, color: theme.colors.onBackground },
+        mapWrap: { flex: 1, overflow: 'hidden' },
+        mapOverlay: {
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(255,255,255,0.7)',
+            gap: sizes.small,
+            padding: sizes.large,
+        },
+        overlayText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tinyPlus, color: theme.colors.onSurface, textAlign: 'center' },
+        footer: { padding: sizes.large, backgroundColor: theme.colors.background },
+        etaRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.colors.surface,
+            borderRadius: sizes.medium,
+            borderWidth: 1,
+            borderColor: theme.colors.outlineVariant ?? '#E2E8F0',
+            paddingVertical: sizes.medium,
+            marginBottom: sizes.medium,
+        },
+        etaItem: { flex: 1, alignItems: 'center' },
+        etaDivider: { width: 1, alignSelf: 'stretch', backgroundColor: theme.colors.outlineVariant ?? '#E2E8F0' },
+        etaValue: { fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.regular, color: theme.colors.onSurface },
+        etaLabel: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onSurfaceVariant, marginTop: 2 },
+        button: { borderRadius: sizes.small },
+        buttonContent: { height: sizes.size56 },
+        buttonLabel: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small },
+    });

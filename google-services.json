@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "512393055743",
+    "project_id": "thesis-67",
+    "storage_bucket": "thesis-67.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:512393055743:android:5aa2d38043a5817a12abca",
+        "android_client_info": {
+          "package_name": "com.samg.devia"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "512393055743-eqru3fnfafrg0gfle1khpt330sje6tca.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjGqtm0gjwa3jHKPxjmzRi1Ey0XtshJL0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "512393055743-eqru3fnfafrg0gfle1khpt330sje6tca.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
