@@ -11,7 +11,7 @@ const compat = new FlatCompat({
 module.exports = defineConfig([
   ...compat.extends('eslint-config-expo'),
   {
-    ignores: ['dist/*'],
+    ignores: ['dist/*', 'admin-web/**'],
     rules: {
       'react-hooks/exhaustive-deps': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
