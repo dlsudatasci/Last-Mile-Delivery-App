@@ -1,0 +1,787 @@
+import OpenCameraView from '@/components/camera/CameraView';
+import SpinningWheel from '@/components/common/SpinningWheel';
+import MapRender from '@/components/map/MapRender';
+import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
+import { getAsyncFlag, useRideStore } from '@/lib/store/useRideStore';
+import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, AppState, StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+    Button,
+    Icon,
+    IconButton,
+    MD3Theme,
+    Modal,
+    Portal,
+    Surface,
+    Text,
+    useTheme,
+} from 'react-native-paper';
+
+export default function Record() {
+    const theme = useTheme();
+
+    const navigation = useNavigation();
+    const [reportModalVisible, setReportModalVisible] = useState(false);
+    const [annotation, setAnnotation] = useState<PredefinedAnnotation | null>(null);
+    const [reportDescription, setReportDescription] = useState('');
+    const [reportMedia, setReportMedia] = useState<{ type: 'image' | 'video'; uri: string } | null>(null);
+    const [showCamera, setShowCamera] = useState(false);
+
+    // variables for saving ride
+    const [isSaving, setIsSaving] = useState(false);
+    const [progressText, setProgressText] = useState('Preparing trip data...');
+    const [error, setError] = useState(false);
+
+    const {
+        isRecording,
+        isPaused,
+        startTime,
+        totalDistance,
+        currentSpeed,
+        duration,
+        points,
+        startRide,
+        pauseRide,
+        resumeRide,
+        finishRide,
+        increaseDuration,
+        resetRide,
+        addAnnotation,
+        setRecording,
+    } = useRideStore();
+
+    // const [duration, setDuration] = useState(0);
+    const [appState, setAppState] = useState(AppState.currentState);
+    const [hasBackgroundPermission, setHasBackgroundPermission] = useState<boolean | null>(null);
+
+    // ETA generated on the Route Preview screen; counts down as the trip runs.
+    const { etaSec } = useLocalSearchParams<{ etaSec?: string; destination?: string }>();
+    const etaTotalSec = Number(etaSec ?? 0);
+    const etaRemainingSec = etaTotalSec > 0 ? Math.max(0, etaTotalSec - duration) : 0;
+    const autoStartedRef = useRef(false);
+
+    // Timer effect for duration
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (isRecording && !isPaused && startTime) {
+            interval = setInterval(() => increaseDuration(), 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isRecording, isPaused, startTime]);
+
+    // Check background location permission on mount
+    useEffect(() => {
+        (async () => {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                console.error('Location permission not granted');
+                return;
+            }
+
+            const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+            if (backgroundStatus !== 'granted') {
+                console.error('Background location permission not granted');
+                return;
+            }
+
+            setHasBackgroundPermission(backgroundStatus === 'granted');
+        })();
+    }, []);
+
+    // State recovery effect - sync AsyncStorage with Zustand state
+    useEffect(() => {
+        (async () => {
+            try {
+                const asyncIsRecording = await getAsyncFlag('isRecording');
+                const asyncIsPaused = await getAsyncFlag('isPaused');
+
+                // If AsyncStorage says we're recording but Zustand state doesn't match, sync them
+                if (asyncIsRecording !== isRecording || asyncIsPaused !== isPaused) {
+                    console.log('State mismatch detected, syncing...');
+                    setRecording(asyncIsRecording);
+
+                    // If AsyncStorage says we're recording but Zustand says we're not,
+                    // we need to check if location updates are actually running
+                    if (asyncIsRecording && !isRecording) {
+                        const isLocationRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
+                        if (!isLocationRunning) {
+                            // Location updates aren't running, so reset the state
+                            console.log('Location updates not running, resetting state');
+                            await resetRide();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error during state recovery:', error);
+            }
+        })();
+    }, []);
+
+    // Listen for app state changes
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', async nextAppState => {
+            if (appState.match(/active/) && nextAppState.match(/inactive|background/) && isRecording && !isPaused) {
+                // Check permission again in case it changed
+                const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+                if (backgroundStatus !== 'granted') {
+                    const result = await pauseRide();
+                    if (!result) {
+                        console.error('Failed to pause ride');
+                    }
+                }
+            }
+            setAppState(nextAppState);
+        });
+        return () => subscription.remove();
+    }, [appState, isRecording, isPaused, pauseRide]);
+
+    const formatDuration = (seconds: number) => {
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs
+            .toString()
+            .padStart(2, '0')}`;
+    };
+
+    const formatEta = (seconds: number) => {
+        if (etaTotalSec <= 0) return '—';
+        if (seconds <= 0) return 'Arriving';
+        if (seconds < 3600) return `${Math.ceil(seconds / 60)} min`;
+        return `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+    };
+
+    const handleStart = async () => {
+        try {
+            // Check permissions before starting
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert(
+                    'Location Permission Required',
+                    'Devia needs location permission to record your trip. Please enable it in your device settings.',
+                    [{ text: 'OK' }]
+                );
+                return;
+            }
+
+            const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+            if (backgroundStatus !== 'granted') {
+                Alert.alert(
+                    'Background Location Permission Required',
+                    'Devia needs background location permission to continue recording the trip when the app is in the background.',
+                    [{ text: 'OK' }]
+                );
+                return;
+            }
+
+            const result = await startRide();
+            if (!result) {
+                Alert.alert('Failed to Start Recording', 'Unable to start location tracking. Please try again.', [
+                    { text: 'OK' },
+                ]);
+            }
+        } catch (error) {
+            console.error('Error starting ride:', error);
+            Alert.alert('Error', 'An unexpected error occurred while starting the ride. Please try again.', [
+                { text: 'OK' },
+            ]);
+        }
+    };
+
+    // The trip was already confirmed on Route Preview ("Start Trip"), so begin
+    // recording automatically on entry — no need for a second Start button.
+    useEffect(() => {
+        if (!isRecording && !autoStartedRef.current) {
+            autoStartedRef.current = true;
+            handleStart();
+        }
+    }, []);
+
+    const handlePause = async () => {
+        const result = await pauseRide();
+        if (!result) {
+            console.error('Failed to pause ride');
+        }
+    };
+
+    const handleResume = async () => {
+        const result = await resumeRide();
+        if (!result) {
+            console.error('Failed to resume ride');
+        }
+    };
+
+    const finishRideProcess = async () => {
+        const messages = [
+            'Preparing trip data...',
+            'Processing GPS points...',
+            'Uploading to cloud...',
+            'Finalizing trip...',
+        ];
+
+        for (let i = 0; i < messages.length; i++) {
+            setProgressText(messages[i]);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        // Start saving the ride using mock
+        const result = await finishRide();
+
+        if (result.success) {
+            setProgressText('Trip saved successfully!');
+            router.push(
+                `/main/(tabs)/record/trip-end?rideId=${encodeURIComponent(result.rideId as string)}`
+            );
+            setIsSaving(false);
+        } else {
+            setError(true);
+            setProgressText('Something went wrong! Please try again.');
+        }
+    };
+
+    const handleFinish = async () => {
+        try {
+            setIsSaving(true);
+
+            // Check if there are coordinates and distance before finishing
+            // if (totalDistance === 0) {
+            //     Alert.alert(
+            //         'Cannot finish ride',
+            //         'Your ride needs to have some distance recorded before it can be finished.',
+            //         [{ text: 'OK' }]
+            //     );
+            //     setIsSaving(false);
+            //     return;
+            // }
+
+            if (totalDistance === 0) {
+                Alert.alert(
+                    'No distance recorded',
+                    'This trip has no recorded distance. Finish anyway?',
+                    [
+                        {
+                            text: 'Cancel',
+                            style: 'cancel',
+                            onPress: () => setIsSaving(false),
+                        },
+                        {
+                            text: 'Finish anyway',
+                            onPress: finishRideProcess,
+                        },
+                    ],
+                    { cancelable: true }
+                );
+                return;
+            }
+
+            await finishRideProcess();
+        } catch (error) {
+            console.error('Error finishing ride:', error);
+        }
+    };
+
+    const handleAddReport = async () => {
+        try {
+            const location = await Location.getCurrentPositionAsync({});
+            addAnnotation({
+                sentiment: reportDescription,
+                points: [
+                    {
+                        coordinate: {
+                            latitude: location.coords.latitude,
+                            longitude: location.coords.longitude,
+                        },
+                        timestamp: Date.now(),
+                        elevation: 0,
+                    },
+                ],
+                annotationId: annotation?.id || '',
+                type: annotation?.type || 'point',
+                mediaUri: reportMedia?.uri,
+                mediaType: reportMedia?.type,
+            });
+            setReportModalVisible(false);
+            setReportDescription('');
+            setReportMedia(null);
+        } catch (error) {
+            console.error('Error adding report:', error);
+        }
+    };
+
+    const handlePickMedia = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images', 'videos', 'livePhotos'],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                const asset = result.assets[0];
+                setReportMedia({
+                    type: asset.type === 'video' ? 'video' : 'image',
+                    uri: asset.uri,
+                });
+            }
+        } catch (error) {
+            console.error('Error picking media:', error);
+        }
+    };
+
+    const handleCaptureMedia = async () => {
+        setShowCamera(true);
+    };
+
+    const handleCameraCapture = (uri: string, type: 'image' | 'video') => {
+        setReportMedia({ type, uri });
+        setShowCamera(false);
+    };
+
+    const styles = getStyles(theme);
+
+    return (
+        <>
+            <Stack.Screen
+                options={{
+                    headerRight: () => (
+                        <IconButton
+                            icon="restart"
+                            iconColor={theme.colors.onSurface}
+                            onPress={() => {
+                                Alert.alert('Reset Trip', 'Are you sure you want to reset this trip recording?', [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    { text: 'Reset', onPress: () => resetRide() },
+                                ]);
+                            }}
+                        />
+                    ),
+                }}
+            />
+            <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+                {/* Saving Ride UI */}
+                {isSaving && (
+                    <View style={styles.savingContainer}>
+                        {progressText === 'Trip saved successfully!' ? (
+                            <Icon source="cloud-check" size={sizes.size112} color={theme.colors.primary} />
+                        ) : (
+                            <SpinningWheel />
+                        )}
+                        <Text style={styles.savingText}>Saving Trip</Text>
+                        <Text style={styles.progressText}>{progressText}</Text>
+                        {error && (
+                            <Button
+                                icon="refresh"
+                                mode="contained"
+                                onPress={() => {
+                                    setIsSaving(false);
+                                    setError(false);
+                                    setProgressText('Preparing trip data...');
+                                }}
+                            >
+                                Try again
+                            </Button>
+                        )}
+                    </View>
+                )}
+                {/* Paused Bar UI */}
+                {isRecording && isPaused && (
+                    <View
+                        style={{
+                            backgroundColor: theme.colors.tertiaryContainer,
+                            padding: sizes.tiny,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <Text
+                            style={{
+                                color: theme.colors.onTertiaryContainer,
+                                fontFamily: 'LGEIHeadline-Bold',
+                                fontSize: fontSizes.small,
+                            }}
+                        >
+                            Trip Paused
+                        </Text>
+                    </View>
+                )}
+                {/* Map View */}
+                <MapRender />
+
+                {/* Trip Stats — rider view: focus on Speed & ETA */}
+                <Surface style={styles.statsContainer}>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statLabel}>Speed</Text>
+                            <Text style={styles.statNumber}>{(currentSpeed * 3.6).toFixed(1)}</Text>
+                            <Text style={styles.statUnit}>km/h</Text>
+                        </View>
+                        <View style={{ width: 1, backgroundColor: theme.colors.outlineVariant, height: '70%' }} />
+                        <View style={styles.statItem}>
+                            <Text style={styles.statLabel}>ETA</Text>
+                            <Text style={styles.statNumber}>{formatEta(etaRemainingSec)}</Text>
+                            <Text style={styles.statUnit}>remaining</Text>
+                        </View>
+                    </View>
+                    <View style={styles.subStatsRow}>
+                        <Text style={styles.subStat}>
+                            <Text style={styles.subStatLabel}>Time </Text>
+                            {formatDuration(duration)}
+                        </Text>
+                        <Text style={styles.subStat}>
+                            <Text style={styles.subStatLabel}>Distance </Text>
+                            {(totalDistance / 1000).toFixed(2)} km
+                        </Text>
+                    </View>
+                </Surface>
+
+                {/* Controls — single Stop while recording (Start is just a fallback) */}
+                <Surface style={styles.controlsContainer}>
+                    {!isRecording ? (
+                        <Button
+                            mode="contained"
+                            onPress={handleStart}
+                            style={[styles.button]}
+                            labelStyle={styles.buttonLabel}
+                        >
+                            Start Trip
+                        </Button>
+                    ) : (
+                        <Button
+                            mode="contained"
+                            onPress={handleFinish}
+                            icon="stop"
+                            style={[styles.button, styles.stopButton]}
+                            labelStyle={styles.buttonLabel}
+                            contentStyle={{ flexDirection: 'row-reverse', height: sizes.size56 }}
+                        >
+                            Stop
+                        </Button>
+                    )}
+                </Surface>
+
+                {/* Report Modal */}
+                <Portal>
+                    <Modal
+                        visible={reportModalVisible}
+                        onDismiss={() => setReportModalVisible(false)}
+                        contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}
+                    >
+                        <Text style={styles.modalTitle}>Quick Annotation</Text>
+
+                        <View
+                            style={{
+                                marginTop: sizes.medium,
+                                flexDirection: 'row',
+                                flexWrap: 'wrap',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                gap: sizes.regular,
+                            }}
+                        >
+                            {predefinedAnnotations
+                                .filter((annotation: PredefinedAnnotation) => annotation.type === 'point')
+                                .map((predefinedAnnotation: PredefinedAnnotation) => (
+                                    <TouchableOpacity
+                                        key={predefinedAnnotation.id}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            gap: sizes.small,
+                                            borderRadius: sizes.small,
+                                            borderWidth: 1,
+                                            borderColor: theme.colors.onSurface,
+                                            padding: sizes.regular,
+                                            backgroundColor:
+                                                predefinedAnnotation.id === annotation?.id
+                                                    ? theme.colors.secondaryContainer
+                                                    : theme.colors.surface,
+                                        }}
+                                        onPress={() => {
+                                            setAnnotation(predefinedAnnotation);
+                                        }}
+                                    >
+                                        <Icon
+                                            source={predefinedAnnotation.icon}
+                                            size={sizes.medium}
+                                            color={theme.colors.onSurface}
+                                        />
+                                        <Text
+                                            style={{ fontFamily: 'LGEIHeadline-Regular', fontSize: fontSizes.tinyPlus }}
+                                        >
+                                            {predefinedAnnotation.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                        </View>
+                        <View
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: sizes.small,
+                                marginVertical: sizes.small,
+                            }}
+                        >
+                            <View
+                                style={{ flex: 1, height: 1, backgroundColor: theme.colors.onSurface, opacity: 0.4 }}
+                            />
+                            <Text style={{ fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.tiny }}>or</Text>
+                            <View
+                                style={{ flex: 1, height: 1, backgroundColor: theme.colors.onSurface, opacity: 0.4 }}
+                            />
+                        </View>
+
+                        <View style={styles.mediaContainer}>
+                            {reportMedia ? (
+                                <View style={styles.mediaPreview}>
+                                    <IconButton
+                                        icon={reportMedia.type === 'image' ? 'image' : 'video'}
+                                        size={24}
+                                        onPress={() => setReportMedia(null)}
+                                    />
+                                    <Text style={styles.mediaText}>
+                                        {reportMedia.type === 'image' ? 'Image' : 'Video'} attached
+                                    </Text>
+                                    <IconButton icon="close" size={24} onPress={() => setReportMedia(null)} />
+                                </View>
+                            ) : (
+                                <View style={styles.mediaButtonsContainer}>
+                                    <Button
+                                        mode="contained"
+                                        onPress={handleCaptureMedia}
+                                        icon="camera"
+                                        style={[styles.mediaButton]}
+                                    >
+                                        Take Photo/Video
+                                    </Button>
+                                    <Button
+                                        mode="outlined"
+                                        onPress={handlePickMedia}
+                                        icon="image"
+                                        style={[styles.mediaButton]}
+                                    >
+                                        Choose from Gallery
+                                    </Button>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={styles.modalButtons}>
+                            <Button
+                                mode="outlined"
+                                onPress={() => setReportModalVisible(false)}
+                                style={styles.modalButton}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                mode="contained"
+                                onPress={handleAddReport}
+                                style={styles.modalButton}
+                                disabled={!annotation && !reportMedia}
+                            >
+                                Add Annotation
+                            </Button>
+                        </View>
+                    </Modal>
+                </Portal>
+
+                {/* Camera Modal */}
+                <Portal>
+                    <Modal
+                        visible={showCamera}
+                        onDismiss={() => setShowCamera(false)}
+                        contentContainerStyle={styles.cameraModal}
+                    >
+                        <OpenCameraView onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />
+                    </Modal>
+                </Portal>
+            </View>
+        </>
+    );
+}
+
+const getStyles = (theme: MD3Theme) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+        },
+        mapContainer: {
+            flex: 1,
+        },
+        map: {
+            flex: 1,
+        },
+        statsContainer: {
+            paddingVertical: sizes.small,
+            paddingHorizontal: sizes.medium,
+            marginHorizontal: sizes.medium,
+            marginTop: sizes.small,
+            borderRadius: sizes.medium,
+            backgroundColor: theme.colors.surface,
+        },
+        statsRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+        },
+        statItem: {
+            flex: 1,
+            alignItems: 'center',
+        },
+        statNumber: {
+            fontSize: fontSizes.subtitle,
+            fontFamily: 'LGEIHeadline-Bold',
+            color: theme.colors.onSurface,
+        },
+        statUnit: {
+            fontSize: fontSizes.tiny,
+            fontFamily: 'LGEIText-Regular',
+            color: theme.colors.onSurfaceVariant,
+        },
+        statLabel: {
+            fontSize: fontSizes.tiny,
+            fontFamily: 'LGEIText-SemiBold',
+            color: theme.colors.onSurfaceVariant,
+            marginBottom: sizes.tiny,
+        },
+        subStatsRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-around',
+            alignItems: 'center',
+            marginTop: sizes.small,
+            paddingTop: sizes.small,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.outlineVariant,
+        },
+        subStat: {
+            fontSize: fontSizes.tinyPlus,
+            fontFamily: 'LGEIHeadline-Bold',
+            color: theme.colors.onSurface,
+        },
+        subStatLabel: {
+            fontFamily: 'LGEIText-Regular',
+            color: theme.colors.onSurfaceVariant,
+        },
+        controlsContainer: {
+            padding: sizes.large,
+            margin: sizes.medium,
+            marginTop: 0,
+            borderRadius: sizes.medium,
+            backgroundColor: theme.colors.surface,
+        },
+        activeControls: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            gap: sizes.medium,
+        },
+        button: {
+            borderRadius: sizes.medium,
+            height: sizes.size56,
+            justifyContent: 'center',
+            backgroundColor: theme.colors.primary,
+        },
+        buttonLabel: {
+            fontSize: fontSizes.small,
+            fontFamily: 'LGEIHeadline-Semibold',
+        },
+        stopButton: {
+            backgroundColor: theme.colors.error,
+        },
+        pauseButton: {
+            flex: 2,
+            backgroundColor: theme.colors.onSurfaceVariant,
+        },
+        resumeButton: {
+            flex: 2,
+            backgroundColor: theme.colors.onSurfaceVariant,
+        },
+        finishButton: {
+            flex: 2,
+        },
+        mapFAB: {
+            backgroundColor: theme.colors.surface,
+        },
+        reportFAB: {
+            flex: 1,
+            backgroundColor: theme.colors.tertiary,
+            borderRadius: sizes.medium,
+            height: sizes.size56,
+            justifyContent: 'center',
+        },
+        modalContainer: {
+            margin: sizes.medium,
+            padding: sizes.medium,
+            borderRadius: sizes.medium,
+        },
+        modalTitle: {
+            fontSize: fontSizes.regular,
+            fontFamily: 'LGEIHeadline-Bold',
+            marginBottom: sizes.medium,
+        },
+        segmentedButtons: {
+            marginBottom: sizes.medium,
+        },
+        textInput: {
+            marginBottom: sizes.medium,
+        },
+        mediaContainer: {
+            marginBottom: sizes.medium,
+        },
+        mediaButtonsContainer: {
+            flexDirection: 'column',
+            gap: sizes.small,
+        },
+        mediaButton: {
+            marginBottom: sizes.small,
+        },
+        mediaPreview: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.colors.surfaceVariant,
+            justifyContent: 'space-between',
+            padding: sizes.small,
+            borderRadius: sizes.small,
+        },
+        mediaText: {
+            marginLeft: sizes.small,
+            fontSize: fontSizes.tinyPlus,
+        },
+        modalButtons: {
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            gap: sizes.small,
+        },
+        modalButton: {
+            minWidth: 100,
+        },
+        cameraModal: {
+            flex: 1,
+            margin: 0,
+            backgroundColor: 'black',
+        },
+        savingContainer: {
+            flex: 1,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: theme.colors.background,
+            padding: sizes.large,
+            zIndex: 1000,
+        },
+        savingText: {
+            fontSize: fontSizes.regular,
+            fontFamily: 'LGEIHeadline-Bold',
+            marginBottom: sizes.small,
+        },
+        progressText: {
+            fontSize: fontSizes.small,
+            fontFamily: 'LGEIHeadline-Regular',
+        },
+    });

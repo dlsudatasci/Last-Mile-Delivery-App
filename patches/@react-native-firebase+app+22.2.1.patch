@@ -1,0 +1,13 @@
+diff --git a/node_modules/@react-native-firebase/app/lib/FirebaseApp.js b/node_modules/@react-native-firebase/app/lib/FirebaseApp.js
+index 8411387..918743a 100644
+--- a/node_modules/@react-native-firebase/app/lib/FirebaseApp.js
++++ b/node_modules/@react-native-firebase/app/lib/FirebaseApp.js
+@@ -14,7 +14,7 @@
+  * limitations under the License.
+  *
+  */
+-import { warnIfNotModularCall } from '@react-native-firebase/app/lib/common';
++import { warnIfNotModularCall } from '@react-native-firebase/app/lib/common/index.js';
+ import { getAppModule } from './internal/registry/nativeModule';
+ 
+ export default class FirebaseApp {
