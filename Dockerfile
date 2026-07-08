@@ -33,11 +33,13 @@ RUN sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 # Set workspace directory
 WORKDIR /app
 
-# Copy package management files for clean npm installation
+# Copy root package files and install root dependencies
 COPY package*.json ./
-
-# Clean installation matching package-lock.json
 RUN npm ci
+
+# Copy admin-web package files and install its dependencies separately
+COPY admin-web/package*.json ./admin-web/
+RUN npm ci --prefix admin-web
 
 # Copy the rest of the application files
 COPY . .
