@@ -357,7 +357,7 @@ export const useRideStore = create<RideState>((set, get) => ({
     },
 }));
 
-function simplify(points: RidePoint[], tolerance: number): RidePoint[] {
+export function simplify(points: RidePoint[], tolerance: number): RidePoint[] {
     if (points.length <= 2) {
         return points;
     }

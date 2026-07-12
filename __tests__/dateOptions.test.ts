@@ -1,3 +1,5 @@
+import { startOfMonth, startOfWeek } from "../lib/common/dateOptions";
+
 jest.mock("expo-localization", () => ({
     getCalendars: () => [
         {
@@ -5,8 +7,6 @@ jest.mock("expo-localization", () => ({
         },
     ],
 }));
-
-import { startOfMonth, startOfWeek } from "../lib/common/dateOptions";
 
 //startOfWeek() testing
 describe("startOfWeek()", () => {

@@ -1,3 +1,4 @@
+// Imports
 import {
     createUserProfile,
     emailToPhone,
@@ -25,6 +26,7 @@ import {
 
 import { useUser } from "@/stores/useUser";
 import { getLocalAccount } from "../lib/local-db/accounts";
+
 // Mocks
 const mockPutFile = jest.fn();
 const mockGetDownloadURL = jest.fn();
@@ -520,6 +522,62 @@ describe("updateUserProfile()", () => {
             )
         ).rejects.toThrow("Firestore failed");
     });
+
+    test("uploads a replacement profile image", async () => {
+        const uploadTask = Promise.resolve() as any;
+        uploadTask.on = jest.fn();
+
+        mockPutFile.mockReturnValue(uploadTask);
+
+        mockGetDownloadURL.mockResolvedValue(
+            "https://firebase.dev/profile.jpg"
+        );
+
+        mockRef.mockReturnValue({
+            putFile: mockPutFile,
+            getDownloadURL: mockGetDownloadURL,
+        });
+
+        await updateUserProfile(
+            "user123",
+            "Juan",
+            "/tmp/profile.jpg"
+        );
+
+        expect(mockPutFile).toHaveBeenCalledWith("/tmp/profile.jpg");
+
+        expect(mockGetDownloadURL).toHaveBeenCalled();
+    });
+
+    test("stores uploaded avatar url", async () => {
+        const uploadTask = Promise.resolve() as any;
+        uploadTask.on = jest.fn();
+
+        mockPutFile.mockReturnValue(uploadTask);
+
+        mockGetDownloadURL.mockResolvedValue(
+            "https://firebase.dev/profile.jpg"
+        );
+
+        mockRef.mockReturnValue({
+            putFile: mockPutFile,
+            getDownloadURL: mockGetDownloadURL,
+        });
+
+        await updateUserProfile(
+            "user123",
+            "Juan",
+            "/tmp/profile.jpg"
+        );
+
+        expect(setDoc).toHaveBeenCalledWith(
+            "user-doc",
+            expect.objectContaining({
+                avatarUrl: "https://firebase.dev/profile.jpg",
+            }),
+            { merge: true }
+        );
+    });
 });
 
 // resolveAuthenticatedSession() testing
@@ -635,6 +693,29 @@ describe("resolveAuthenticatedSession()", () => {
 
         expect(result.destination).toBe("/create-profile");
     });
+
+    test("routes to create-profile when email is not a Devia account", async () => {
+        (getDoc as jest.Mock).mockResolvedValue({
+            exists: () => false,
+        });
+
+        (useUser.getState as jest.Mock).mockReturnValue({
+            user: null,
+            setUser: jest.fn(),
+        });
+
+        const result = await resolveAuthenticatedSession({
+            uid: "user123",
+            email: "juan@gmail.com",
+        } as any);
+
+        expect(result).toEqual({
+            destination: "/create-profile",
+            profile: null,
+        });
+
+        expect(getLocalAccount).not.toHaveBeenCalled();
+    });
 });
 
 // createUserProfile() testing
@@ -703,5 +784,63 @@ describe("createUserProfile()", () => {
                 null
             )
         ).rejects.toThrow("Firestore failed");
+    });
+
+    test("uploads a profile image", async () => {
+        const uploadTask = Promise.resolve() as any;
+        uploadTask.on = jest.fn();
+
+        mockPutFile.mockReturnValue(uploadTask);
+
+        mockGetDownloadURL.mockResolvedValue(
+            "https://firebase.dev/profile.jpg"
+        );
+
+        mockRef.mockReturnValue({
+            putFile: mockPutFile,
+            getDownloadURL: mockGetDownloadURL,
+        });
+
+        await createUserProfile(
+            "user123",
+            "juan@test.com",
+            "Juan",
+            "/tmp/profile.jpg"
+        );
+
+        expect(mockPutFile).toHaveBeenCalledWith("/tmp/profile.jpg");
+
+        expect(mockGetDownloadURL).toHaveBeenCalled();
+    });
+
+    test("stores uploaded avatar url", async () => {
+        const uploadTask = Promise.resolve() as any;
+        uploadTask.on = jest.fn();
+
+        mockPutFile.mockReturnValue(uploadTask);
+
+        mockGetDownloadURL.mockResolvedValue(
+            "https://firebase.dev/profile.jpg"
+        );
+
+        mockRef.mockReturnValue({
+            putFile: mockPutFile,
+            getDownloadURL: mockGetDownloadURL,
+        });
+
+        await createUserProfile(
+            "user123",
+            "juan@test.com",
+            "Juan",
+            "/tmp/profile.jpg"
+        );
+
+        expect(setDoc).toHaveBeenCalledWith(
+            "user-doc",
+            expect.objectContaining({
+                avatarUrl: "https://firebase.dev/profile.jpg",
+            }),
+            { merge: true }
+        );
     });
 });

@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "tsc": "tsc --noEmit",
     "unit": "jest",
+    "coverage": "jest --coverage",
     "test": "npm run lint && npm run tsc"
   },
   "dependencies": {

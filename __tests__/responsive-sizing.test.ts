@@ -1,3 +1,15 @@
+import {
+    fontSize,
+    fontSizes,
+    height,
+    hitSlop,
+    SCREEN_HEIGHT,
+    SCREEN_WIDTH,
+    size,
+    sizes,
+    width,
+} from "../lib/utils/responsive-sizing";
+
 jest.mock("react-native", () => ({
     Dimensions: {
         get: jest.fn(() => ({
@@ -12,18 +24,6 @@ jest.mock("react-native", () => ({
         currentHeight: 24,
     },
 }));
-
-import {
-    fontSize,
-    fontSizes,
-    height,
-    hitSlop,
-    SCREEN_HEIGHT,
-    SCREEN_WIDTH,
-    size,
-    sizes,
-    width,
-} from "../lib/utils/responsive-sizing";
 
 // size() testing
 describe("size()", () => {
