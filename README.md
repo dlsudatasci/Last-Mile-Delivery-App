@@ -1,25 +1,27 @@
-# Devia — Last-Mile Delivery Route Deviation Research Platform
+# Devia — Last-Mile Delivery Route Deviation Research Mobile Application
 
-**Devia** is a comprehensive research platform designed to investigate and analyze why last-mile delivery riders (e.g., Grab, Foodpanda, Lalamove) deviate from optimized navigation routes. The system consists of a **React Native (Expo) Mobile Application** for riders, a **Google Cloud Firestore NoSQL Database**, and a **Next.js 16 Research Admin Dashboard** for real-time data analysis and study management.
+**Devia** is a specialized research platform designed to investigate and analyze why last-mile delivery couriers (e.g., Grab, Foodpanda, Lalamove) deviate from optimized navigation routes. This repository houses the **React Native (Expo) Mobile Application**, **Google Cloud Firestore Database Rules & Schema**, and **Automated Build & CI/CD Pipelines**.
+
+> **Note on Monorepo Separation:** As mandated by thesis deployment requirements, the **Devia Research Admin Web Dashboard (Next.js 16)** is maintained and hosted in a separate dedicated GitHub repository.
 
 ---
 
 ## 🏗️ System Architecture & Components
 
 ```
-┌──────────────────────────┐       ┌──────────────────────────┐       ┌──────────────────────────┐
-│  Devia Mobile App        │       │  Google Cloud Firestore  │       │  Devia Admin Dashboard   │
-│  (React Native / Expo)   │ ───►  │  Project: thesis-67      │ ◄───  │  (Next.js 16 / Admin SDK)│
-│  • GPS Route Recording   │       │  • Users & Rides Data    │       │  • Real-Time Metrics     │
-│  • Deviation Surveys     │       │  • Study Enrollment      │       │  • Claim Validation      │
-│  • Study Registration    │       │  • Compensation Claims   │       │  • Community Events      │
-└──────────────────────────┘       └──────────────────────────┘       └──────────────────────────┘
+┌──────────────────────────┐       ┌──────────────────────────┐
+│  Devia Mobile App        │       │  Google Cloud Firestore  │
+│  (React Native / Expo)   │ ───►  │  Project: thesis-67      │
+│  • GPS Route Recording   │       │  • Users & Rides Data    │
+│  • Deviation Surveys     │       │  • Study Enrollment      │
+│  • Study Registration    │       │  • Compensation Claims   │
+└──────────────────────────┘       └──────────────────────────┘
 ```
 
-1. **Mobile Application (`app/` & root)**: Built with React Native, Expo 52, and Mapbox SDK. Allows riders to record GPS trips, compare actual paths against optimized screenshots, answer post-trip deviation questionnaires, and submit compensation claims.
-2. **Backend Database (`firestore.rules` & `docs/`)**: Hosted on Google Cloud Firestore (`thesis-67`). Enforces strict client security rules while providing scalable JSON document storage.
-3. **Research Admin Dashboard (`admin-web/`)**: Built with Next.js 16 (App Router), Turbopack, and the Firebase Admin SDK. Bypasses client rules securely to give researchers full CRUD management over riders, trips, claims, tickets, notifications, and events.
-4. **Containerized Build Environment (`Dockerfile`)**: A Debian-based Docker image pre-configured with Node.js 20, Java 17, and Android SDK 34 for reproducible CI/CD testing and native Android compilation.
+1. **Mobile Application (`app/` & root)**: Built with React Native, Expo 52, and Mapbox SDK. Allows riders to record GPS trips, compare actual paths against baseline routes, answer post-trip deviation questionnaires, and submit compensation claims.
+2. **Backend Database (`firestore.rules` & `docs/`)**: Hosted on Google Cloud Firestore (`thesis-67`). Enforces strict client security rules (`resource.data.userId == auth.uid`) while providing scalable JSON document storage.
+3. **Containerized Build Environment (`Dockerfile`)**: A Debian-based Docker image pre-configured with Node.js 20, Java 17, and Android SDK 34 for reproducible CI/CD testing and native Android compilation.
+4. **Research Admin Dashboard**: Hosted in a separate standalone repository, enabling the research team to monitor live stats, audit GPS telemetry, validate compensation claims, and publish community events via the Firebase Admin SDK.
 
 ---
 
@@ -179,91 +181,31 @@ For academic thesis specifications, logical schemas, and relational maps, consul
 Client-side database access from the mobile app is strictly governed by `firestore.rules`:
 * **Riders (`users/{userId}`)**: Can only read/write their own user profile, recorded trips, annotations, and claims.
 * **Public Trips**: Rides marked `isPublic == true` can be read by all authenticated riders for community comparison.
-* **Admin Bypass**: The research dashboard (`admin-web/`) connects using the **Firebase Admin SDK (Service Account)**, completely bypassing client rules to allow full administrative oversight.
+* **Admin Bypass**: The research dashboard connects from its own standalone repository using the **Firebase Admin SDK (Service Account)**, completely bypassing client rules to allow full administrative oversight.
 
 ---
 
-## 📊 Tutorial Part 6: Research Admin Dashboard (`admin-web/`)
+## 📊 Tutorial Part 6: Research Admin Dashboard
 
-The **Devia Admin Dashboard** (`admin-web/`) is a dedicated Next.js 16 web application enabling the research team to monitor live stats, manage users, validate compensation claims, resolve support tickets, and publish community events.
-
-### Step-by-Step Dashboard Setup
-
-1. **Navigate to the Dashboard Directory**
-   ```bash
-   cd admin-web
-   npm install
-   ```
-
-2. **Create Your Local Environment File**
-   Copy the provided template to create your `.env.local` file:
-   ```bash
-   # On Windows PowerShell:
-   copy .env.example .env.local
-
-   # On macOS / Linux:
-   cp .env.example .env.local
-   ```
-
-3. **Get Your Firebase Service Account Credentials**
-   The dashboard requires server-side Admin SDK credentials to read/write all study data:
-   * Go to the [Firebase Console](https://console.firebase.google.com) $\rightarrow$ select project **`thesis-67`**.
-   * Go to **Project Settings** (gear icon) $\rightarrow$ **Service Accounts** tab.
-   * Click **Generate new private key** and download the JSON file.
-   * Open the downloaded JSON and copy the values into your `admin-web/.env.local` file:
-     ```env
-     FIREBASE_PROJECT_ID=thesis-67
-     FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@thesis-67.iam.gserviceaccount.com
-     FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_KEY_HERE\n-----END PRIVATE KEY-----\n"
-     ```
-   *(Note: The private key string must include the `\n` newline characters enclosed in quotes).*
-
-4. **Authorize Research Team Emails**
-   In `admin-web/.env.local`, specify which Firebase Authentication email addresses are allowed to sign in to the admin panel (comma-separated):
-   ```env
-   ADMIN_ALLOWED_EMAILS=researcher1@example.com,advisor@example.com
-   ```
-
-5. **Start the Dashboard Development Server**
-   ```bash
-   npm run dev
-   ```
-   Open **[http://localhost:3000](http://localhost:3000)** in your web browser.
-
-6. **Log In to the Admin Panel**
-   * Sign in using the exact email and password associated with your Firebase Authentication account (must match one of the emails listed in `ADMIN_ALLOWED_EMAILS`).
-   * Upon login, the server issues a secure 7-day HTTP-only session cookie (`devia_admin_session`).
-
-### Dashboard Features & Pages
-* **`/` (Dashboard Home)**: Displays live aggregate counts (`users`, `rides`, `studyParticipants`, `compensationClaims`, `tickets`, `adminNotifications`) and instant feeds for unread alerts and pending claims.
-* **`/users`**: Searchable table of all registered riders with avatar previews, contact info, and policy acceptance status.
-* **`/rides`**: Telemetry log of all recorded trips including distance (`km`), duration, speed (`km/h`), elevation gain (`m`), and source flags (`GPX`, `Web`).
-* **`/study`**: Roster of enrolled research participants with consent tracking (`Terms`, `Privacy`) and platform breakdown (`Grab`, `Foodpanda`).
-* **`/claims`**: Financial workflow allowing admins to **Validate**, **Mark Paid**, or **Reject** ₱250 compensation claims submitted by riders who reached their 10-ride study quota.
-* **`/tickets`**: Expandable customer support portal where admins can read full rider issue descriptions and mark tickets as **Resolved**.
-* **`/notifications`**: System alert center showing milestone notifications (`Quota Reached`, `Claim Alert`) with individual or batch **Mark as Read** actions.
-* **`/events`**: Full **CRUD Content Manager** allowing researchers to publish, edit, or delete workshops, safety webinars, and community announcements directly to the mobile app.
+As required by thesis separation guidelines, the **Devia Admin Dashboard (Next.js 16)** is maintained and hosted in a separate standalone repository. Please refer to that repository for server configuration, environment variable setup (`.env.local`), and Firebase Admin SDK credentials.
 
 ---
 
 ## 📁 Repository Directory Structure
 
 ```
-Last-Mile-Delivery-App-1/
+Devia-Mobile-App/
 ├── app/                       # React Native / Expo Mobile App screens & tabs
 ├── components/                # Reusable mobile UI components (Map, Camera, Rides, etc.)
 ├── lib/                       # Mobile app business logic, Firebase CRUD, hooks & stores
 ├── assets/                    # Mobile app fonts, icons, and static images
+├── stores/                    # Zustand state management stores
+├── types/                     # TypeScript schema declarations and domain models
 ├── docs/                      # Thesis documentation & database specs
 │   ├── DATABASE_DESIGN.md     # Complete Firestore schema & data dictionary
 │   ├── ERD.md                 # Standalone academic Entity-Relationship Diagram doc
+│   ├── FULL_SYSTEM_SPECIFICATIONS.md # Thesis-ready full system specifications
 │   └── erd_diagram.png        # High-resolution dark-theme ERD diagram image
-├── admin-web/                 # Next.js 16 Research Admin Web Dashboard
-│   ├── app/                   # App Router pages (Dashboard, Users, Rides, Claims, etc.)
-│   ├── components/            # Dashboard tables, modal managers, sidebar navigation
-│   ├── lib/                   # Firebase Admin SDK v13 & session cookie auth helpers
-│   ├── .env.example           # Environment template for admin service account config
-│   └── package.json           # Next.js dependencies and scripts
 ├── Dockerfile                 # Debian Bullseye container with Node 20, Java 17, Android SDK 34
 ├── firestore.rules            # Google Cloud Firestore client security rules
 ├── package.json               # Mobile app dependencies and scripts
