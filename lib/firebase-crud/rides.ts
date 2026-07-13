@@ -134,8 +134,8 @@ export const getRidePoints = async (userId: string, rideId: string): Promise<Rid
             return [];
         }
 
-        const data = pointsDoc.data();
-        return data?.items as RidePoint[];
+        const data = pointsDoc.data() as { items?: RidePoint[] };
+        return data.items ?? [];
     } catch (error) {
         console.error('Error fetching ride points:', error);
         throw error;
