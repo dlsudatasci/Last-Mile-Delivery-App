@@ -18,9 +18,18 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
 
-      match /annotations/{annotationId} {
-        allow read, write: if isSignedIn()
+      match /map/{docId} {
+        allow read: if isSignedIn()
           && get(/databases/$(database)/documents/rides/$(rideId)).data.userId == request.auth.uid;
+        allow write: if isSignedIn()
+          && getAfter(/databases/$(database)/documents/rides/$(rideId)).data.userId == request.auth.uid;
+      }
+
+      match /annotations/{annotationId} {
+        allow read: if isSignedIn()
+          && get(/databases/$(database)/documents/rides/$(rideId)).data.userId == request.auth.uid;
+        allow write: if isSignedIn()
+          && getAfter(/databases/$(database)/documents/rides/$(rideId)).data.userId == request.auth.uid;
       }
     }
 
