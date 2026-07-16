@@ -8,7 +8,7 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 import { Button, Icon, IconButton, MD3Theme, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-Mapbox.setAccessToken('pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA');
+Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
 
 const TEAL = '#0E6E73';
 
@@ -18,7 +18,7 @@ export default function RoutePreview() {
     const styles = getStyles(theme);
     const mapStyle = colorScheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
 
-    const { destination } = useLocalSearchParams<{ destination?: string }>();
+    const { destination, destLng, destLat } = useLocalSearchParams<{ destination?: string; destLng?: string; destLat?: string }>();
 
     const [from, setFrom] = useState<LngLat | null>(null);
     const [to, setTo] = useState<LngLat | null>(null);
@@ -40,7 +40,13 @@ export default function RoutePreview() {
                 if (!active) return;
                 setFrom(origin);
 
-                const dest = await geocode(destination ?? '', origin);
+                // Use pre-resolved coordinates from search selection, or fall back to geocoding
+                let dest: LngLat | null = null;
+                if (destLng && destLat) {
+                    dest = [parseFloat(destLng), parseFloat(destLat)];
+                } else {
+                    dest = await geocode(destination ?? '', origin);
+                }
                 if (!active) return;
                 if (!dest) {
                     setError(`Couldn't find "${destination}". Try a more specific place.`);
@@ -64,7 +70,7 @@ export default function RoutePreview() {
         return () => {
             active = false;
         };
-    }, [destination]);
+    }, [destination, destLng, destLat]);
 
     const lineShape = useMemo(
         () =>

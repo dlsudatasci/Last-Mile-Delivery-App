@@ -15,7 +15,7 @@ import { Alert, Linking, Platform, Text, TouchableOpacity, useColorScheme } from
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Button, Dialog, Icon, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
 
-Mapbox.setAccessToken('pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA');
+Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
 
 if (!TaskManager.isTaskDefined('location-recording')) {
     TaskManager.defineTask(

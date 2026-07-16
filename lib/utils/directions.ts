@@ -5,7 +5,7 @@
 // -----------------------------------------------------------------------------
 
 const MAPBOX_TOKEN =
-    'pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA';
+    'pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg';
 
 export type LngLat = [number, number];
 
@@ -30,6 +30,45 @@ export async function geocode(query: string, proximity?: LngLat): Promise<LngLat
     } catch (error) {
         console.warn('geocode failed:', error);
         return null;
+    }
+}
+
+// -- Metro Manila autocomplete search ----------------------------------------
+
+/** Bounding box covering all of Metro Manila / NCR. */
+const METRO_MANILA_BBOX = '120.8457,14.2700,121.1350,14.7800';
+
+export interface SearchResult {
+    /** Short place name (e.g. "SM Megamall") */
+    name: string;
+    /** Full formatted address returned by Mapbox */
+    fullAddress: string;
+    /** [longitude, latitude] */
+    coordinates: LngLat;
+}
+
+/**
+ * Live autocomplete search for places within Metro Manila.
+ * Designed to be called on every keystroke (debounced by the caller).
+ */
+export async function searchPlaces(query: string, proximity?: LngLat): Promise<SearchResult[]> {
+    if (!query.trim()) return [];
+    const prox = proximity ? `&proximity=${proximity[0]},${proximity[1]}` : '';
+    const url =
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json` +
+        `?autocomplete=true&country=PH&bbox=${METRO_MANILA_BBOX}&limit=5${prox}&access_token=${MAPBOX_TOKEN}`;
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const features: any[] = data?.features ?? [];
+        return features.map((f: any) => ({
+            name: f.text ?? f.place_name ?? query,
+            fullAddress: f.place_name ?? '',
+            coordinates: [f.center[0], f.center[1]] as LngLat,
+        }));
+    } catch (error) {
+        console.warn('searchPlaces failed:', error);
+        return [];
     }
 }
 

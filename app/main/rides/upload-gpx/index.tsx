@@ -12,7 +12,7 @@ import { StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native
 import { ScrollView } from 'react-native-gesture-handler';
 import { Button, FAB, Icon, MD3Theme, Modal, Portal, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 
-Mapbox.setAccessToken('pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA');
+Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
 
 export default function GpxPreview() {
     const theme = useTheme();

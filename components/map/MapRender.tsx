@@ -8,7 +8,7 @@ import { StyleSheet, useColorScheme, View } from 'react-native';
 import { FAB, MD3Theme, useTheme } from 'react-native-paper';
 import { Polygon } from './polygon';
 
-Mapbox.setAccessToken('pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA');
+Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
 
 export default function MapRender() {
     const theme = useTheme();
