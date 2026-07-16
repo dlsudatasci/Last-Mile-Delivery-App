@@ -30,7 +30,7 @@
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.0.14",
-    "@rnmapbox/maps": "^10.1.38",
+    "@rnmapbox/maps": "10.1.38",
     "dotenv": "^16.5.0",
     "expo": "~52.0.31",
     "expo-blur": "~14.0.3",
