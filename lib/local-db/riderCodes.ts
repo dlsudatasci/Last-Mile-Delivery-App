@@ -3,7 +3,7 @@ import { getLocalAccount, LocalAccount } from './accounts';
 import { getLocalDb, initLocalDb } from './sqlite';
 
 const STORAGE_KEY = 'devia-rider-code-registrations';
-const MIGRATION_KEY = 'devia-rider-code-registrations-sqlite-migrated';
+const MIGRATION_KEY_PREFIX = 'devia-rider-code-registrations-migrated';
 
 export const RIDER_CODES = [
     '123456',
@@ -41,11 +41,12 @@ async function readRegistrations(): Promise<RegistrationMap> {
 }
 
 async function migrateLegacyRegistrations(): Promise<void> {
-    const migrated = await AsyncStorage.getItem(MIGRATION_KEY);
-    if (migrated === 'true') return;
-
     await initLocalDb();
     const db = await getLocalDb();
+    const migrationKey = `${MIGRATION_KEY_PREFIX}-${db.backend}`;
+    const migrated = await AsyncStorage.getItem(migrationKey);
+    if (migrated === 'true') return;
+
     const registrations = await readRegistrations();
     for (const registration of Object.values(registrations)) {
         if (!registration) continue;
@@ -55,7 +56,7 @@ async function migrateLegacyRegistrations(): Promise<void> {
             [registration.code, registration.phone, registration.registeredAt]
         );
     }
-    await AsyncStorage.setItem(MIGRATION_KEY, 'true');
+    await AsyncStorage.setItem(migrationKey, 'true');
 }
 
 export function sanitizeRiderCode(code: string) {
@@ -118,5 +119,6 @@ export async function clearRiderCodeRegistrations(): Promise<void> {
     const db = await getLocalDb();
     await db.runAsync('DELETE FROM rider_code_registrations');
     await AsyncStorage.removeItem(STORAGE_KEY);
-    await AsyncStorage.removeItem(MIGRATION_KEY);
+    await AsyncStorage.removeItem(`${MIGRATION_KEY_PREFIX}-sqlite`);
+    await AsyncStorage.removeItem(`${MIGRATION_KEY_PREFIX}-fallback`);
 }

@@ -1,0 +1,47 @@
+import {
+    QUESTION_TEXT,
+    isDeviationQuestionnaireComplete,
+    shouldAskBlockageFollowUp,
+    shouldAskPersonalStopFollowUps,
+    shouldAskTrafficFollowUps,
+} from "../lib/deviation-questionnaire";
+
+describe("deviation questionnaire helpers", () => {
+    test("traffic congestion and avoid intersection show traffic follow-ups", () => {
+        expect(shouldAskTrafficFollowUps("Traffic Congestion")).toBe(true);
+        expect(shouldAskTrafficFollowUps("Avoid Intersection")).toBe(true);
+        expect(shouldAskTrafficFollowUps("Wrong Turn")).toBe(false);
+    });
+
+    test("road blockage and personal stop show their own follow-ups", () => {
+        expect(shouldAskBlockageFollowUp("Road Blockage/Hazard (Flood, Accident, Poor road condition)")).toBe(true);
+        expect(shouldAskPersonalStopFollowUps("Personal Stop (Meal, Restroom, Break, Refueling, etc.)")).toBe(true);
+    });
+
+    test("other primary reasons only require the always-asked frequency questions", () => {
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Wrong Turn",
+                personalStopReason: [],
+                deviateAgainFrequency: "Rarely",
+                avoidRoadFrequency: "Sometimes",
+            })
+        ).toBe(true);
+    });
+
+    test("short traffic response is incomplete until traffic follow-ups are answered", () => {
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Traffic Congestion",
+                personalStopReason: [],
+                deviateAgainFrequency: "Often",
+                avoidRoadFrequency: "Always",
+            })
+        ).toBe(false);
+    });
+
+    test("english and tagalog labels share canonical question keys", () => {
+        expect(QUESTION_TEXT.primaryReason.en).toContain("PRIMARY reason");
+        expect(QUESTION_TEXT.primaryReason.tl).toContain("PANGUNAHING dahilan");
+    });
+});

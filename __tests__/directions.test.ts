@@ -10,7 +10,9 @@ import {
     getRestrictedRoadExposure,
     scoreRiderRoute,
     summarizeRouteCongestion,
+    estimateMetroManilaEtaSec,
     getRoute,
+    getDistanceToRouteM,
     searchPlaces,
 } from "../lib/utils/directions";
 
@@ -77,6 +79,26 @@ describe("formatSearchDistance()", () => {
 
     test("formats kilometers at one kilometer and above", () => {
         expect(formatSearchDistance(4200)).toBe("4.2 km");
+    });
+});
+
+describe("getDistanceToRouteM()", () => {
+    test("returns a small distance for a point on the route", () => {
+        const route: [number, number][] = [
+            [121.0, 14.0],
+            [121.01, 14.0],
+        ];
+
+        expect(getDistanceToRouteM([121.005, 14.0], route)).toBeLessThan(5);
+    });
+
+    test("returns a larger distance for a point away from the route", () => {
+        const route: [number, number][] = [
+            [121.0, 14.0],
+            [121.01, 14.0],
+        ];
+
+        expect(getDistanceToRouteM([121.005, 14.002], route)).toBeGreaterThan(100);
     });
 });
 
@@ -355,6 +377,11 @@ describe("geocode()", () => {
 describe("getRoute()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useFakeTimers().setSystemTime(new Date("2026-07-17T10:00:00+08:00"));
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     test("returns route information from a valid response", async () => {
@@ -379,17 +406,21 @@ describe("getRoute()", () => {
 
         expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/directions/v5/mapbox/driving-traffic/"));
         expect(fetch).toHaveBeenCalledWith(expect.stringContaining("alternatives=true"));
+        expect(fetch).toHaveBeenCalledWith(expect.stringContaining("annotations=congestion,congestion_numeric,duration,distance"));
+        expect(fetch).toHaveBeenCalledWith(expect.stringContaining("overview=full"));
         expect(fetch).toHaveBeenCalledWith(expect.stringContaining("depart_at=now"));
         expect(result).toEqual({
             coordinates: [
                 [121.0, 14.0],
                 [121.1, 14.1],
             ],
-            durationSec: 180,
+            durationSec: 900,
+            mapboxDurationSec: 180,
             distanceM: 2500,
             congestionSegments: [],
-            score: 2.5,
+            score: 3.85,
             trafficDelaySec: 0,
+            typicalDurationSec: undefined,
             restrictedRoadExposure: 0,
             congestionSummary: {
                 unknown: { distanceM: 0, count: 0 },
@@ -432,7 +463,8 @@ describe("getRoute()", () => {
 
         const result = await getRoute([121, 14], [121.1, 14.1]);
 
-        expect(result?.durationSec).toBe(300);
+        expect(result?.durationSec).toBe(1800);
+        expect(result?.mapboxDurationSec).toBe(300);
         expect(result?.distanceM).toBe(5000);
     });
 
@@ -460,7 +492,8 @@ describe("getRoute()", () => {
 
         expect(fetch).toHaveBeenCalledWith(expect.stringContaining("exclude=motorway,toll"));
         expect(fetch).toHaveBeenCalledWith(expect.stringContaining("steps=true"));
-        expect(result?.durationSec).toBe(420);
+        expect(result?.durationSec).toBe(2520);
+        expect(result?.mapboxDurationSec).toBe(420);
         expect(result?.distanceM).toBe(7000);
     });
 
@@ -505,6 +538,29 @@ describe("getRoute()", () => {
         ]);
 
         expect(best?.id).toBe("longer-smooth");
+    });
+
+    test("lets live traffic ETA beat a shorter but much slower route", () => {
+        const best = chooseRiderFriendlyRoute([
+            {
+                id: "short-slow-traffic",
+                geometry: { coordinates: [[121.0, 14.0], [121.01, 14.01]] },
+                duration: 3600,
+                duration_typical: 1800,
+                distance: 4000,
+                legs: [{ annotation: { congestion: ["heavy"], distance: [4000] }, steps: [{ name: "Taft Avenue" }] }],
+            },
+            {
+                id: "longer-faster-current-traffic",
+                geometry: { coordinates: [[121.0, 14.0], [121.05, 14.05]] },
+                duration: 2400,
+                duration_typical: 2100,
+                distance: 7000,
+                legs: [{ annotation: { congestion: ["moderate"], distance: [7000] }, steps: [{ name: "Local Road" }] }],
+            },
+        ]);
+
+        expect(best?.id).toBe("longer-faster-current-traffic");
     });
 
     test("lets a short route with moderate moving traffic beat a longer route", () => {
@@ -606,8 +662,9 @@ describe("getRoute()", () => {
 
         const result = await getRoute([121, 14], [121.1, 14.1]);
 
-        expect(fetch).toHaveBeenCalledWith(expect.stringContaining("annotations=congestion,duration,distance"));
-        expect(result?.durationSec).toBe(420);
+        expect(fetch).toHaveBeenCalledWith(expect.stringContaining("annotations=congestion,congestion_numeric,duration,distance"));
+        expect(result?.durationSec).toBe(1140);
+        expect(result?.mapboxDurationSec).toBe(420);
         expect(result?.typicalDurationSec).toBe(300);
         expect(result?.congestionSegments).toEqual([
             { coordinates: [[121.0, 14.0], [121.05, 14.05]], congestion: "low", distanceM: expect.any(Number) },
@@ -624,6 +681,85 @@ describe("getRoute()", () => {
                 distanceM: 350,
             },
         ]);
+    });
+
+    test("uses traffic-aware duration for ETA instead of typical duration", async () => {
+        (fetch as jest.Mock).mockResolvedValue({
+            json: async () => ({
+                routes: [
+                    {
+                        geometry: { coordinates: [[121.0, 14.0], [121.1, 14.1]] },
+                        duration: 3600,
+                        duration_typical: 1800,
+                        distance: 5000,
+                        legs: [{ annotation: { congestion: ["heavy"], distance: [5000] } }],
+                    },
+                ],
+            }),
+        });
+
+        const result = await getRoute([121, 14], [121.1, 14.1]);
+
+        expect(result?.durationSec).toBe(3600);
+        expect(result?.mapboxDurationSec).toBe(3600);
+        expect(result?.typicalDurationSec).toBe(1800);
+        expect(result?.trafficDelaySec).toBe(1800);
+    });
+
+    test("calibrates unrealistically fast Metro Manila ETA upward during peak traffic", () => {
+        expect(
+            estimateMetroManilaEtaSec({
+                duration: 1980,
+                distance: 9000,
+                geometry: { coordinates: [[121.0, 14.0], [121.1, 14.1]] },
+                legs: [{ annotation: { congestion: [], distance: [] } }],
+            })
+        ).toBe(3240);
+    });
+
+    test("preserves moderate, heavy, and severe congestion from numeric annotations", () => {
+        const segments = buildCongestionSegments({
+            geometry: {
+                coordinates: [
+                    [121.0, 14.0],
+                    [121.01, 14.01],
+                    [121.02, 14.02],
+                    [121.03, 14.03],
+                ],
+            },
+            legs: [{ annotation: { congestion_numeric: [35, 65, 90], distance: [1000, 2000, 3000] } }],
+        });
+
+        expect(segments.map(segment => segment.congestion)).toEqual(["moderate", "heavy", "severe"]);
+        expect(segments.map(segment => segment.distanceM)).toEqual([1000, 2000, 3000]);
+    });
+
+    test("retries without depart_at when Mapbox rejects that parameter", async () => {
+        (fetch as jest.Mock)
+            .mockResolvedValueOnce({
+                json: async () => ({
+                    message: "depart_at is not supported for this request",
+                    routes: [],
+                }),
+            })
+            .mockResolvedValueOnce({
+                json: async () => ({
+                    routes: [
+                        {
+                            geometry: { coordinates: [[121.0, 14.0], [121.1, 14.1]] },
+                            duration: 600,
+                            distance: 2000,
+                        },
+                    ],
+                }),
+            });
+
+        const result = await getRoute([121, 14], [121.1, 14.1]);
+
+        expect(fetch).toHaveBeenNthCalledWith(1, expect.stringContaining("depart_at=now"));
+        expect(fetch).toHaveBeenNthCalledWith(2, expect.not.stringContaining("depart_at=now"));
+        expect(result?.durationSec).toBe(720);
+        expect(result?.mapboxDurationSec).toBe(600);
     });
 
     test("buildRouteSteps maps maneuver data and falls back to continue instructions", () => {

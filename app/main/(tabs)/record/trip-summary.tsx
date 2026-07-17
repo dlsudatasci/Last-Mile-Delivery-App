@@ -46,7 +46,7 @@ export default function TripSummary() {
     const avgSpeed = `${((ride?.averageSpeed || 0) * 3.6).toFixed(1)} km/h`;
     const maxSpeed = `${((ride?.maxSpeed || 0) * 3.6).toFixed(1)} km/h`;
     const elevationGain = `${(ride?.elevationGain || 0).toFixed(0)} m`;
-    const deviationCount = 1;
+    const deviationCount = 0;
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

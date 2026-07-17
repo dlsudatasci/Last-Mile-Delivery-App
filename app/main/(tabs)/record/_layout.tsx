@@ -45,7 +45,10 @@ export default function Layout() {
             <Stack.Screen name="study-information" options={{ headerShown: false }} />
             <Stack.Screen name="destination" options={{ headerShown: false }} />
             <Stack.Screen name="route-preview" options={{ headerShown: false }} />
-            <Stack.Screen name="trip-end" options={{ headerShown: false }} />
+            <Stack.Screen name="post-trip-questionnaire" options={{ headerShown: true }} />
+            <Stack.Screen name="follow-route-confirmation" options={{ headerShown: true }} />
+            <Stack.Screen name="reason-for-deviation" options={{ headerShown: true }} />
+            <Stack.Screen name="smart-follow-up-questions" options={{ headerShown: true }} />
         </Stack>
     );
 }

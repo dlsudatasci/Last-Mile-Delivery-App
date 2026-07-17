@@ -10,7 +10,7 @@ import { getLocalDb, initLocalDb } from './sqlite';
 // -----------------------------------------------------------------------------
 
 const STORAGE_KEY = 'devia-local-accounts';
-const MIGRATION_KEY = 'devia-local-accounts-sqlite-migrated';
+const MIGRATION_KEY_PREFIX = 'devia-local-accounts-migrated';
 
 export interface LocalAccount {
     riderCode?: string;
@@ -36,11 +36,12 @@ async function readLegacyAll(): Promise<AccountMap> {
 }
 
 async function migrateLegacyAccounts(): Promise<void> {
-    const migrated = await AsyncStorage.getItem(MIGRATION_KEY);
-    if (migrated === 'true') return;
-
     await initLocalDb();
     const db = await getLocalDb();
+    const migrationKey = `${MIGRATION_KEY_PREFIX}-${db.backend}`;
+    const migrated = await AsyncStorage.getItem(migrationKey);
+    if (migrated === 'true') return;
+
     const accounts = await readLegacyAll();
     for (const account of Object.values(accounts)) {
         await db.runAsync(
@@ -60,7 +61,7 @@ async function migrateLegacyAccounts(): Promise<void> {
             ]
         );
     }
-    await AsyncStorage.setItem(MIGRATION_KEY, 'true');
+    await AsyncStorage.setItem(migrationKey, 'true');
 }
 
 export async function saveLocalAccount(account: LocalAccount): Promise<void> {
@@ -129,5 +130,6 @@ export async function clearLocalAccounts(): Promise<void> {
     const db = await getLocalDb();
     await db.runAsync('DELETE FROM local_accounts');
     await AsyncStorage.removeItem(STORAGE_KEY);
-    await AsyncStorage.removeItem(MIGRATION_KEY);
+    await AsyncStorage.removeItem(`${MIGRATION_KEY_PREFIX}-sqlite`);
+    await AsyncStorage.removeItem(`${MIGRATION_KEY_PREFIX}-fallback`);
 }

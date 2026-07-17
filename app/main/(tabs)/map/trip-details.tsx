@@ -1,5 +1,5 @@
 import { formatStudyExpiry, getTripById, getTripDisplay } from '@/lib/mock/trips';
-import { useTripReviews } from '@/lib/store/useTripReviews';
+import { DeviationAnswers, TripReview, useTripReviews } from '@/lib/store/useTripReviews';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -229,32 +229,31 @@ export default function TripDetails() {
                     (!display.isStudy ? (
                         <Text style={styles.empty}>Personal trip — no response needed.</Text>
                     ) : hasDeviations ? (
-                        !review || Object.keys(review.answers).length === 0 ? (
+                        !review || (!review.postTrip && Object.keys(review.answers).length === 0) ? (
                             <Text style={styles.empty}>
                                 No responses yet. Open the Deviations tab and tap “Review Deviations”.
                             </Text>
                         ) : (
-                            trip.deviations.map((d, index) => {
-                                const a = review.answers[d.id];
-                                if (!a) return null;
-                                return (
-                                    <View key={d.id} style={styles.card}>
-                                        <Text style={styles.devTitle}>{d.title}</Text>
-                                        <View style={[styles.qaRow, styles.qaBorder]}>
-                                            <Text style={styles.question}>Bakit ibang ruta?</Text>
-                                            <Text style={styles.answer}>{a.whyRoute}</Text>
-                                        </View>
-                                        <View style={[styles.qaRow, styles.qaBorder]}>
-                                            <Text style={styles.question}>Paano nakaapekto sa biyahe?</Text>
-                                            <Text style={styles.answer}>{a.affect}</Text>
-                                        </View>
-                                        <View style={styles.qaRow}>
-                                            <Text style={styles.question}>Gaano ka kasigurado?</Text>
-                                            <Text style={styles.answer}>{a.confidence}</Text>
-                                        </View>
+                            <>
+                                {review.postTrip && <PostTripResponseCard review={review} theme={theme} />}
+                                {Object.entries(review.answers).map(([deviationId, a], index) => (
+                                    <View key={deviationId} style={styles.card}>
+                                        <Text style={styles.devTitle}>Deviation {index + 1}</Text>
+                                        {!!a.metadata && (
+                                            <View style={[styles.qaRow, styles.qaBorder]}>
+                                                <Text style={styles.question}>Context</Text>
+                                                <Text style={styles.answer}>
+                                                    Street: {a.metadata.streetName ?? 'Not available'}{'\n'}
+                                                    Generated route: {a.metadata.generatedInstruction ?? 'Not available'}{'\n'}
+                                                    Route deviation: {a.metadata.deviationInstruction ?? 'Not available'}{'\n'}
+                                                    Time: {a.metadata.dateTime ?? 'Not available'}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <DeviationAnswerRows answer={a} theme={theme} />
                                     </View>
-                                );
-                            })
+                                ))}
+                            </>
                         )
                     ) : display.incomplete ? (
                         !review?.incompleteFeedback ? (
@@ -278,29 +277,103 @@ export default function TripDetails() {
                                 </View>
                             </View>
                         )
-                    ) : !review?.routeFeedback ? (
+                    ) : !review?.postTrip && !review?.routeFeedback ? (
                         <Text style={styles.empty}>
                             No responses yet. Open the Deviations tab and tap “Answer Route Questions”.
                         </Text>
                     ) : (
-                        <View style={styles.card}>
-                            <Text style={styles.devTitle}>Route Feedback</Text>
-                            <View style={[styles.qaRow, styles.qaBorder]}>
-                                <Text style={styles.question}>Naging angkop ba ang ruta?</Text>
-                                <Text style={styles.answer}>{review.routeFeedback.optimalRoute}</Text>
-                            </View>
-                            <View style={[styles.qaRow, styles.qaBorder]}>
-                                <Text style={styles.question}>Bakit walang ibang rutang ginawa?</Text>
-                                <Text style={styles.answer}>{review.routeFeedback.whyNoDeviation}</Text>
-                            </View>
-                            <View style={styles.qaRow}>
-                                <Text style={styles.question}>Kabuuang karanasan sa ruta?</Text>
-                                <Text style={styles.answer}>{review.routeFeedback.experience}</Text>
-                            </View>
-                        </View>
+                        <>
+                            {review.postTrip && <PostTripResponseCard review={review} theme={theme} />}
+                            {review.routeFeedback && (
+                                <View style={styles.card}>
+                                    <Text style={styles.devTitle}>Route Feedback</Text>
+                                    <View style={[styles.qaRow, styles.qaBorder]}>
+                                        <Text style={styles.question}>Naging angkop ba ang ruta?</Text>
+                                        <Text style={styles.answer}>{review.routeFeedback.optimalRoute}</Text>
+                                    </View>
+                                    <View style={[styles.qaRow, styles.qaBorder]}>
+                                        <Text style={styles.question}>Bakit walang ibang rutang ginawa?</Text>
+                                        <Text style={styles.answer}>{review.routeFeedback.whyNoDeviation}</Text>
+                                    </View>
+                                    <View style={styles.qaRow}>
+                                        <Text style={styles.question}>Kabuuang karanasan sa ruta?</Text>
+                                        <Text style={styles.answer}>{review.routeFeedback.experience}</Text>
+                                    </View>
+                                </View>
+                            )}
+                        </>
                     ))}
             </ScrollView>
         </SafeAreaView>
+    );
+}
+
+function PostTripResponseCard({ review, theme }: { review: TripReview; theme: MD3Theme }) {
+    const styles = getStyles(theme);
+    if (!review.postTrip) return null;
+    return (
+        <View style={styles.card}>
+            <Text style={styles.devTitle}>Post-trip Questionnaire</Text>
+            <View style={[styles.qaRow, styles.qaBorder]}>
+                <Text style={styles.question}>Arrival timing</Text>
+                <Text style={styles.answer}>{review.postTrip.arrival}</Text>
+            </View>
+            <View style={[styles.qaRow, styles.qaBorder]}>
+                <Text style={styles.question}>ETA accuracy</Text>
+                <Text style={styles.answer}>{review.postTrip.etaRating}</Text>
+            </View>
+            <View style={styles.qaRow}>
+                <Text style={styles.question}>Trip stress</Text>
+                <Text style={styles.answer}>{review.postTrip.stressRating}</Text>
+            </View>
+        </View>
+    );
+}
+
+function DeviationAnswerRows({ answer, theme }: { answer: DeviationAnswers; theme: MD3Theme }) {
+    const styles = getStyles(theme);
+    const q = answer.questionnaire;
+    if (!q) {
+        return (
+            <>
+                <View style={[styles.qaRow, styles.qaBorder]}>
+                    <Text style={styles.question}>Bakit ibang ruta?</Text>
+                    <Text style={styles.answer}>{answer.whyRoute}</Text>
+                </View>
+                <View style={[styles.qaRow, styles.qaBorder]}>
+                    <Text style={styles.question}>Paano nakaapekto sa biyahe?</Text>
+                    <Text style={styles.answer}>{answer.affect}</Text>
+                </View>
+                <View style={styles.qaRow}>
+                    <Text style={styles.question}>Gaano ka kasigurado?</Text>
+                    <Text style={styles.answer}>{answer.confidence}</Text>
+                </View>
+            </>
+        );
+    }
+
+    const rows = [
+        ['Primary reason', q.primaryReason === 'Other' ? `Other: ${q.primaryReasonOther}` : q.primaryReason],
+        ['Traffic severity', q.trafficSeverity],
+        ['Rush hour cause', q.rushHourCause],
+        ['Would choose during non-rush', q.chooseDuringNonRush],
+        ['Blockage reason', q.blockageReason === 'Other' ? `Other: ${q.blockageReasonOther}` : q.blockageReason],
+        ['Personal stop reason', Array.isArray(q.personalStopReason) ? q.personalStopReason.join(', ') : undefined],
+        ['Personal stop other', q.personalStopOther],
+        ['Stop duration', q.stopDuration],
+        ['Deviate again', q.deviateAgainFrequency],
+        ['Usually avoid this road', q.avoidRoadFrequency],
+    ].filter(([, value]) => value);
+
+    return (
+        <>
+            {rows.map(([label, value], index) => (
+                <View key={label} style={[styles.qaRow, index < rows.length - 1 && styles.qaBorder]}>
+                    <Text style={styles.question}>{label}</Text>
+                    <Text style={styles.answer}>{value}</Text>
+                </View>
+            ))}
+        </>
     );
 }
 

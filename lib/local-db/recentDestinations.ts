@@ -4,7 +4,7 @@ import { LngLat, SearchResult } from '@/lib/utils/directions';
 import { getLocalDb, initLocalDb } from './sqlite';
 
 const STORAGE_KEY = 'devia-recent-destinations';
-const MIGRATION_KEY = 'devia-recent-destinations-sqlite-migrated';
+const MIGRATION_KEY_PREFIX = 'devia-recent-destinations-migrated';
 const MAX_RECENT_DESTINATIONS = 8;
 const DEFAULT_USER_KEY = 'anonymous';
 
@@ -28,11 +28,12 @@ async function readLegacyAll(): Promise<RecentDestinationMap> {
 }
 
 async function migrateLegacyRecentDestinations(): Promise<void> {
-    const migrated = await AsyncStorage.getItem(MIGRATION_KEY);
-    if (migrated === 'true') return;
-
     await initLocalDb();
     const db = await getLocalDb();
+    const migrationKey = `${MIGRATION_KEY_PREFIX}-${db.backend}`;
+    const migrated = await AsyncStorage.getItem(migrationKey);
+    if (migrated === 'true') return;
+
     const all = await readLegacyAll();
     for (const destinations of Object.values(all)) {
         for (const destination of destinations) {
@@ -51,7 +52,7 @@ async function migrateLegacyRecentDestinations(): Promise<void> {
             );
         }
     }
-    await AsyncStorage.setItem(MIGRATION_KEY, 'true');
+    await AsyncStorage.setItem(migrationKey, 'true');
 }
 
 function getUserKey(userId?: string | null): string {
@@ -138,7 +139,8 @@ export async function clearRecentDestinations(userId?: string | null): Promise<v
     if (!userId) {
         await db.runAsync('DELETE FROM recent_destinations');
         await AsyncStorage.removeItem(STORAGE_KEY);
-        await AsyncStorage.removeItem(MIGRATION_KEY);
+        await AsyncStorage.removeItem(`${MIGRATION_KEY_PREFIX}-sqlite`);
+        await AsyncStorage.removeItem(`${MIGRATION_KEY_PREFIX}-fallback`);
         return;
     }
 

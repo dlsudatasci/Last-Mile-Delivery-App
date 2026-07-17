@@ -3,6 +3,7 @@ import SpinningWheel from '@/components/common/SpinningWheel';
 import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
 import { calculateRemainingDistanceM, getAsyncFlag, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
+import { getDistanceToRouteM, getRoute, LngLat } from '@/lib/utils/directions';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -51,6 +52,7 @@ export default function Record() {
         resetRide,
         addAnnotation,
         setRecording,
+        setActiveRouteSteps,
     } = useRideStore();
 
     // const [duration, setDuration] = useState(0);
@@ -65,8 +67,11 @@ export default function Record() {
         destLat?: string;
     }>();
     const etaTotalSec = Number(etaSec ?? 0);
-    const etaRemainingSec = etaTotalSec > 0 ? Math.max(0, etaTotalSec - duration) : 0;
+    const [routeEtaTotalSec, setRouteEtaTotalSec] = useState(etaTotalSec);
     const initialRouteDistanceM = Number(routeDistanceM ?? 0);
+    const [currentRouteDistanceM, setCurrentRouteDistanceM] = useState(initialRouteDistanceM);
+    const [isRerouting, setIsRerouting] = useState(false);
+    const etaRemainingSec = routeEtaTotalSec > 0 ? Math.max(0, routeEtaTotalSec - duration) : 0;
     const destinationPoint: RidePoint | null =
         destLng && destLat && Number.isFinite(Number(destLng)) && Number.isFinite(Number(destLat))
             ? {
@@ -83,11 +88,13 @@ export default function Record() {
     const remainingDistanceM = calculateRemainingDistanceM({
         currentLocation: currentPoint,
         destination: destinationPoint,
-        routeDistanceM: initialRouteDistanceM > 0 ? initialRouteDistanceM : undefined,
+        routeDistanceM: currentRouteDistanceM > 0 ? currentRouteDistanceM : undefined,
         traveledDistanceM: totalDistance,
         previousRemainingM: previousRemainingDistanceM,
     });
     const autoStartedRef = useRef(false);
+    const offRouteCountRef = useRef(0);
+    const lastRerouteAtRef = useRef(0);
 
     // Timer effect for duration
     useEffect(() => {
@@ -102,6 +109,44 @@ export default function Record() {
     useEffect(() => {
         setPreviousRemainingDistanceM(remainingDistanceM);
     }, [remainingDistanceM]);
+
+    useEffect(() => {
+        if (!isRecording || isPaused || !currentPoint || !destinationPoint || activeRouteSteps.length < 2 || isRerouting) {
+            return;
+        }
+
+        const routeLine = activeRouteSteps.map(step => step.location);
+        const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
+        const distanceFromRouteM = getDistanceToRouteM(currentLngLat, routeLine);
+        const now = Date.now();
+
+        if (distanceFromRouteM < 90) {
+            offRouteCountRef.current = 0;
+            return;
+        }
+
+        offRouteCountRef.current += 1;
+        if (offRouteCountRef.current < 2 || now - lastRerouteAtRef.current < 45000) {
+            return;
+        }
+
+        lastRerouteAtRef.current = now;
+        offRouteCountRef.current = 0;
+        setIsRerouting(true);
+
+        getRoute(currentLngLat, [destinationPoint.coordinate.longitude, destinationPoint.coordinate.latitude])
+            .then(route => {
+                if (!route) return;
+                setActiveRouteSteps(route.steps);
+                setRouteEtaTotalSec(route.durationSec);
+                setCurrentRouteDistanceM(route.distanceM);
+                setPreviousRemainingDistanceM(route.distanceM);
+            })
+            .catch(error => {
+                console.warn('Failed to reroute after deviation:', error);
+            })
+            .finally(() => setIsRerouting(false));
+    }, [activeRouteSteps, currentPoint, destinationPoint, isPaused, isRecording, isRerouting, setActiveRouteSteps]);
 
     // Check background location permission on mount
     useEffect(() => {
@@ -241,8 +286,10 @@ export default function Record() {
 
         if (result.success) {
             setProgressText('Trip saved successfully!');
-            router.push(
-                `/main/(tabs)/record/trip-end?rideId=${encodeURIComponent(result.rideId as string)}`
+            router.replace(
+                `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
+                    result.rideId as string
+                )}&deviationCount=0`
             );
             setIsSaving(false);
         } else {
@@ -417,9 +464,9 @@ export default function Record() {
                 )}
                 {isRecording && nextInstruction && (
                     <Surface style={styles.guidanceBanner}>
-                        <Icon source="navigation-variant" size={sizes.medium} color={theme.colors.onPrimaryContainer} />
+                        <Icon source={isRerouting ? 'routes' : 'navigation-variant'} size={sizes.medium} color={theme.colors.onPrimaryContainer} />
                         <Text style={styles.guidanceText} numberOfLines={1}>
-                            {nextInstruction.text}
+                            {isRerouting ? 'Adjusting route from your current location...' : nextInstruction.text}
                         </Text>
                     </Surface>
                 )}

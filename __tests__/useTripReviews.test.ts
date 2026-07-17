@@ -124,6 +124,20 @@ describe("useTripReviews", () => {
         expect(review.routeFeedback?.experience).toBe("Good");
     });
 
+    test("savePostTrip creates a pending review", () => {
+        useTripReviews.getState().savePostTrip("trip-post", {
+            arrival: "On time",
+            etaRating: 4,
+            stressRating: 2,
+            language: "en",
+        });
+
+        const review = useTripReviews.getState().reviews["trip-post"];
+
+        expect(review.status).toBe("pending");
+        expect(review.postTrip?.arrival).toBe("On time");
+    });
+
     // #6
     test("saveRouteFeedback updates existing feedback", () => {
         useTripReviews.getState().saveRouteFeedback("trip2", {
@@ -194,6 +208,12 @@ describe("useTripReviews", () => {
 
     // #10
     test("markReviewed preserves routeFeedback", () => {
+        useTripReviews.getState().savePostTrip("trip-4", {
+            arrival: "Late",
+            etaRating: 3,
+            stressRating: 4,
+            language: "tl",
+        });
         useTripReviews.getState().markReviewed("trip-4");
 
         expect(
@@ -203,6 +223,9 @@ describe("useTripReviews", () => {
         expect(
             useTripReviews.getState().reviews["trip-4"].status
         ).toBe("reviewed");
+        expect(
+            useTripReviews.getState().reviews["trip-4"].postTrip?.arrival
+        ).toBe("Late");
     });
 
     // #11

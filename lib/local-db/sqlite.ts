@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeModules } from 'react-native';
 
 type QueryParams = (string | number | null)[];
 
 export interface LocalDb {
+    backend: 'sqlite' | 'fallback';
     execAsync: (sql: string) => Promise<void>;
     runAsync: (sql: string, params?: QueryParams) => Promise<void>;
     getFirstAsync: <T>(sql: string, params?: QueryParams) => Promise<T | null>;
@@ -43,6 +45,7 @@ async function writeFallbackTables(tables: FallbackTables): Promise<void> {
 
 function createFallbackDb(): LocalDb {
     return {
+        backend: 'fallback',
         execAsync: async () => {},
         runAsync: async (sql, params = []) => {
             const tables = await readFallbackTables();
@@ -159,13 +162,25 @@ async function openNativeDb(): Promise<LocalDb | null> {
     try {
         // Keep this dynamic so older dev/test builds without the native module
         // do not crash during module evaluation.
+        if (!NativeModules.ExpoSQLite) return null;
         const SQLite = require('expo-sqlite');
         if (!SQLite?.openDatabaseAsync) return null;
-        return await SQLite.openDatabaseAsync('devia-local.db');
+        const db = await SQLite.openDatabaseAsync('devia-local.db');
+        return {
+            backend: 'sqlite',
+            execAsync: (sql: string) => db.execAsync(sql),
+            runAsync: (sql: string, params?: QueryParams) => db.runAsync(sql, params ?? []),
+            getFirstAsync: async <T>(sql: string, params?: QueryParams) => (await db.getFirstAsync(sql, params ?? [])) as T | null,
+            getAllAsync: async <T>(sql: string, params?: QueryParams) => (await db.getAllAsync(sql, params ?? [])) as T[],
+        };
     } catch (error) {
         console.warn('expo-sqlite native module unavailable; using local storage fallback.', error);
         return null;
     }
+}
+
+export async function isNativeSqliteAvailable(): Promise<boolean> {
+    return (await getLocalDb()).backend === 'sqlite';
 }
 
 export function getLocalDb(): Promise<LocalDb> {

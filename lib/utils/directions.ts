@@ -12,6 +12,7 @@ export type LngLat = [number, number];
 export interface RouteResult {
     coordinates: LngLat[]; // route line geometry
     durationSec: number; // ETA in seconds
+    mapboxDurationSec: number; // raw traffic-aware ETA returned by Mapbox
     typicalDurationSec?: number; // non-traffic typical duration, when Mapbox returns it
     distanceM: number; // distance in meters
     congestionSegments: RouteCongestionSegment[];
@@ -44,6 +45,7 @@ export interface RouteScoreBreakdown {
     score: number;
     distanceKm: number;
     trafficDelaySec: number;
+    trafficAwareDurationSec: number;
     restrictedRoadExposure: number;
     congestionSummary: RouteCongestionSummary;
 }
@@ -246,6 +248,42 @@ export function getApproxDistanceM(from: LngLat, to: LngLat): number {
     return 2 * earthRadiusM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function toMercatorMeters(point: LngLat): { x: number; y: number } {
+    const earthRadiusM = 6371000;
+    const latRad = (point[1] * Math.PI) / 180;
+    return {
+        x: ((point[0] * Math.PI) / 180) * earthRadiusM * Math.cos(latRad),
+        y: ((point[1] * Math.PI) / 180) * earthRadiusM,
+    };
+}
+
+function distanceToSegmentM(point: LngLat, start: LngLat, end: LngLat): number {
+    const p = toMercatorMeters(point);
+    const a = toMercatorMeters(start);
+    const b = toMercatorMeters(end);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    if (dx === 0 && dy === 0) return getApproxDistanceM(point, start);
+
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+    const projection: LngLat = [
+        start[0] + (end[0] - start[0]) * t,
+        start[1] + (end[1] - start[1]) * t,
+    ];
+    return getApproxDistanceM(point, projection);
+}
+
+export function getDistanceToRouteM(point: LngLat, routeCoordinates: LngLat[]): number {
+    if (routeCoordinates.length === 0) return Number.POSITIVE_INFINITY;
+    if (routeCoordinates.length === 1) return getApproxDistanceM(point, routeCoordinates[0]);
+
+    let nearest = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < routeCoordinates.length - 1; index += 1) {
+        nearest = Math.min(nearest, distanceToSegmentM(point, routeCoordinates[index], routeCoordinates[index + 1]));
+    }
+    return nearest;
+}
+
 function getSearchQueryVariants(query: string): string[] {
     const normalized = normalizeSearchText(query);
     const words = normalized.split(' ').filter(Boolean);
@@ -364,8 +402,14 @@ export async function searchPlaces(query: string, proximity?: LngLat): Promise<S
     }
 }
 
-function normalizeCongestion(value: unknown): RouteCongestionLevel {
+function normalizeCongestion(value: unknown, numericValue?: unknown): RouteCongestionLevel {
     if (value === 'low' || value === 'moderate' || value === 'heavy' || value === 'severe') return value;
+    if (typeof numericValue === 'number' && Number.isFinite(numericValue)) {
+        if (numericValue >= 80) return 'severe';
+        if (numericValue >= 60) return 'heavy';
+        if (numericValue >= 30) return 'moderate';
+        if (numericValue >= 0) return 'low';
+    }
     return 'unknown';
 }
 
@@ -377,8 +421,11 @@ export function buildCongestionSegments(route: any): RouteCongestionSegment[] {
     const distanceValues: number[] = [];
     for (const leg of route?.legs ?? []) {
         const legCongestion = leg?.annotation?.congestion ?? [];
-        if (Array.isArray(legCongestion)) {
-            congestionValues.push(...legCongestion.map(normalizeCongestion));
+        const legCongestionNumeric = leg?.annotation?.congestion_numeric ?? [];
+        if (Array.isArray(legCongestion) && legCongestion.length > 0) {
+            congestionValues.push(...legCongestion.map((value, index) => normalizeCongestion(value, legCongestionNumeric[index])));
+        } else if (Array.isArray(legCongestionNumeric)) {
+            congestionValues.push(...legCongestionNumeric.map((value: unknown) => normalizeCongestion(undefined, value)));
         }
         const legDistances = leg?.annotation?.distance ?? [];
         if (Array.isArray(legDistances)) {
@@ -495,10 +542,40 @@ export function getRouteTrafficDelaySec(route: any): number {
     return 0;
 }
 
+function getCongestedDistanceM(summary: RouteCongestionSummary): number {
+    return summary.moderate.distanceM + summary.heavy.distanceM + summary.severe.distanceM;
+}
+
+export function estimateMetroManilaEtaSec(route: any): number {
+    const mapboxDurationSec = Math.max(0, getTrafficAwareDuration(route));
+    const distanceM = Math.max(0, route?.distance ?? 0);
+    if (distanceM === 0 || !Number.isFinite(mapboxDurationSec)) return mapboxDurationSec || 0;
+
+    const summary = summarizeRouteCongestion(route);
+    const distanceKm = distanceM / 1000;
+    const congestedRatio = Math.min(1, getCongestedDistanceM(summary) / distanceM);
+    const severeHeavyRatio = Math.min(1, (summary.heavy.distanceM + summary.severe.distanceM) / distanceM);
+    const hour = new Date().getHours();
+    const isPeak = (hour >= 6 && hour <= 10) || (hour >= 16 && hour <= 21);
+    const hasTrafficAnnotations = Object.values(summary).some(item => item.count > 0);
+
+    let assumedKph = isPeak ? 11 : 15;
+    if (congestedRatio >= 0.5) assumedKph -= 2;
+    if (severeHeavyRatio >= 0.25) assumedKph -= 2;
+    if (!hasTrafficAnnotations && isPeak) assumedKph = 10;
+
+    const urbanFloorSec = (distanceKm / Math.max(8, assumedKph)) * 3600;
+    const calibratedSec = Math.max(mapboxDurationSec, urbanFloorSec);
+
+    return Math.round(calibratedSec / 60) * 60;
+}
+
 export function scoreRiderRoute(route: any): RouteScoreBreakdown {
     const congestionSummary = summarizeRouteCongestion(route);
     const distanceKm = Math.max(0, (route?.distance ?? 0) / 1000);
     const trafficDelaySec = getRouteTrafficDelaySec(route);
+    const trafficAwareDurationSec = getTrafficAwareDuration(route);
+    const trafficAwareDurationMinutes = trafficAwareDurationSec / 60;
     const trafficDelayMinutes = trafficDelaySec / 60;
     const restrictedRoadExposure = getRestrictedRoadExposure(route);
     const moderateTrafficKm = congestionSummary.moderate.distanceM / 1000;
@@ -506,20 +583,35 @@ export function scoreRiderRoute(route: any): RouteScoreBreakdown {
     const severeTrafficKm = congestionSummary.severe.distanceM / 1000;
 
     const score =
-        distanceKm * 1 +
+        distanceKm * 1.0 +
+        trafficAwareDurationMinutes * 0.45 +
         trafficDelayMinutes * 0.35 +
-        moderateTrafficKm * 0.25 +
-        heavyTrafficKm * 0.8 +
-        severeTrafficKm * 1.4 +
+        moderateTrafficKm * 0.35 +
+        heavyTrafficKm * 1.4 +
+        severeTrafficKm * 2.8 +
         restrictedRoadExposure * 10000;
 
     return {
         score,
         distanceKm,
         trafficDelaySec,
+        trafficAwareDurationSec,
         restrictedRoadExposure,
         congestionSummary,
     };
+}
+
+function buildDirectionsUrl(from: LngLat, to: LngLat, includeDepartAt: boolean): string {
+    return (
+        `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${from[0]},${from[1]};${to[0]},${to[1]}` +
+        `?geometries=geojson&overview=full&alternatives=true&steps=true&annotations=congestion,congestion_numeric,duration,distance&exclude=motorway,toll` +
+        `${includeDepartAt ? '&depart_at=now' : ''}&access_token=${MAPBOX_TOKEN}`
+    );
+}
+
+function shouldRetryWithoutDepartAt(data: any): boolean {
+    const message = `${data?.message ?? data?.error ?? data?.code ?? ''}`.toLowerCase();
+    return message.includes('depart_at') || message.includes('depart at');
 }
 
 export function chooseRiderFriendlyRoute(routes: any[]): any | null {
@@ -534,19 +626,22 @@ export function chooseRiderFriendlyRoute(routes: any[]): any | null {
 
 /** Fetch the recommended rider route (geometry + ETA + distance) between two points. */
 export async function getRoute(from: LngLat, to: LngLat): Promise<RouteResult | null> {
-    const url =
-        `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${from[0]},${from[1]};${to[0]},${to[1]}` +
-        `?geometries=geojson&overview=full&alternatives=true&steps=true&annotations=congestion,duration,distance&exclude=motorway,toll&depart_at=now&access_token=${MAPBOX_TOKEN}`;
     try {
-        const res = await fetch(url);
-        const data = await res.json();
+        const res = await fetch(buildDirectionsUrl(from, to, true));
+        let data = await res.json();
+        if ((data?.routes ?? []).length === 0 && shouldRetryWithoutDepartAt(data)) {
+            const retryRes = await fetch(buildDirectionsUrl(from, to, false));
+            data = await retryRes.json();
+        }
         const routes: any[] = data?.routes ?? [];
         const route = chooseRiderFriendlyRoute(routes);
         if (!route?.geometry?.coordinates) return null;
         const score = scoreRiderRoute(route);
+        const mapboxDurationSec = route.duration ?? route.duration_typical ?? 0;
         return {
             coordinates: route.geometry.coordinates as LngLat[],
-            durationSec: route.duration ?? route.duration_typical ?? 0,
+            durationSec: estimateMetroManilaEtaSec(route),
+            mapboxDurationSec,
             typicalDurationSec: route.duration_typical,
             distanceM: route.distance ?? 0,
             congestionSegments: buildCongestionSegments(route),

@@ -12,8 +12,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
 
 const TRAFFIC_RED = '#DC2626';
-const TRAFFIC_ORANGE = '#F97316';
-const TRAFFIC_YELLOW = '#FACC15';
+const TRAFFIC_DARK_RED = '#991B1B';
+const TRAFFIC_ORANGE = '#F59E0B';
+const TRAFFIC_TILESET_URL = 'mapbox://mapbox.mapbox-traffic-v1';
+const TRAFFIC_SOURCE_LAYER = 'traffic';
 
 export default function RoutePreview() {
     const theme = useTheme();
@@ -136,20 +138,40 @@ export default function RoutePreview() {
                             <Mapbox.LineLayer
                                 id="moderateTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'moderate']}
-                                style={{ lineColor: TRAFFIC_YELLOW, lineWidth: 6, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 7, lineOpacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
                             />
                             <Mapbox.LineLayer
                                 id="heavyTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'heavy']}
-                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 6, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_RED, lineWidth: 7, lineOpacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
                             />
                             <Mapbox.LineLayer
                                 id="severeTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'severe']}
-                                style={{ lineColor: TRAFFIC_RED, lineWidth: 6, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 8, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
                             />
                         </Mapbox.ShapeSource>
                     )}
+                    <Mapbox.VectorSource id="mapboxTrafficTiles" url={TRAFFIC_TILESET_URL}>
+                        <Mapbox.LineLayer
+                            id="mapboxTrafficModerate"
+                            sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                            filter={['==', ['get', 'congestion'], 'moderate']}
+                            style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 2.5, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                        <Mapbox.LineLayer
+                            id="mapboxTrafficHeavy"
+                            sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                            filter={['==', ['get', 'congestion'], 'heavy']}
+                            style={{ lineColor: TRAFFIC_RED, lineWidth: 3, lineOpacity: 0.65, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                        <Mapbox.LineLayer
+                            id="mapboxTrafficSevere"
+                            sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                            filter={['==', ['get', 'congestion'], 'severe']}
+                            style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 3.5, lineOpacity: 0.75, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                    </Mapbox.VectorSource>
                     {to && (
                         <Mapbox.PointAnnotation id="dest" coordinate={to}>
                             <Icon source="map-marker" size={sizes.size32} color={theme.colors.error} />
