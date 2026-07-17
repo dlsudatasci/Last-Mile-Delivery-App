@@ -1,23 +1,21 @@
-import { LngLat, SearchResult, searchPlaces } from '@/lib/utils/directions';
+import { formatSearchDistance, LngLat, SearchResult, searchPlaces } from '@/lib/utils/directions';
+import { getRecentDestinations, RecentDestination, saveRecentDestination } from '@/lib/local-db/recentDestinations';
+import { auth } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, MD3Theme, Text, TextInput, TouchableRipple, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
+import { Icon, IconButton, MD3Theme, Text, TextInput, TouchableRipple, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const TEAL = '#0E6E73';
-
-const RECENT = ['Makati CBD', 'BGC', 'Ortigas', 'QC Circle'];
 
 export default function Destination() {
     const theme = useTheme();
     const styles = getStyles(theme);
 
     const [destination, setDestination] = useState('');
-    const [selectedCoords, setSelectedCoords] = useState<LngLat | null>(null);
     const [results, setResults] = useState<SearchResult[]>([]);
+    const [recentDestinations, setRecentDestinations] = useState<RecentDestination[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
     const [userLocation, setUserLocation] = useState<LngLat | null>(null);
@@ -39,12 +37,51 @@ export default function Destination() {
         })();
     }, []);
 
+    const loadRecentDestinations = useCallback(async () => {
+        const userId = auth.currentUser?.uid;
+        const recents = await getRecentDestinations(userId);
+        setRecentDestinations(recents);
+    }, []);
+
+    useEffect(() => {
+        void loadRecentDestinations();
+    }, [loadRecentDestinations]);
+
+    const runSearch = useCallback(
+        async (query: string) => {
+            if (!query.trim()) {
+                setResults([]);
+                setHasSearched(false);
+                setIsSearching(false);
+                return;
+            }
+
+            setIsSearching(true);
+            try {
+                const places = await searchPlaces(query, userLocation ?? undefined);
+                setResults(places);
+            } catch {
+                setResults([]);
+            } finally {
+                setIsSearching(false);
+                setHasSearched(true);
+            }
+        },
+        [userLocation]
+    );
+
+    const triggerSearch = useCallback(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        Keyboard.dismiss();
+        setTimeout(() => {
+            void runSearch(destination);
+        }, 80);
+    }, [destination, runSearch]);
+
     // Debounced search — fires 300ms after the user stops typing
     const handleTextChange = useCallback(
         (text: string) => {
             setDestination(text);
-            // Clear previously selected coordinates when the user edits the text
-            setSelectedCoords(null);
 
             if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -57,18 +94,10 @@ export default function Destination() {
 
             setIsSearching(true);
             debounceRef.current = setTimeout(async () => {
-                try {
-                    const places = await searchPlaces(text, userLocation ?? undefined);
-                    setResults(places);
-                } catch {
-                    setResults([]);
-                } finally {
-                    setIsSearching(false);
-                    setHasSearched(true);
-                }
+                await runSearch(text);
             }, 300);
         },
-        [userLocation]
+        [runSearch]
     );
 
     // Cleanup debounce on unmount
@@ -78,28 +107,38 @@ export default function Destination() {
         };
     }, []);
 
-    const selectResult = (result: SearchResult) => {
+    const navigateToRoutePreview = useCallback((name: string, coordinates: LngLat) => {
+        router.push({
+            pathname: '/main/(tabs)/record/route-preview',
+            params: {
+                destination: name,
+                destLng: String(coordinates[0]),
+                destLat: String(coordinates[1]),
+            },
+        });
+    }, []);
+
+    const selectResult = async (result: SearchResult) => {
+        Keyboard.dismiss();
         setDestination(result.name);
-        setSelectedCoords(result.coordinates);
         setResults([]);
         setHasSearched(false);
+        const recents = await saveRecentDestination(result, auth.currentUser?.uid);
+        setRecentDestinations(recents);
+        navigateToRoutePreview(result.name, result.coordinates);
     };
 
-    const selectRecent = (place: string) => {
-        setDestination(place);
-        setSelectedCoords(null); // Will geocode in route-preview
+    const selectRecent = (recent: RecentDestination) => {
+        Keyboard.dismiss();
+        setDestination(recent.name);
         setResults([]);
         setHasSearched(false);
+        navigateToRoutePreview(recent.name, recent.coordinates);
     };
 
-    const handleGenerateRoute = () => {
-        const params: Record<string, string> = { destination };
-        if (selectedCoords) {
-            params.destLng = String(selectedCoords[0]);
-            params.destLat = String(selectedCoords[1]);
-        }
-        router.push({ pathname: '/main/(tabs)/record/route-preview', params });
-    };
+    const hasRecentDestinations = recentDestinations.length > 0;
+
+    const getRecentAddress = (recent: RecentDestination) => recent.fullAddress || `${recent.coordinates[1].toFixed(5)}, ${recent.coordinates[0].toFixed(5)}`;
 
     // Show search results when actively searching, otherwise show recents
     const showResults = destination.trim().length > 0 && (results.length > 0 || isSearching || hasSearched);
@@ -130,25 +169,11 @@ export default function Destination() {
                     value={destination}
                     onChangeText={handleTextChange}
                     placeholder="Search places in Metro Manila"
-                    right={
-                        destination.trim() ? (
-                            <TextInput.Icon
-                                icon="close"
-                                onPress={() => {
-                                    setDestination('');
-                                    setSelectedCoords(null);
-                                    setResults([]);
-                                    setHasSearched(false);
-                                }}
-                            />
-                        ) : (
-                            <TextInput.Icon icon="magnify" />
-                        )
-                    }
+                    right={<TextInput.Icon icon="magnify" color={theme.colors.primary} onPress={triggerSearch} forceTextInputFocus={false} />}
                     style={styles.input}
                     contentStyle={styles.inputText}
                     outlineStyle={{ borderRadius: sizes.small }}
-                    activeOutlineColor={TEAL}
+                    activeOutlineColor={theme.colors.primary}
                 />
 
                 {/* Search results */}
@@ -160,7 +185,7 @@ export default function Destination() {
 
                         {isSearching && (
                             <View style={styles.loadingRow}>
-                                <ActivityIndicator size="small" color={TEAL} />
+                                <ActivityIndicator size="small" color={theme.colors.primary} />
                             </View>
                         )}
 
@@ -174,7 +199,7 @@ export default function Destination() {
                                         borderless
                                     >
                                         <View style={styles.resultInner}>
-                                            <Icon source="map-marker" size={sizes.medium} color={TEAL} />
+                                            <Icon source="map-marker" size={sizes.medium} color={theme.colors.primary} />
                                             <View style={styles.resultTextWrap}>
                                                 <Text style={styles.resultName} numberOfLines={1}>
                                                     {result.name}
@@ -183,6 +208,9 @@ export default function Destination() {
                                                     {result.fullAddress}
                                                 </Text>
                                             </View>
+                                            {result.distanceM !== undefined && (
+                                                <Text style={styles.resultDistance}>{formatSearchDistance(result.distanceM)}</Text>
+                                            )}
                                         </View>
                                     </TouchableRipple>
                                 ))}
@@ -199,20 +227,27 @@ export default function Destination() {
                 )}
 
                 {/* Recent destinations — shown when NOT actively searching */}
-                {!showResults && (
+                {!showResults && hasRecentDestinations && (
                     <>
                         <Text style={[styles.fieldLabel, { marginTop: sizes.large }]}>Recent Destinations</Text>
                         <View style={styles.recentCard}>
-                            {RECENT.map((place, index) => (
+                            {recentDestinations.map((recent, index) => (
                                 <TouchableRipple
-                                    key={place}
-                                    onPress={() => selectRecent(place)}
-                                    style={[styles.recentRow, index < RECENT.length - 1 && styles.recentRowBorder]}
+                                    key={`${recent.name}-${recent.coordinates[0]}-${recent.coordinates[1]}`}
+                                    onPress={() => selectRecent(recent)}
+                                    style={[styles.recentRow, index < recentDestinations.length - 1 && styles.recentRowBorder]}
                                     borderless
                                 >
                                     <View style={styles.recentInner}>
                                         <Icon source="map-marker-outline" size={sizes.medium} color={theme.colors.onSurfaceVariant} />
-                                        <Text style={styles.recentText}>{place}</Text>
+                                        <View style={styles.resultTextWrap}>
+                                            <Text style={styles.recentText} numberOfLines={1}>
+                                                {recent.name}
+                                            </Text>
+                                            <Text style={styles.resultAddress} numberOfLines={1}>
+                                                {getRecentAddress(recent)}
+                                            </Text>
+                                        </View>
                                     </View>
                                 </TouchableRipple>
                             ))}
@@ -220,21 +255,6 @@ export default function Destination() {
                     </>
                 )}
             </ScrollView>
-
-            <View style={styles.footer}>
-                <Button
-                    mode="contained"
-                    buttonColor={TEAL}
-                    textColor="#ffffff"
-                    style={styles.button}
-                    contentStyle={styles.buttonContent}
-                    labelStyle={styles.buttonLabel}
-                    disabled={!destination.trim()}
-                    onPress={handleGenerateRoute}
-                >
-                    Generate Route
-                </Button>
-            </View>
         </SafeAreaView>
     );
 }
@@ -242,7 +262,7 @@ export default function Destination() {
 const getStyles = (theme: MD3Theme) =>
     StyleSheet.create({
         safe: { flex: 1, backgroundColor: theme.colors.background },
-        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: sizes.small },
+        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: sizes.small, backgroundColor: theme.colors.background },
         headerTitle: {
             flex: 1,
             textAlign: 'center',
@@ -273,11 +293,8 @@ const getStyles = (theme: MD3Theme) =>
         resultTextWrap: { flex: 1 },
         resultName: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.tinyPlus, color: theme.colors.onSurface },
         resultAddress: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onSurfaceVariant, marginTop: 2 },
+        resultDistance: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.tiny, color: theme.colors.onSurfaceVariant },
         loadingRow: { alignItems: 'center', paddingVertical: sizes.large },
         emptyWrap: { alignItems: 'center', gap: sizes.small, paddingVertical: sizes.large },
         emptyText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tinyPlus, color: theme.colors.onSurfaceVariant },
-        footer: { padding: sizes.large },
-        button: { borderRadius: sizes.small },
-        buttonContent: { height: sizes.size56 },
-        buttonLabel: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small },
     });

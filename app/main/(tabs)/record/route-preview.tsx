@@ -1,4 +1,5 @@
-import { formatDistance, formatEta, geocode, getRoute, LngLat, RouteResult } from '@/lib/utils/directions';
+import { formatDistance, formatEta, getRoute, LngLat, RouteCongestionLevel, RouteResult } from '@/lib/utils/directions';
+import { useRideStore } from '@/lib/store/useRideStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
@@ -10,7 +11,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
 
-const TEAL = '#0E6E73';
+const TRAFFIC_RED = '#DC2626';
+const TRAFFIC_ORANGE = '#F97316';
+const TRAFFIC_YELLOW = '#FACC15';
 
 export default function RoutePreview() {
     const theme = useTheme();
@@ -25,6 +28,7 @@ export default function RoutePreview() {
     const [route, setRoute] = useState<RouteResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const setActiveRouteSteps = useRideStore(state => state.setActiveRouteSteps);
 
     useEffect(() => {
         let active = true;
@@ -40,16 +44,14 @@ export default function RoutePreview() {
                 if (!active) return;
                 setFrom(origin);
 
-                // Use pre-resolved coordinates from search selection, or fall back to geocoding
                 let dest: LngLat | null = null;
                 if (destLng && destLat) {
-                    dest = [parseFloat(destLng), parseFloat(destLat)];
-                } else {
-                    dest = await geocode(destination ?? '', origin);
+                    const parsedDest: LngLat = [parseFloat(destLng), parseFloat(destLat)];
+                    dest = parsedDest.every(Number.isFinite) ? parsedDest : null;
                 }
                 if (!active) return;
                 if (!dest) {
-                    setError(`Couldn't find "${destination}". Try a more specific place.`);
+                    setError('Select a destination from search results before generating a route.');
                     return;
                 }
                 setTo(dest);
@@ -79,6 +81,21 @@ export default function RoutePreview() {
                 : null,
         [route]
     );
+
+    const congestionShape = useMemo(() => {
+        const segments =
+            route?.congestionSegments.filter(segment => segment.congestion === 'moderate' || segment.congestion === 'heavy' || segment.congestion === 'severe') ??
+            [];
+        if (segments.length === 0) return null;
+        return {
+            type: 'FeatureCollection' as const,
+            features: segments.map(segment => ({
+                type: 'Feature' as const,
+                properties: { congestion: segment.congestion satisfies RouteCongestionLevel },
+                geometry: { type: 'LineString' as const, coordinates: segment.coordinates },
+            })),
+        };
+    }, [route]);
 
     const bounds = useMemo(() => {
         if (!route || route.coordinates.length === 0) return null;
@@ -110,21 +127,40 @@ export default function RoutePreview() {
                         <Mapbox.ShapeSource id="routeSource" shape={lineShape}>
                             <Mapbox.LineLayer
                                 id="routeLine"
-                                style={{ lineColor: TEAL, lineWidth: 5, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: theme.colors.primary, lineWidth: 5, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                        </Mapbox.ShapeSource>
+                    )}
+                    {congestionShape && (
+                        <Mapbox.ShapeSource id="trafficRouteSource" shape={congestionShape}>
+                            <Mapbox.LineLayer
+                                id="moderateTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'moderate']}
+                                style={{ lineColor: TRAFFIC_YELLOW, lineWidth: 6, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                            <Mapbox.LineLayer
+                                id="heavyTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'heavy']}
+                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 6, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                            <Mapbox.LineLayer
+                                id="severeTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'severe']}
+                                style={{ lineColor: TRAFFIC_RED, lineWidth: 6, lineCap: 'round', lineJoin: 'round' }}
                             />
                         </Mapbox.ShapeSource>
                     )}
                     {to && (
                         <Mapbox.PointAnnotation id="dest" coordinate={to}>
-                            <Icon source="map-marker" size={sizes.size32} color="#DC2626" />
+                            <Icon source="map-marker" size={sizes.size32} color={theme.colors.error} />
                         </Mapbox.PointAnnotation>
                     )}
                 </Mapbox.MapView>
 
                 {loading && (
                     <View style={styles.mapOverlay}>
-                        <ActivityIndicator color={TEAL} />
-                        <Text style={styles.overlayText}>Generating shortest route…</Text>
+                        <ActivityIndicator color={theme.colors.primary} />
+                        <Text style={styles.overlayText}>Generating recommended rider route…</Text>
                     </View>
                 )}
                 {!loading && error !== '' && (
@@ -150,18 +186,30 @@ export default function RoutePreview() {
 
                 <Button
                     mode="contained"
-                    buttonColor={TEAL}
-                    textColor="#ffffff"
+                    buttonColor={theme.colors.primary}
+                    textColor={theme.colors.onPrimary}
                     style={styles.button}
                     contentStyle={styles.buttonContent}
                     labelStyle={styles.buttonLabel}
                     disabled={!route}
-                    onPress={() =>
+                    onPress={() => {
+                        if (route) {
+                            setActiveRouteSteps(route.steps);
+                        }
                         router.push({
                             pathname: '/main/(tabs)/record',
-                            params: from && to ? { destination: destination ?? '', etaSec: String(route?.durationSec ?? 0) } : {},
-                        })
-                    }
+                            params:
+                                from && to && route
+                                    ? {
+                                          destination: destination ?? '',
+                                          etaSec: String(route.durationSec),
+                                          routeDistanceM: String(route.distanceM),
+                                          destLng: String(to[0]),
+                                          destLat: String(to[1]),
+                                      }
+                                    : {},
+                        });
+                    }}
                 >
                     Start Trip
                 </Button>

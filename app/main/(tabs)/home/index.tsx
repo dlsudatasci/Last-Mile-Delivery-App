@@ -1,29 +1,19 @@
-import StudyOverviewModal from '@/components/onboarding/StudyOverviewModal';
 import ActiveStudyCard from '@/components/studies/ActiveStudyCard';
 import { MOCK_ACTIVE_STUDIES } from '@/lib/mock/studies';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, MD3Theme, Text, useTheme } from 'react-native-paper';
 
-// TODO: replace with real data. Mock values so the dashboard previews fully.
-const MOCK_STATS = {
-    weeklyTrips: 26,
-    weeklyDistanceKm: 142,
-    weeklyTime: '4h 10m',
-    totalTrips: 96,
-    totalDistanceKm: 1245,
-    totalTime: '38h 20m',
-    deviationsFound: 23,
-};
-
-const MOCK_RECENT_TRIP = {
-    date: 'June 13, 2025',
-    name: 'Makati → BGC',
-    status: 'Approved',
+const EMPTY_STATS = {
+    weeklyTrips: 0,
+    weeklyDistanceKm: 0,
+    weeklyTime: '0m',
+    totalTrips: 0,
+    totalDistanceKm: 0,
+    totalTime: '0m',
+    deviationsFound: 0,
 };
 
 const greetingForNow = () => {
@@ -38,28 +28,11 @@ export default function Home() {
     const styles = getStyles(theme);
 
     const { user } = useUser();
-    const { pendingStudyOffer, setPendingStudyOffer } = useOnboarding();
-
-    const [studyOfferVisible, setStudyOfferVisible] = useState(false);
-
-    // Show the Join Study offer once, right after the user finishes onboarding.
-    useEffect(() => {
-        if (pendingStudyOffer) {
-            setStudyOfferVisible(true);
-            setPendingStudyOffer(false);
-        }
-    }, [pendingStudyOffer, setPendingStudyOffer]);
-
-    const handleJoinStudyOffer = () => {
-        setStudyOfferVisible(false);
-        router.push('/study-consent');
-    };
 
     // --- Derived display values ----------------------------------------------
     const firstName = (user?.fullName || user?.username || 'there').split(' ')[0];
-    // Mock for now — swap these for the user's real studies/trip data later.
     const activeStudies = MOCK_ACTIVE_STUDIES;
-    const recentTrip = MOCK_RECENT_TRIP;
+    const stats = EMPTY_STATS;
 
     return (
         <View style={styles.safe}>
@@ -120,60 +93,45 @@ export default function Home() {
                 <View style={styles.statRow}>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>Trips Recorded</Text>
-                        <Text style={styles.statValue}>{MOCK_STATS.weeklyTrips}</Text>
+                        <Text style={styles.statValue}>{stats.weeklyTrips}</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>Distance Traveled</Text>
-                        <Text style={styles.statValue}>{MOCK_STATS.weeklyDistanceKm} km</Text>
+                        <Text style={styles.statValue}>{stats.weeklyDistanceKm} km</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>Time Spent</Text>
-                        <Text style={styles.statValue}>{MOCK_STATS.weeklyTime}</Text>
+                        <Text style={styles.statValue}>{stats.weeklyTime}</Text>
                     </View>
                 </View>
 
                 {/* Recent trip */}
                 <Text style={styles.sectionLabel}>RECENT TRIP</Text>
                 <View style={styles.card}>
-                    <View style={styles.recentRow}>
-                        <View style={styles.flex}>
-                            <Text style={styles.recentDate}>{recentTrip.date}</Text>
-                            <Text style={styles.recentTitle} numberOfLines={1}>
-                                {recentTrip.name}
-                            </Text>
-                        </View>
-                        <View style={styles.statusBadge}>
-                            <Text style={styles.statusText}>{recentTrip.status}</Text>
-                        </View>
-                    </View>
+                    <Text style={styles.emptyText}>No trips recorded yet.</Text>
                 </View>
 
                 {/* Quick summary */}
                 <Text style={styles.sectionLabel}>QUICK SUMMARY (All Time)</Text>
                 <View style={styles.card}>
-                    <SummaryRow icon="map-marker-path" label="Total Trips" value={String(MOCK_STATS.totalTrips)} theme={theme} />
+                    <SummaryRow icon="map-marker-path" label="Total Trips" value={String(stats.totalTrips)} theme={theme} />
                     <SummaryRow
                         icon="map-marker-distance"
                         label="Total Distance"
-                        value={`${MOCK_STATS.totalDistanceKm.toLocaleString()} km`}
+                        value={`${stats.totalDistanceKm.toLocaleString()} km`}
                         theme={theme}
                     />
-                    <SummaryRow icon="clock-outline" label="Total Time" value={MOCK_STATS.totalTime} theme={theme} />
+                    <SummaryRow icon="clock-outline" label="Total Time" value={stats.totalTime} theme={theme} />
                     <SummaryRow
                         icon="alert-circle-outline"
                         label="Deviations Found"
-                        value={String(MOCK_STATS.deviationsFound)}
+                        value={String(stats.deviationsFound)}
                         theme={theme}
                         last
                     />
                 </View>
             </ScrollView>
 
-            <StudyOverviewModal
-                visible={studyOfferVisible}
-                onJoin={handleJoinStudyOffer}
-                onClose={() => setStudyOfferVisible(false)}
-            />
         </View>
     );
 }
@@ -304,29 +262,6 @@ const getStyles = (theme: MD3Theme) =>
             fontSize: fontSizes.regular,
             color: theme.colors.onSurface,
             marginTop: sizes.tiny,
-        },
-        recentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        recentDate: {
-            fontFamily: 'LGEIText-Regular',
-            fontSize: fontSizes.tiny,
-            color: theme.colors.onSurfaceVariant,
-        },
-        recentTitle: {
-            fontFamily: 'LGEIText-SemiBold',
-            fontSize: fontSizes.small,
-            color: theme.colors.onSurface,
-            marginTop: 2,
-        },
-        statusBadge: {
-            backgroundColor: '#DCFCE7',
-            paddingHorizontal: sizes.regular,
-            paddingVertical: sizes.tiny,
-            borderRadius: sizes.size32,
-        },
-        statusText: {
-            fontFamily: 'LGEIText-SemiBold',
-            fontSize: fontSizes.tiny,
-            color: '#16A34A',
         },
         emptyText: {
             fontFamily: 'LGEIText-Regular',

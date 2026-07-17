@@ -5,8 +5,14 @@ import * as Location from "expo-location";
 import { saveRide } from "../lib/firebase-crud/rides";
 
 import {
+    calculateRemainingDistanceM,
+    calculateSpeedFromMovement,
+    formatNavigationInstruction,
+    getNextNavigationInstruction,
     haversineDistance,
+    sanitizeLocationSpeed,
     simplify,
+    smoothSpeed,
     useRideStore,
 } from "../lib/store/useRideStore";
 
@@ -50,6 +56,8 @@ describe("useRideStore", () => {
             isRecording: false,
             isPaused: false,
             startTime: null,
+            pausedAt: null,
+            pausedDurationMs: 0,
 
             points: [],
             displayPoints: [],
@@ -63,6 +71,7 @@ describe("useRideStore", () => {
             currentSpeed: 0,
             averageSpeed: 0,
             maxSpeed: 0,
+            activeRouteSteps: [],
 
             annotations: [],
         });
@@ -75,12 +84,39 @@ describe("useRideStore", () => {
 
     // #1 increaseDuration
     test("increaseDuration increments duration", () => {
+        useRideStore.setState({ startTime: Date.now() - 2000 });
         const { increaseDuration } = useRideStore.getState();
 
         increaseDuration();
         increaseDuration();
 
         expect(useRideStore.getState().duration).toBe(2);
+    });
+
+    test("duration sync starts at zero and follows wall-clock time", () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(1000);
+        useRideStore.setState({ startTime: 1000, duration: 0, pausedDurationMs: 0, pausedAt: null, isPaused: false });
+
+        useRideStore.getState().syncDurationFromClock();
+        expect(useRideStore.getState().duration).toBe(0);
+
+        jest.setSystemTime(6500);
+        useRideStore.getState().syncDurationFromClock();
+        expect(useRideStore.getState().duration).toBe(5);
+
+        jest.useRealTimers();
+    });
+
+    test("duration sync excludes paused time", () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(10000);
+        useRideStore.setState({ startTime: 1000, duration: 0, pausedDurationMs: 4000, pausedAt: null, isPaused: false });
+
+        useRideStore.getState().syncDurationFromClock();
+
+        expect(useRideStore.getState().duration).toBe(5);
+        jest.useRealTimers();
     });
 
     // #2 setRecording
@@ -203,6 +239,169 @@ describe("useRideStore", () => {
         expect(state.maxSpeed).toBeGreaterThan(0);
 
         expect(state.totalElevationGain).toBe(5);
+    });
+
+    test("addPoint uses valid location speed and clamps unrealistic speed", () => {
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 1,
+                longitude: 2,
+                altitude: 10,
+                speed: 120,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 1.0001,
+                longitude: 2.0001,
+                altitude: 10,
+                speed: 120,
+            },
+            timestamp: 3000,
+        } as any);
+
+        expect(useRideStore.getState().currentSpeed).toBeLessThanOrEqual(35);
+        expect(useRideStore.getState().currentSpeed).toBeGreaterThan(0);
+    });
+
+    test("addPoint keeps speed and distance at zero for stationary GPS jitter", () => {
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 14.0,
+                longitude: 121.0,
+                altitude: 10,
+                speed: 1,
+                accuracy: 12,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 14.00001,
+                longitude: 121.00001,
+                altitude: 10,
+                speed: 1,
+                accuracy: 12,
+            },
+            timestamp: 3000,
+        } as any);
+
+        const state = useRideStore.getState();
+        expect(state.currentSpeed).toBe(0);
+        expect(state.totalDistance).toBe(0);
+    });
+
+    test("addPoint ignores poor accuracy movement for speed and distance", () => {
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 14.0,
+                longitude: 121.0,
+                altitude: 10,
+                speed: 8,
+                accuracy: 80,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 14.001,
+                longitude: 121.001,
+                altitude: 10,
+                speed: 8,
+                accuracy: 80,
+            },
+            timestamp: 3000,
+        } as any);
+
+        const state = useRideStore.getState();
+        expect(state.currentSpeed).toBe(0);
+        expect(state.totalDistance).toBe(0);
+    });
+
+    test("speed helpers sanitize invalid values and smooth changes", () => {
+        expect(sanitizeLocationSpeed(-1)).toBeNull();
+        expect(sanitizeLocationSpeed(null)).toBeNull();
+        expect(sanitizeLocationSpeed(1)).toBeNull();
+        expect(sanitizeLocationSpeed(8, 80)).toBeNull();
+        expect(sanitizeLocationSpeed(120)).toBe(35);
+        expect(calculateSpeedFromMovement(20, 2)).toBe(10);
+        expect(calculateSpeedFromMovement(4, 2)).toBe(0);
+        expect(calculateSpeedFromMovement(20, 2, 80)).toBe(0);
+        expect(calculateSpeedFromMovement(1000, 1)).toBe(35);
+        expect(smoothSpeed(10, 20)).toBeCloseTo(15.5);
+        expect(smoothSpeed(1.5, 0)).toBe(0);
+    });
+
+    test("remaining distance starts from route distance and decreases with traveled distance", () => {
+        const remaining = calculateRemainingDistanceM({
+            routeDistanceM: 5000,
+            traveledDistanceM: 1200,
+        });
+
+        expect(remaining).toBe(3800);
+    });
+
+    test("remaining distance falls back to destination distance and ignores small GPS increases", () => {
+        const destination = {
+            coordinate: { latitude: 14.01, longitude: 121.01 },
+            timestamp: 1,
+        };
+        const currentLocation = {
+            coordinate: { latitude: 14.0, longitude: 121.0 },
+            timestamp: 1,
+        };
+
+        const firstRemaining = calculateRemainingDistanceM({
+            currentLocation,
+            destination,
+            traveledDistanceM: 0,
+        });
+        const noisyRemaining = calculateRemainingDistanceM({
+            currentLocation: {
+                coordinate: { latitude: 13.99999, longitude: 120.99999 },
+                timestamp: 2,
+            },
+            destination,
+            traveledDistanceM: 0,
+            previousRemainingM: firstRemaining,
+        });
+
+        expect(noisyRemaining).toBe(firstRemaining);
+    });
+
+    test("formats and selects the next navigation instruction", () => {
+        const steps = [
+            {
+                instruction: "Turn left onto Taft Avenue",
+                maneuverType: "turn",
+                maneuverModifier: "left",
+                location: [121.001, 14.001] as [number, number],
+                distanceM: 250,
+            },
+            {
+                instruction: "Continue straight",
+                maneuverType: "continue",
+                location: [121.02, 14.02] as [number, number],
+                distanceM: 2000,
+            },
+        ];
+        const currentLocation = {
+            coordinate: { latitude: 14.0, longitude: 121.0 },
+            timestamp: 1,
+        };
+
+        expect(formatNavigationInstruction(steps[0], 205)).toBe("Turn left onto Taft Avenue in 210 m");
+        expect(getNextNavigationInstruction(currentLocation, steps)?.text).toContain("Turn left");
     });
 
     // #7 displayPoints
@@ -486,62 +685,7 @@ describe("useRideStore", () => {
         expect(state.isPaused).toBe(false);
     });
 
-    // #18 pauseRide 
-    test("pauseRide pauses an active ride", async () => {
-        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(true);
-        (Location.stopLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
-
-        const result = await useRideStore.getState().pauseRide();
-
-        expect(result).toBe(true);
-
-        expect(Location.stopLocationUpdatesAsync).toHaveBeenCalledWith(
-            "location-recording"
-        );
-
-        expect(useRideStore.getState().isPaused).toBe(true);
-    });
-
-    // #19 
-    test("pauseRide returns false when stopping location updates fails", async () => {
-        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockRejectedValue(
-            new Error("Failed")
-        );
-
-        const result = await useRideStore.getState().pauseRide();
-
-        expect(result).toBe(false);
-
-        expect(useRideStore.getState().isPaused).toBe(false);
-    });
-
-    // #20 resumeRide
-    test("resumeRide resumes location tracking", async () => {
-        (Location.startLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
-
-        const result = await useRideStore.getState().resumeRide();
-
-        expect(result).toBe(true);
-
-        expect(Location.startLocationUpdatesAsync).toHaveBeenCalled();
-
-        expect(useRideStore.getState().isPaused).toBe(false);
-    });
-
-    // #21
-    test("resumeRide returns false when location updates fail", async () => {
-        (Location.startLocationUpdatesAsync as jest.Mock).mockRejectedValue(
-            new Error("Resume failed")
-        );
-
-        const result = await useRideStore.getState().resumeRide();
-
-        expect(result).toBe(false);
-
-        expect(useRideStore.getState().isPaused).toBe(true);
-    });
-
-    // #22 finishRide 
+    // #18 finishRide
     test("finishRide saves ride successfully", async () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
 

@@ -21,8 +21,16 @@ export interface AvailableStudy {
     org: string;
 }
 
-// No joined study yet — Home and the Studies tab show the "not joined" state.
-export const MOCK_ACTIVE_STUDIES: ActiveStudy[] = [];
+// Study enrollment is mandatory during onboarding, so a completed account is
+// treated as joined in the local mock data until this is backed by persistence.
+export const MOCK_ACTIVE_STUDIES: ActiveStudy[] = [
+    {
+        id: 'devia-route',
+        name: 'Devia Route Study',
+        tripsDone: 0,
+        tripsRequired: 10,
+    },
+];
 
 export const MOCK_AVAILABLE_STUDIES: AvailableStudy[] = [
     {

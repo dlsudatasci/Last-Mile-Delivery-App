@@ -27,8 +27,6 @@ if (!TaskManager.isTaskDefined('location-recording')) {
             }
             if (data?.locations?.length > 0) {
                 try {
-                    const location = data.locations[0];
-
                     const isRecording = await getAsyncFlag('isRecording');
                     const isPaused = await getAsyncFlag('isPaused');
 
@@ -37,7 +35,9 @@ if (!TaskManager.isTaskDefined('location-recording')) {
                     const { addPoint } = useRideStore.getState();
 
                     if (isRecording && !isPaused) {
-                        addPoint(location);
+                        for (const location of data.locations) {
+                            addPoint(location);
+                        }
                     }
                 } catch (e) {
                     console.error('Error processing location:', e);
@@ -46,18 +46,6 @@ if (!TaskManager.isTaskDefined('location-recording')) {
         }
     );
 }
-
-// Add cleanup function for location updates
-const cleanupLocationUpdates = async () => {
-    try {
-        const isRegistered = await TaskManager.isTaskRegisteredAsync('location-recording');
-        if (isRegistered) {
-            await Location.stopLocationUpdatesAsync('location-recording');
-        }
-    } catch (error) {
-        console.error('Error cleaning up location updates:', error);
-    }
-};
 
 // Version context
 const VersionContext = createContext<{
@@ -156,13 +144,6 @@ export default function RootLayout() {
 
     const [fontsLoaded] = useCustomFonts();
 
-    // Add cleanup on unmount
-    React.useEffect(() => {
-        return () => {
-            cleanupLocationUpdates();
-        };
-    }, []);
-
     if (!fontsLoaded) return null;
 
     const paperTheme =
@@ -201,7 +182,7 @@ export default function RootLayout() {
             <VersionDialogProvider>
                 <GestureHandlerRootView>
                     <Stack
-                        initialRouteName="login"
+                        initialRouteName="index"
                         screenOptions={{
                             ...commonScreenOptions,
                             headerLeft: () => (
@@ -219,20 +200,6 @@ export default function RootLayout() {
                             }}
                         />
                         <Stack.Screen
-                            name="login"
-                            options={{
-                                title: 'Login',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="register"
-                            options={{
-                                title: 'Register',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
                             name="get-started"
                             options={{
                                 title: 'Get Started',
@@ -243,6 +210,13 @@ export default function RootLayout() {
                             name="enter-phone"
                             options={{
                                 title: 'Enter Phone Number',
+                                headerShown: false,
+                            }}
+                        />
+                        <Stack.Screen
+                            name="rider-code"
+                            options={{
+                                title: 'Rider Code',
                                 headerShown: false,
                             }}
                         />
@@ -278,18 +252,6 @@ export default function RootLayout() {
                             name="main"
                             options={{
                                 headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="forgot-password"
-                            options={{
-                                title: 'Forgot Password',
-                                headerShown: true,
-                                headerLeft: () => (
-                                    <TouchableOpacity onPress={() => router.dismiss()}>
-                                        <Icon source={'chevron-left'} size={sizes.size32} />
-                                    </TouchableOpacity>
-                                ),
                             }}
                         />
                         <Stack.Screen

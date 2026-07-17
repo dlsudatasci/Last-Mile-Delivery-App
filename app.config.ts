@@ -111,6 +111,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
                     },
                 },
             ],
+            'expo-sqlite',
         ],
         experiments: {
             typedRoutes: true,

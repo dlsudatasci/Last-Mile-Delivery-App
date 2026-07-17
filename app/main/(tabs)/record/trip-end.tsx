@@ -1,7 +1,7 @@
 import { INCOMPLETE_QUESTIONS } from '@/lib/review-questions';
 import { useRideStore } from '@/lib/store/useRideStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, MD3Theme, Text, TouchableRipple, useTheme } from 'react-native-paper';
@@ -11,7 +11,7 @@ const TEAL = '#0E6E73';
 const RED = '#DC2626';
 const GREEN = '#16A34A';
 
-type Step = 'ask' | 'questions' | 'arrived-done' | 'incomplete-done';
+type Step = 'ask' | 'questions' | 'incomplete-done';
 
 export default function TripEnd() {
     const theme = useTheme();
@@ -21,10 +21,23 @@ export default function TripEnd() {
     const [step, setStep] = useState<Step>('ask');
     const [qIndex, setQIndex] = useState(0);
     const [answers, setAnswers] = useState<string[]>(['', '', '']);
+    const { rideId } = useLocalSearchParams<{ rideId?: string }>();
 
     const goToTrips = () => {
         resetRide();
         router.replace('/main/(tabs)/map');
+    };
+
+    const goToRequiredStudyQuestions = () => {
+        resetRide();
+        if (!rideId) {
+            router.replace('/main/(tabs)/map');
+            return;
+        }
+        router.replace({
+            pathname: '/main/(tabs)/record/post-trip-questionnaire',
+            params: { rideId, deviationCount: '1' },
+        });
     };
 
     const select = (value: string) => {
@@ -65,7 +78,7 @@ export default function TripEnd() {
                     <Text style={styles.askTitle}>Did you reach your destination?</Text>
                     <Text style={styles.askSub}>This confirms whether the trip was completed.</Text>
 
-                    <TouchableRipple style={[styles.choice, styles.choiceArrived]} borderless onPress={() => setStep('arrived-done')}>
+                    <TouchableRipple style={[styles.choice, styles.choiceArrived]} borderless onPress={goToRequiredStudyQuestions}>
                         <View style={styles.choiceRow}>
                             <View style={[styles.choiceIcon, { backgroundColor: '#DCFCE7' }]}>
                                 <Icon source="map-marker-check" size={sizes.size32} color={GREEN} />
@@ -120,20 +133,6 @@ export default function TripEnd() {
                         />
                     </View>
                 </>
-            )}
-
-            {/* ARRIVED — success */}
-            {step === 'arrived-done' && (
-                <View style={styles.doneWrap}>
-                    <View style={[styles.doneCircle, { borderColor: GREEN }]}>
-                        <Icon source="check" size={sizes.size64} color={GREEN} />
-                    </View>
-                    <Text style={styles.doneTitle}>Trip complete!</Text>
-                    <Text style={styles.doneSub}>
-                        You reached your destination, so this trip is valid. It’s now saved and pending for response in Trips.
-                    </Text>
-                    <PrimaryButton label="View in Trips" onPress={goToTrips} theme={theme} />
-                </View>
             )}
 
             {/* INCOMPLETE — success */}

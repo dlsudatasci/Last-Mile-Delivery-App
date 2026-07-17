@@ -72,7 +72,7 @@ export default function SmartFollowUpQuestions() {
             return;
         }
 
-        router.replace(`/main/rides/ride/${rideId}`);
+        router.replace('/main/(tabs)/map');
     };
 
     return (

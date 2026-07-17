@@ -1,10 +1,8 @@
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
-import { isValidPhilippineMobileNumber, signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
-import { getLocalAccount, localAccountExists } from '@/lib/local-db/accounts';
-import { useOnboarding } from '@/stores/useOnboarding';
-import { useUser } from '@/stores/useUser';
+import { isValidPhilippineMobileNumber } from '@/lib/firebase-crud/auth';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useOnboarding } from '@/stores/useOnboarding';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text, TextInput } from 'react-native-paper';
@@ -22,14 +20,9 @@ const toLocalPhone = (raw: string) => {
 };
 
 export default function EnterPhone() {
-    const { mode } = useLocalSearchParams<{ mode?: string }>();
-    const isLogin = mode === 'login';
-
     const setOnboardingPhone = useOnboarding(state => state.setPhone);
-    const setUser = useUser(state => state.setUser);
 
     const [phone, setPhone] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarType, setSnackbarType] = useState<SnackbarType>('error');
@@ -49,52 +42,14 @@ export default function EnterPhone() {
     };
 
     const handleContinue = async () => {
-        if (isLoading) return;
         const localPhone = toLocalPhone(phone);
         if (!isValidPhilippineMobileNumber(localPhone)) {
             showError('Enter a valid Philippine mobile number (e.g. 912 345 6789).');
             return;
         }
 
-        // Sign-up: account is NOT created here — collect the phone and continue to
-        // consent, then create the account on the "Create Account" step.
-        if (!isLogin) {
-            setOnboardingPhone(localPhone);
-            router.push('/study-enrollment');
-            return;
-        }
-
-        // Login: the number must already be registered (checked in the local DB).
-        setIsLoading(true);
-        try {
-            const exists = await localAccountExists(localPhone);
-            if (!exists) {
-                showError('No account found with this number. Tap “Get Started” to create one.');
-                return;
-            }
-            const { user } = await signUpOrSignInWithPhone(localPhone);
-            const local = await getLocalAccount(localPhone);
-            if (local) {
-                setUser({
-                    id: user.uid,
-                    username: local.fullName,
-                    fullName: local.fullName,
-                    avatarUrl: null,
-                    email: user.email,
-                    phone: local.phone,
-                    gender: local.gender,
-                    ageRange: local.ageRange,
-                    city: local.city,
-                    yearsExperience: local.yearsExperience,
-                    createdAt: new Date(local.createdAt),
-                });
-            }
-            router.replace('/main/(tabs)/home');
-        } catch (error) {
-            showError(error instanceof Error ? error.message : 'Could not sign in. Please try again.');
-        } finally {
-            setIsLoading(false);
-        }
+        setOnboardingPhone(localPhone);
+        router.push('/create-profile');
     };
 
     return (
@@ -107,9 +62,8 @@ export default function EnterPhone() {
                     <IconButton icon="chevron-left" size={sizes.size32} onPress={handleBack} style={styles.backButton} />
                     <Text style={styles.title}>Enter your{'\n'}phone number</Text>
                     <Text style={styles.subtitle}>
-                        {isLogin
-                            ? "We'll check if you already have an account."
-                            : "We'll use this to create your account."}
+                        This number will be linked to your rider account and used for compensation verification through
+                        GCash, Maya, or Maribank.
                     </Text>
 
                     <View style={styles.phoneRow}>
@@ -141,8 +95,6 @@ export default function EnterPhone() {
                         contentStyle={styles.buttonContent}
                         labelStyle={styles.buttonLabel}
                         onPress={handleContinue}
-                        loading={isLoading}
-                        disabled={isLoading}
                     >
                         Continue
                     </Button>

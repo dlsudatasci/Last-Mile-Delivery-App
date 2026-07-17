@@ -1,5 +1,4 @@
-import ActiveStudyCard from '@/components/studies/ActiveStudyCard';
-import { MOCK_ACTIVE_STUDIES, MOCK_AVAILABLE_STUDIES } from '@/lib/mock/studies';
+import { MOCK_AVAILABLE_STUDIES } from '@/lib/mock/studies';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
@@ -53,7 +52,7 @@ export default function Studies() {
                         key={study.id}
                         style={styles.availCard}
                         borderless
-                        onPress={() => openStudy({ ...study, joined: false })}
+                        onPress={() => openStudy({ ...study, joined: true })}
                     >
                         <View>
                             <View style={styles.cardTopRow}>
@@ -61,8 +60,8 @@ export default function Studies() {
                                     <Text style={styles.availName}>{study.name}</Text>
                                     <Text style={styles.availOrg}>{study.org}</Text>
                                 </View>
-                                <View style={[styles.badge, styles.badgeNotJoined]}>
-                                    <Text style={[styles.badgeText, styles.badgeTextNotJoined]}>Not Joined</Text>
+                                <View style={[styles.badge, styles.badgeJoined]}>
+                                    <Text style={[styles.badgeText, styles.badgeTextJoined]}>Joined</Text>
                                 </View>
                             </View>
 
@@ -88,24 +87,12 @@ export default function Studies() {
                             </View>
 
                             <View style={styles.viewCta}>
-                                <Text style={styles.viewCtaText}>View details & join</Text>
+                                <Text style={styles.viewCtaText}>View details</Text>
                                 <Icon source="chevron-right" size={sizes.size28} color={theme.colors.primary} />
                             </View>
                         </View>
                     </TouchableRipple>
                 ))}
-
-                {/* Active studies */}
-                <Text style={styles.sectionLabel}>ACTIVE STUDY</Text>
-                {MOCK_ACTIVE_STUDIES.length === 0 ? (
-                    <View style={styles.card}>
-                        <Text style={styles.emptyText}>You haven&apos;t joined a study yet.</Text>
-                    </View>
-                ) : (
-                    MOCK_ACTIVE_STUDIES.map(study => (
-                        <ActiveStudyCard key={study.id} study={study} onPress={() => openStudy({ ...study, joined: true })} />
-                    ))
-                )}
 
                 {/* Quick links */}
                 <View style={styles.linksCard}>

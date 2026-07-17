@@ -2,13 +2,13 @@ import OpenCameraView from '@/components/camera/CameraView';
 import SpinningWheel from '@/components/common/SpinningWheel';
 import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
-import { getAsyncFlag, useRideStore } from '@/lib/store/useRideStore';
+import { calculateRemainingDistanceM, getAsyncFlag, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import {
     Button,
     Icon,
@@ -24,7 +24,6 @@ import {
 export default function Record() {
     const theme = useTheme();
 
-    const navigation = useNavigation();
     const [reportModalVisible, setReportModalVisible] = useState(false);
     const [annotation, setAnnotation] = useState<PredefinedAnnotation | null>(null);
     const [reportDescription, setReportDescription] = useState('');
@@ -44,34 +43,65 @@ export default function Record() {
         currentSpeed,
         duration,
         points,
+        activeRouteSteps,
         startRide,
-        pauseRide,
-        resumeRide,
         finishRide,
         increaseDuration,
+        syncDurationFromClock,
         resetRide,
         addAnnotation,
         setRecording,
     } = useRideStore();
 
     // const [duration, setDuration] = useState(0);
-    const [appState, setAppState] = useState(AppState.currentState);
-    const [hasBackgroundPermission, setHasBackgroundPermission] = useState<boolean | null>(null);
+    const [backgroundPermissionWarningShown, setBackgroundPermissionWarningShown] = useState(false);
 
     // ETA generated on the Route Preview screen; counts down as the trip runs.
-    const { etaSec } = useLocalSearchParams<{ etaSec?: string; destination?: string }>();
+    const { etaSec, routeDistanceM, destLng, destLat } = useLocalSearchParams<{
+        etaSec?: string;
+        destination?: string;
+        routeDistanceM?: string;
+        destLng?: string;
+        destLat?: string;
+    }>();
     const etaTotalSec = Number(etaSec ?? 0);
     const etaRemainingSec = etaTotalSec > 0 ? Math.max(0, etaTotalSec - duration) : 0;
+    const initialRouteDistanceM = Number(routeDistanceM ?? 0);
+    const destinationPoint: RidePoint | null =
+        destLng && destLat && Number.isFinite(Number(destLng)) && Number.isFinite(Number(destLat))
+            ? {
+                  coordinate: {
+                      longitude: Number(destLng),
+                      latitude: Number(destLat),
+                  },
+                  timestamp: Date.now(),
+              }
+            : null;
+    const currentPoint = points.length > 0 ? points[points.length - 1] : null;
+    const nextInstruction = getNextNavigationInstruction(currentPoint, activeRouteSteps);
+    const [previousRemainingDistanceM, setPreviousRemainingDistanceM] = useState<number | undefined>(undefined);
+    const remainingDistanceM = calculateRemainingDistanceM({
+        currentLocation: currentPoint,
+        destination: destinationPoint,
+        routeDistanceM: initialRouteDistanceM > 0 ? initialRouteDistanceM : undefined,
+        traveledDistanceM: totalDistance,
+        previousRemainingM: previousRemainingDistanceM,
+    });
     const autoStartedRef = useRef(false);
 
     // Timer effect for duration
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (isRecording && !isPaused && startTime) {
+            syncDurationFromClock();
             interval = setInterval(() => increaseDuration(), 1000);
         }
         return () => clearInterval(interval);
-    }, [isRecording, isPaused, startTime]);
+    }, [increaseDuration, isPaused, isRecording, startTime, syncDurationFromClock]);
+
+    useEffect(() => {
+        setPreviousRemainingDistanceM(remainingDistanceM);
+    }, [remainingDistanceM]);
 
     // Check background location permission on mount
     useEffect(() => {
@@ -85,12 +115,17 @@ export default function Record() {
             const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
             if (backgroundStatus !== 'granted') {
                 console.error('Background location permission not granted');
+                if (!backgroundPermissionWarningShown) {
+                    setBackgroundPermissionWarningShown(true);
+                    Alert.alert(
+                        'Background Location Recommended',
+                        'Devia can keep recording while the app is in the background when background location is enabled.'
+                    );
+                }
                 return;
             }
-
-            setHasBackgroundPermission(backgroundStatus === 'granted');
         })();
-    }, []);
+    }, [backgroundPermissionWarningShown]);
 
     // State recovery effect - sync AsyncStorage with Zustand state
     useEffect(() => {
@@ -104,14 +139,19 @@ export default function Record() {
                     console.log('State mismatch detected, syncing...');
                     setRecording(asyncIsRecording);
 
-                    // If AsyncStorage says we're recording but Zustand says we're not,
-                    // we need to check if location updates are actually running
                     if (asyncIsRecording && !isRecording) {
                         const isLocationRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
-                        if (!isLocationRunning) {
-                            // Location updates aren't running, so reset the state
-                            console.log('Location updates not running, resetting state');
-                            await resetRide();
+                        if (!isLocationRunning && !asyncIsPaused) {
+                            console.log('Location updates not running, attempting to resume tracking');
+                            await Location.startLocationUpdatesAsync('location-recording', {
+                                accuracy: Location.Accuracy.BestForNavigation,
+                                timeInterval: 2000,
+                                distanceInterval: 2,
+                                foregroundService: {
+                                    notificationTitle: 'Recording Delivery',
+                                    notificationBody: 'Devia is recording your delivery trip',
+                                },
+                            });
                         }
                     }
                 }
@@ -120,24 +160,6 @@ export default function Record() {
             }
         })();
     }, []);
-
-    // Listen for app state changes
-    useEffect(() => {
-        const subscription = AppState.addEventListener('change', async nextAppState => {
-            if (appState.match(/active/) && nextAppState.match(/inactive|background/) && isRecording && !isPaused) {
-                // Check permission again in case it changed
-                const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-                if (backgroundStatus !== 'granted') {
-                    const result = await pauseRide();
-                    if (!result) {
-                        console.error('Failed to pause ride');
-                    }
-                }
-            }
-            setAppState(nextAppState);
-        });
-        return () => subscription.remove();
-    }, [appState, isRecording, isPaused, pauseRide]);
 
     const formatDuration = (seconds: number) => {
         const hrs = Math.floor(seconds / 3600);
@@ -200,20 +222,6 @@ export default function Record() {
             handleStart();
         }
     }, []);
-
-    const handlePause = async () => {
-        const result = await pauseRide();
-        if (!result) {
-            console.error('Failed to pause ride');
-        }
-    };
-
-    const handleResume = async () => {
-        const result = await resumeRide();
-        if (!result) {
-            console.error('Failed to resume ride');
-        }
-    };
 
     const finishRideProcess = async () => {
         const messages = [
@@ -407,6 +415,14 @@ export default function Record() {
                         </Text>
                     </View>
                 )}
+                {isRecording && nextInstruction && (
+                    <Surface style={styles.guidanceBanner}>
+                        <Icon source="navigation-variant" size={sizes.medium} color={theme.colors.onPrimaryContainer} />
+                        <Text style={styles.guidanceText} numberOfLines={1}>
+                            {nextInstruction.text}
+                        </Text>
+                    </Surface>
+                )}
                 {/* Map View */}
                 <MapRender />
 
@@ -432,7 +448,7 @@ export default function Record() {
                         </Text>
                         <Text style={styles.subStat}>
                             <Text style={styles.subStatLabel}>Distance </Text>
-                            {(totalDistance / 1000).toFixed(2)} km
+                            {(remainingDistanceM / 1000).toFixed(2)} km
                         </Text>
                     </View>
                 </Surface>
@@ -622,6 +638,26 @@ const getStyles = (theme: MD3Theme) =>
             borderRadius: sizes.medium,
             backgroundColor: theme.colors.surface,
         },
+        guidanceBanner: {
+            position: 'absolute',
+            top: sizes.small,
+            left: sizes.medium,
+            right: sizes.medium,
+            zIndex: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: sizes.small,
+            paddingHorizontal: sizes.medium,
+            paddingVertical: sizes.small,
+            borderRadius: sizes.medium,
+            backgroundColor: theme.colors.primaryContainer,
+        },
+        guidanceText: {
+            flex: 1,
+            fontSize: fontSizes.tinyPlus,
+            fontFamily: 'LGEIText-SemiBold',
+            color: theme.colors.onPrimaryContainer,
+        },
         statsRow: {
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -672,11 +708,6 @@ const getStyles = (theme: MD3Theme) =>
             borderRadius: sizes.medium,
             backgroundColor: theme.colors.surface,
         },
-        activeControls: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            gap: sizes.medium,
-        },
         button: {
             borderRadius: sizes.medium,
             height: sizes.size56,
@@ -689,17 +720,6 @@ const getStyles = (theme: MD3Theme) =>
         },
         stopButton: {
             backgroundColor: theme.colors.error,
-        },
-        pauseButton: {
-            flex: 2,
-            backgroundColor: theme.colors.onSurfaceVariant,
-        },
-        resumeButton: {
-            flex: 2,
-            backgroundColor: theme.colors.onSurfaceVariant,
-        },
-        finishButton: {
-            flex: 2,
         },
         mapFAB: {
             backgroundColor: theme.colors.surface,

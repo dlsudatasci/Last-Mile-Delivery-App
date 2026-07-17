@@ -38,37 +38,7 @@ interface TripReviewsState {
     markPending: (tripId: string) => void;
 }
 
-// Seeded mock responses so a couple of trips show as already answered + approved.
-const INITIAL_REVIEWS: Record<string, TripReview> = {
-    // trip-3: approved study trip WITH deviations and recorded responses
-    'trip-3': {
-        status: 'reviewed',
-        answers: {
-            d1: { whyRoute: 'Matinding trapiko', affect: 'Nakatipid sa oras', confidence: 'Sigurado' },
-            d2: { whyRoute: 'Mas maikling ruta', affect: 'Nakaikli ng distansya', confidence: 'Sobrang sigurado' },
-        },
-    },
-    // trip-4: approved study trip with NO deviations — route-confirmation feedback
-    'trip-4': {
-        status: 'reviewed',
-        answers: {},
-        routeFeedback: {
-            optimalRoute: 'Oo, ito ang pinakamagandang ruta',
-            whyNoDeviation: 'Pinakamabilis na ang iminungkahing ruta',
-            experience: 'Maganda',
-        },
-    },
-    // trip-7: trip that ENDED WITHOUT reaching the destination — incomplete feedback
-    'trip-7': {
-        status: 'reviewed',
-        answers: {},
-        incompleteFeedback: {
-            reason: 'Nakansela ang order / booking',
-            distanceReached: 'Lampas kalahati',
-            willRetry: 'Hindi',
-        },
-    },
-};
+const INITIAL_REVIEWS: Record<string, TripReview> = {};
 
 export const useTripReviews = create<TripReviewsState>(set => ({
     reviews: INITIAL_REVIEWS,

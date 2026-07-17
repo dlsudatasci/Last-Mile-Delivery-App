@@ -17,7 +17,7 @@ export default function FollowRouteConfirmation() {
         if (!rideId) return;
 
         if (!shouldAskDeviationReason) {
-            router.replace(`/main/rides/ride/${rideId}`);
+            router.replace('/main/(tabs)/map');
             return;
         }
 

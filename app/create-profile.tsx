@@ -1,7 +1,9 @@
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { SelectField } from '@/components/onboarding/FormFields';
 import { saveOnboardingProfile, signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
+import { enrollInStudy } from '@/lib/firebase-crud/study';
 import { saveLocalAccount } from '@/lib/local-db/accounts';
+import { registerRiderCode } from '@/lib/local-db/riderCodes';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
@@ -32,8 +34,8 @@ const EXPERIENCE = ['Less than 6 months', '6 months–1 year', '1–3 years', '3
 const AGE_RANGES = ['18–24', '25–34', '35–44', '45–54', '55+'];
 
 export default function CreateProfile() {
+    const { riderCode, phone, acceptedPolicies, reset } = useOnboarding();
     const { setUser } = useUser();
-    const { phone, acceptedPolicies, setPendingStudyOffer } = useOnboarding();
 
     const [fullName, setFullName] = useState('');
     const [gender, setGender] = useState('');
@@ -53,7 +55,7 @@ export default function CreateProfile() {
         setSnackbarVisible(true);
     };
 
-    const handleCreateAccount = async () => {
+    const handleRegister = async () => {
         if (isLoading) return;
         setSubmitted(true);
 
@@ -68,39 +70,49 @@ export default function CreateProfile() {
             return;
         }
 
+        if (!riderCode) {
+            router.replace('/rider-code');
+            return;
+        }
+
+        const trimmedName = fullName.trim();
+        const profile = {
+            fullName: trimmedName,
+            gender,
+            ageRange,
+            city,
+            yearsExperience,
+        };
+
         setIsLoading(true);
         try {
-            // Account is created here (no OTP/password — derived from the phone number).
             const { user } = await signUpOrSignInWithPhone(phone);
-            const trimmedName = fullName.trim();
 
-            // Always record the registered account in the local DB first, so every
-            // registration is stored for testing even if the remote save fails.
-            await saveLocalAccount({
-                phone,
-                fullName: trimmedName,
-                gender,
-                ageRange,
-                city,
-                yearsExperience,
-                acceptedPolicies,
-                createdAt: new Date().toISOString(),
-            });
-
-            // Best-effort remote save (Firestore).
             try {
                 await saveOnboardingProfile(user.uid, {
-                    fullName: trimmedName,
-                    gender,
-                    ageRange,
-                    city,
-                    yearsExperience,
+                    ...profile,
                     phone,
                     acceptedPolicies,
                 });
             } catch (remoteError) {
-                console.warn('Remote profile save failed (kept locally):', remoteError);
+                console.warn('Remote profile save failed (kept locally after registration):', remoteError);
             }
+
+            await enrollInStudy({
+                acceptedPrivacyPolicy: true,
+                acceptedDataUsage: true,
+                acceptedParticipationTerms: true,
+            });
+
+            const createdAt = new Date().toISOString();
+            await saveLocalAccount({
+                riderCode,
+                phone,
+                ...profile,
+                acceptedPolicies,
+                createdAt,
+            });
+            await registerRiderCode(riderCode, phone);
 
             setUser({
                 id: user.uid,
@@ -113,14 +125,13 @@ export default function CreateProfile() {
                 ageRange,
                 city,
                 yearsExperience,
-                createdAt: new Date(),
+                createdAt: new Date(createdAt),
             });
 
-            // Tell Home to show the Join Study offer once, then go home.
-            setPendingStudyOffer(true);
+            reset();
             router.replace('/main/(tabs)/home');
         } catch (error) {
-            showError(error instanceof Error ? error.message : 'Could not create your account. Please try again.');
+            showError(error instanceof Error ? error.message : 'Could not register. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -193,11 +204,11 @@ export default function CreateProfile() {
                         style={styles.button}
                         contentStyle={styles.buttonContent}
                         labelStyle={styles.buttonLabel}
-                        onPress={handleCreateAccount}
+                        onPress={handleRegister}
                         loading={isLoading}
                         disabled={isLoading}
                     >
-                        Create Account
+                        Register
                     </Button>
                 </ScrollView>
             </KeyboardAvoidingView>
