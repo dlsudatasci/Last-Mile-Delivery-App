@@ -81,15 +81,15 @@ export const getRides = async (
         if (community) {
             q = query(
                 ridesCollectionRef,
-                orderBy('createdAt', 'desc'),
                 where('isPublic', '==', true),
+                orderBy('createdAt', 'desc'),
                 limit(options.limit)
             );
         } else {
             q = query(
                 ridesCollectionRef,
-                orderBy('createdAt', 'desc'),
                 where('userId', '==', userId),
+                orderBy('createdAt', 'desc'),
                 limit(options.limit)
             );
         }

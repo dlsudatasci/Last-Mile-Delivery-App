@@ -18,11 +18,12 @@ import {
     shouldAskTrafficFollowUps,
 } from '@/lib/deviation-questionnaire';
 import { DeviationMetadata, useTripReviews } from '@/lib/store/useTripReviews';
+import { submitTripReview } from '@/lib/firebase-crud/reviews';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Button, Checkbox, MD3Theme, RadioButton, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
+import { ScrollView, StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
+import { Button, Checkbox, MD3Theme, RadioButton, SegmentedButtons, Surface, Text, TextInput, useTheme, ActivityIndicator } from 'react-native-paper';
 
 const emptyAnswers = (): DeviationQuestionnaireAnswers => ({
     primaryReason: '',
@@ -67,10 +68,11 @@ export default function ReasonForDeviation() {
     const markReviewed = useTripReviews(state => state.markReviewed);
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
     const [answers, setAnswers] = useState<DeviationQuestionnaireAnswers>(emptyAnswers);
+    const [submitting, setSubmitting] = useState(false);
     const currentDeviationIndex = Math.max(0, Number(deviationIndex || 0));
     const totalDeviationCount = Math.max(1, Number(deviationCount || 1));
     const metadata = useMemo(() => buildDeviationMetadata(currentDeviationIndex), [currentDeviationIndex]);
-    const canContinue = !!rideId && isDeviationQuestionnaireComplete(answers);
+    const canContinue = !!rideId && isDeviationQuestionnaireComplete(answers) && !submitting;
 
     const setAnswer = <K extends keyof DeviationQuestionnaireAnswers>(key: K, value: DeviationQuestionnaireAnswers[K]) => {
         setAnswers(prev => ({ ...prev, [key]: value }));
@@ -91,10 +93,10 @@ export default function ReasonForDeviation() {
         });
     };
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (!rideId || !canContinue) return;
+        const deviationId = `dev-${rideId}-${currentDeviationIndex}`; // temporary ID approach
 
-        const deviationId = `deviation-${currentDeviationIndex + 1}`;
         saveDeviation(rideId, deviationId, {
             whyRoute: answers.primaryReason === 'Other' ? `Other: ${answers.primaryReasonOther?.trim()}` : answers.primaryReason,
             affect: answers.deviateAgainFrequency,
@@ -114,8 +116,17 @@ export default function ReasonForDeviation() {
             return;
         }
 
-        markReviewed(rideId);
-        router.replace('/main/(tabs)/map');
+        try {
+            setSubmitting(true);
+            await submitTripReview(rideId);
+            markReviewed(rideId);
+            router.replace('/main/(tabs)/map');
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Error', 'Failed to submit review. Please check your connection and try again.');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -270,7 +281,7 @@ export default function ReasonForDeviation() {
                         Back
                     </Button>
                     <Button mode="contained" onPress={handleNext} style={styles.navButton} disabled={!canContinue}>
-                        {currentDeviationIndex + 1 < totalDeviationCount ? 'Next Deviation' : 'Finish'}
+                        {submitting ? <ActivityIndicator size={16} color={theme.colors.onPrimary} /> : currentDeviationIndex < totalDeviationCount - 1 ? 'Next Deviation' : 'Finish'}
                     </Button>
                 </View>
             </Surface>

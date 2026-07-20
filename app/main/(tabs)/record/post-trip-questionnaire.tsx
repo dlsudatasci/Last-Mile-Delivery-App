@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme, ActivityIndicator } from 'react-native-paper';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { LANGUAGE_LABELS, QuestionnaireLanguage } from '@/lib/deviation-questionnaire';
 import { useTripReviews } from '@/lib/store/useTripReviews';
+import { submitTripReview } from '@/lib/firebase-crud/reviews';
 
 const arrivalOptions = ['Early', 'On time', 'Late'];
 const ratingOptions = [1, 2, 3, 4, 5];
@@ -29,6 +30,7 @@ export default function PostTripQuestionnaire() {
     const [etaRating, setEtaRating] = useState<number>(0);
     const [stressRating, setStressRating] = useState<number>(0);
     const [language, setLanguage] = useState<QuestionnaireLanguage>('en');
+    const [submitting, setSubmitting] = useState(false);
     const theme = useTheme();
     const styles = getStyles(theme);
     const savePostTrip = useTripReviews(state => state.savePostTrip);
@@ -36,14 +38,23 @@ export default function PostTripQuestionnaire() {
     const goBackToNewTrip = () => router.replace('/main/(tabs)/record/new-trip');
     const totalDeviationCount = Math.max(0, Number(deviationCount || 0));
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (!rideId || !arrival || etaRating === 0 || stressRating === 0) return;
 
         savePostTrip(rideId, { arrival, etaRating, stressRating, language });
 
         if (totalDeviationCount <= 0) {
-            markReviewed(rideId);
-            router.replace('/main/(tabs)/map');
+            try {
+                setSubmitting(true);
+                await submitTripReview(rideId);
+                markReviewed(rideId);
+                router.replace('/main/(tabs)/map');
+            } catch (error) {
+                console.error(error);
+                Alert.alert('Error', 'Failed to submit review. Please check your connection and try again.');
+            } finally {
+                setSubmitting(false);
+            }
             return;
         }
 
@@ -124,9 +135,9 @@ export default function PostTripQuestionnaire() {
                         mode="contained"
                         onPress={handleNext}
                         style={styles.navButton}
-                        disabled={!rideId || !arrival || etaRating === 0 || stressRating === 0}
+                        disabled={!rideId || !arrival || etaRating === 0 || stressRating === 0 || submitting}
                     >
-                        {totalDeviationCount > 0 ? postTripText.next[language] : postTripText.finish[language]}
+                        {submitting ? <ActivityIndicator size={16} color={theme.colors.onPrimary} /> : totalDeviationCount > 0 ? postTripText.next[language] : postTripText.finish[language]}
                     </Button>
                 </View>
             </Surface>

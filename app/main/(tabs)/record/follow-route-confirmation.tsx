@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Button, MD3Theme, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, MD3Theme, Surface, Text, useTheme, ActivityIndicator } from 'react-native-paper';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { submitTripReview } from '@/lib/firebase-crud/reviews';
+import { useTripReviews } from '@/lib/store/useTripReviews';
 
 const options = ['Yes, completely', 'Mostly', 'No'];
 
@@ -10,14 +12,26 @@ export default function FollowRouteConfirmation() {
     const theme = useTheme();
     const styles = getStyles(theme);
     const { rideId, deviationCount } = useLocalSearchParams<{ rideId?: string; deviationCount?: string }>();
-    const [choice, setChoice] = React.useState('');
+    const [choice, setChoice] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const shouldAskDeviationReason = choice !== 'Yes, completely';
+    const markReviewed = useTripReviews(state => state.markReviewed);
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (!rideId) return;
 
         if (!shouldAskDeviationReason) {
-            router.replace('/main/(tabs)/map');
+            try {
+                setSubmitting(true);
+                await submitTripReview(rideId);
+                markReviewed(rideId);
+                router.replace('/main/(tabs)/map');
+            } catch (error) {
+                console.error(error);
+                Alert.alert('Error', 'Failed to submit review. Please check your connection and try again.');
+            } finally {
+                setSubmitting(false);
+            }
             return;
         }
 
@@ -59,9 +73,9 @@ export default function FollowRouteConfirmation() {
                         mode="contained"
                         onPress={handleNext}
                         style={styles.navButton}
-                        disabled={!rideId || !choice}
+                        disabled={!rideId || !choice || submitting}
                     >
-                        {shouldAskDeviationReason ? 'Next' : 'Finish'}
+                        {submitting ? <ActivityIndicator size={16} color={theme.colors.onPrimary} /> : shouldAskDeviationReason ? 'Next' : 'Finish'}
                     </Button>
                 </View>
             </Surface>
