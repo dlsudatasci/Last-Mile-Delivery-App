@@ -5,7 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { DeviationQuestionnaireAnswers } from '../deviation-questionnaire';
 
 // Tracks the response state per trip (in-memory for the session).
-//   • Trips WITH deviations -> per-deviation answers (keyed by deviation id).
+//   • Trips WITH route changes -> per-route-change answers (keyed by existing deviation id fields).
 //   • Trips WITHOUT deviations -> a single "route confirmation" feedback.
 // Skipping marks a trip 'pending' so the rider can continue later; finishing
 // marks it 'reviewed'. Answers are kept so a resumed review keeps prior input.
@@ -20,6 +20,11 @@ export interface DeviationAnswers {
 }
 
 export interface DeviationMetadata {
+    deviationId?: string | null;
+    routeId?: string | null;
+    rideId?: string | null;
+    userId?: string | null;
+    index?: number | null;
     originalRoute?: string | null;
     dateTime?: string | null;
     isFaster?: boolean | null;
@@ -28,11 +33,19 @@ export interface DeviationMetadata {
     dayOfWeek?: string | null;
     dayType?: 'Weekday' | 'Weekend' | null;
     gpsLocation?: { latitude: number; longitude: number } | null;
+    suggestedPoint?: { latitude: number; longitude: number } | null;
+    actualPoint?: { latitude: number; longitude: number } | null;
     originalRouteEdge?: string | null;
     deviatedEdge?: string | null;
     streetName?: string | null;
     generatedInstruction?: string | null;
     deviationInstruction?: string | null;
+    type?: 'point' | 'segment' | null;
+    points?: { latitude: number; longitude: number }[] | null;
+    start_timestamp?: number | null;
+    end_timestamp?: number | null;
+    createdAt?: number | null;
+    mapMatchedEdge?: string | null;
     imageUri?: string | null;
 }
 
@@ -43,10 +56,10 @@ export interface PostTripAnswers {
     language?: 'en' | 'tl';
 }
 
-// Asked when a trip had NO deviations (the rider followed the optimal route).
+// Asked when a trip had NO route changes (the rider followed the optimal route).
 export interface RouteFeedback {
     optimalRoute: string; // was the suggested/optimal route suitable?
-    whyNoDeviation: string; // why no deviations were made
+    whyNoDeviation: string; // why no route changes were made
     experience: string; // overall experience with the optimal route
 }
 
@@ -54,7 +67,7 @@ export type ReviewStatus = 'pending' | 'reviewed';
 
 export interface TripReview {
     status: ReviewStatus;
-    answers: Record<string, DeviationAnswers>; // keyed by deviation id
+    answers: Record<string, DeviationAnswers>; // keyed by existing deviation id fields
     postTrip?: PostTripAnswers;
     routeFeedback?: RouteFeedback; // for no-deviation trips
     incompleteFeedback?: IncompleteFeedback; // for trips that didn't reach the destination

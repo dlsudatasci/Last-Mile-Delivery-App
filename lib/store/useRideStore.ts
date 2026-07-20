@@ -4,7 +4,7 @@ import { LocationObject } from 'expo-location';
 import { create } from 'zustand';
 import { Annotation } from '../firebase-crud/annotations';
 import { NewRideData, saveRide } from '../firebase-crud/rides';
-import { LngLat, RouteStep } from '../utils/directions';
+import { LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
 
 const setAsyncFlag = async (key: string, value: boolean) => {
     try {
@@ -54,6 +54,16 @@ export interface NavigationInstruction {
     step: RouteStep;
 }
 
+export interface RideDeviationEvent {
+    timestamp: number;
+    location: LngLat;
+    offRouteDistanceM: number;
+    previousInstruction?: string;
+    newInstruction?: string;
+    previousEtaSec?: number;
+    newEtaSec?: number;
+}
+
 interface RideState {
     // Ride recording state
     isRecording: boolean;
@@ -73,11 +83,21 @@ interface RideState {
     averageSpeed: number;
     maxSpeed: number;
     activeRouteSteps: RouteStep[];
+    activeRouteCoordinates: LngLat[];
+    activeRouteCongestionSegments: RouteCongestionSegment[];
+    activeRouteDestination: LngLat | null;
+    activeRouteDurationSec: number;
+    activeRouteDistanceM: number;
+    suggestedRouteDurationSec: number;
+    suggestedRouteDistanceM: number;
+    activeRouteUpdatedAt: number | null;
+    routeUpdateStatus: 'idle' | 'traffic' | 'rerouting';
+    deviationEvents: RideDeviationEvent[];
     annotations: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>[];
 
     // Actions
     startRide: () => Promise<boolean>;
-    finishRide: () => Promise<{ success: boolean; rideId?: string; error?: any }>;
+    finishRide: (tripName?: string) => Promise<{ success: boolean; rideId?: string; error?: any }>;
     increaseDuration: () => void;
     syncDurationFromClock: () => void;
     addPoint: (location: LocationObject) => void;
@@ -85,6 +105,9 @@ interface RideState {
     addAnnotation: (annotation: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>) => void;
     setRecording: (isRecording: boolean) => void;
     setActiveRouteSteps: (steps: RouteStep[]) => void;
+    setActiveRoute: (route: RouteResult, destination?: LngLat | null) => void;
+    setRouteUpdateStatus: (status: RideState['routeUpdateStatus']) => void;
+    addDeviationEvent: (event: RideDeviationEvent) => void;
 }
 
 const calculateElevationGain = (currentElevation: number, newElevation: number): number => {
@@ -120,12 +143,32 @@ export const useRideStore = create<RideState>((set, get) => ({
     averageSpeed: 0,
     maxSpeed: 0,
     activeRouteSteps: [],
+    activeRouteCoordinates: [],
+    activeRouteCongestionSegments: [],
+    activeRouteDestination: null,
+    activeRouteDurationSec: 0,
+    activeRouteDistanceM: 0,
+    suggestedRouteDurationSec: 0,
+    suggestedRouteDistanceM: 0,
+    activeRouteUpdatedAt: null,
+    routeUpdateStatus: 'idle',
+    deviationEvents: [],
     annotations: [],
 
     // Actions
     startRide: async (): Promise<boolean> => {
         try {
-            const activeRouteSteps = get().activeRouteSteps;
+            const {
+                activeRouteSteps,
+                activeRouteCoordinates,
+                activeRouteCongestionSegments,
+                activeRouteDestination,
+                activeRouteDurationSec,
+                activeRouteDistanceM,
+                suggestedRouteDurationSec,
+                suggestedRouteDistanceM,
+                activeRouteUpdatedAt,
+            } = get();
             // First, reset the ride state
             get().resetRide();
 
@@ -139,6 +182,14 @@ export const useRideStore = create<RideState>((set, get) => ({
                 duration: 0,
                 currentSpeed: 0,
                 activeRouteSteps,
+                activeRouteCoordinates,
+                activeRouteCongestionSegments,
+                activeRouteDestination,
+                activeRouteDurationSec,
+                activeRouteDistanceM,
+                suggestedRouteDurationSec,
+                suggestedRouteDistanceM,
+                activeRouteUpdatedAt,
             });
 
             // Finally, update AsyncStorage flags
@@ -178,7 +229,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         }
     },
 
-    finishRide: async () => {
+    finishRide: async (tripName?: string) => {
         try {
             const stillRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
             if (stillRunning) {
@@ -203,6 +254,10 @@ export const useRideStore = create<RideState>((set, get) => ({
                 annotations,
                 startTime,
                 duration,
+                activeRouteDurationSec,
+                activeRouteDistanceM,
+                suggestedRouteDurationSec,
+                suggestedRouteDistanceM,
             } = get();
             let pointsForSave = points;
             if (pointsForSave.length === 0) {
@@ -219,7 +274,9 @@ export const useRideStore = create<RideState>((set, get) => ({
                 startTime: startTime || Date.now(),
                 endTime: Date.now(),
                 duration: duration,
-                rideName: 'New Delivery Trip',
+                suggestedRouteDistanceM: suggestedRouteDistanceM || activeRouteDistanceM || undefined,
+                suggestedRouteDurationSec: suggestedRouteDurationSec || activeRouteDurationSec || undefined,
+                rideName: tripName?.trim() || 'Metro Manila Trip',
                 annotations,
                 isPublic: false,
                 isGPXUpload: false,
@@ -338,6 +395,16 @@ export const useRideStore = create<RideState>((set, get) => ({
             averageSpeed: 0,
             maxSpeed: 0,
             activeRouteSteps: [],
+            activeRouteCoordinates: [],
+            activeRouteCongestionSegments: [],
+            activeRouteDestination: null,
+            activeRouteDurationSec: 0,
+            activeRouteDistanceM: 0,
+            suggestedRouteDurationSec: 0,
+            suggestedRouteDistanceM: 0,
+            activeRouteUpdatedAt: null,
+            routeUpdateStatus: 'idle',
+            deviationEvents: [],
             annotations: [],
         });
 
@@ -350,6 +417,29 @@ export const useRideStore = create<RideState>((set, get) => ({
     },
     setActiveRouteSteps: (steps: RouteStep[]) => {
         set({ activeRouteSteps: steps });
+    },
+    setActiveRoute: (route: RouteResult, destination = get().activeRouteDestination) => {
+        const state = get();
+        const shouldRefreshSuggestedRoute =
+            !state.isRecording || state.suggestedRouteDistanceM <= 0 || state.suggestedRouteDurationSec <= 0;
+
+        set({
+            activeRouteSteps: route.steps,
+            activeRouteCoordinates: route.coordinates,
+            activeRouteCongestionSegments: route.congestionSegments,
+            activeRouteDestination: destination ?? null,
+            activeRouteDurationSec: route.durationSec,
+            activeRouteDistanceM: route.distanceM,
+            suggestedRouteDurationSec: shouldRefreshSuggestedRoute ? route.durationSec : state.suggestedRouteDurationSec,
+            suggestedRouteDistanceM: shouldRefreshSuggestedRoute ? route.distanceM : state.suggestedRouteDistanceM,
+            activeRouteUpdatedAt: Date.now(),
+        });
+    },
+    setRouteUpdateStatus: status => {
+        set({ routeUpdateStatus: status });
+    },
+    addDeviationEvent: event => {
+        set(state => ({ deviationEvents: [...state.deviationEvents, event] }));
     },
 }));
 

@@ -1,3 +1,4 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { isValidPhilippineMobileNumber } from '@/lib/firebase-crud/auth';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
@@ -5,7 +6,7 @@ import { useOnboarding } from '@/stores/useOnboarding';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text, TextInput } from 'react-native-paper';
+import { Button, Icon, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TEAL = '#0E6E73';
@@ -59,7 +60,7 @@ export default function EnterPhone() {
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
                 <View style={styles.content}>
-                    <IconButton icon="chevron-left" size={sizes.size32} onPress={handleBack} style={styles.backButton} />
+                    <HeaderBackButton onPress={handleBack} style={styles.backButton} />
                     <Text style={styles.title}>Enter your{'\n'}phone number</Text>
                     <Text style={styles.subtitle}>
                         This number will be linked to your rider account and used for compensation verification through

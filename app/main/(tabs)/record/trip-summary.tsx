@@ -1,3 +1,4 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, View, StyleSheet } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
@@ -53,7 +54,7 @@ export default function TripSummary() {
             <Stack.Screen
                 options={{
                     title: 'Trip Summary',
-                    headerLeft: () => <Button onPress={() => router.back()}>Back</Button>,
+                    headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
                 }}
             />
             <ScrollView contentContainerStyle={styles.content}>
@@ -66,9 +67,9 @@ export default function TripSummary() {
                     <Text style={styles.label}>Actual route</Text>
                     <Text style={styles.body}>{ride ? `${ride.points?.length || 0} GPS points recorded` : loading ? 'Loading trip data...' : 'Trip data unavailable'}</Text>
 
-                    <Text style={styles.label}>Deviation review</Text>
+                    <Text style={styles.label}>Change Route review</Text>
                     <Text style={styles.body}>
-                        Review each detected deviation after the trip. If no deviation happened, you can mark the
+                        Review each detected change route after the trip. If no change route happened, you can mark the
                         suggested route as followed on the next screen.
                     </Text>
 

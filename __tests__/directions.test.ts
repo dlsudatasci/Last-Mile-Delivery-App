@@ -13,6 +13,7 @@ import {
     estimateMetroManilaEtaSec,
     getRoute,
     getDistanceToRouteM,
+    calculateSpeedAdjustedEtaSec,
     searchPlaces,
 } from "../lib/utils/directions";
 
@@ -79,6 +80,38 @@ describe("formatSearchDistance()", () => {
 
     test("formats kilometers at one kilometer and above", () => {
         expect(formatSearchDistance(4200)).toBe("4.2 km");
+    });
+});
+
+describe("calculateSpeedAdjustedEtaSec()", () => {
+    test("keeps traffic ETA when speed is stopped or unreliable", () => {
+        expect(
+            calculateSpeedAdjustedEtaSec({
+                trafficRemainingSec: 900,
+                remainingDistanceM: 3000,
+                currentSpeedMps: 0,
+            })
+        ).toBe(900);
+    });
+
+    test("increases ETA when current speed is slower than traffic ETA pace", () => {
+        expect(
+            calculateSpeedAdjustedEtaSec({
+                trafficRemainingSec: 600,
+                remainingDistanceM: 3000,
+                currentSpeedMps: 2,
+            })
+        ).toBeGreaterThan(600);
+    });
+
+    test("decreases ETA when current speed is faster than traffic ETA pace", () => {
+        expect(
+            calculateSpeedAdjustedEtaSec({
+                trafficRemainingSec: 1200,
+                remainingDistanceM: 3000,
+                currentSpeedMps: 10,
+            })
+        ).toBeLessThan(1200);
     });
 });
 

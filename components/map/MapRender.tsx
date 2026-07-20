@@ -3,12 +3,18 @@ import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { UserTrackingMode } from '@rnmapbox/maps';
 
 import Mapbox from '@rnmapbox/maps';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
 import { FAB, MD3Theme, useTheme } from 'react-native-paper';
 import { Polygon } from './polygon';
 
 Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
+
+const TRAFFIC_RED = '#DC2626';
+const TRAFFIC_DARK_RED = '#991B1B';
+const TRAFFIC_ORANGE = '#F59E0B';
+const TRAFFIC_TILESET_URL = 'mapbox://mapbox.mapbox-traffic-v1';
+const TRAFFIC_SOURCE_LAYER = 'traffic';
 
 export default function MapRender() {
     const theme = useTheme();
@@ -16,7 +22,7 @@ export default function MapRender() {
     const mapboxStyle =
         colorScheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
 
-    const { displayPoints } = useRideStore();
+    const { displayPoints, activeRouteCoordinates, activeRouteCongestionSegments } = useRideStore();
 
     const [zoomLevel, setZoomLevel] = useState(16);
     const recenterMap = () => {
@@ -28,6 +34,31 @@ export default function MapRender() {
     };
 
     const styles = getStyles(theme);
+    const activeRouteShape = useMemo(
+        () =>
+            activeRouteCoordinates.length > 1
+                ? {
+                      type: 'Feature' as const,
+                      properties: {},
+                      geometry: { type: 'LineString' as const, coordinates: activeRouteCoordinates },
+                  }
+                : null,
+        [activeRouteCoordinates]
+    );
+    const congestionShape = useMemo(() => {
+        const segments = activeRouteCongestionSegments.filter(
+            segment => segment.congestion === 'moderate' || segment.congestion === 'heavy' || segment.congestion === 'severe'
+        );
+        if (segments.length === 0) return null;
+        return {
+            type: 'FeatureCollection' as const,
+            features: segments.map(segment => ({
+                type: 'Feature' as const,
+                properties: { congestion: segment.congestion },
+                geometry: { type: 'LineString' as const, coordinates: segment.coordinates },
+            })),
+        };
+    }, [activeRouteCongestionSegments]);
 
     return (
         <View style={styles.mapContainer}>
@@ -41,11 +72,58 @@ export default function MapRender() {
                     console.log('data', data);
                 }}
             >
+                <Mapbox.VectorSource id="recordingMapboxTrafficTiles" url={TRAFFIC_TILESET_URL}>
+                    <Mapbox.LineLayer
+                        id="recordingMapboxTrafficModerate"
+                        sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                        filter={['==', ['get', 'congestion'], 'moderate']}
+                        style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 2.5, lineOpacity: 0.45, lineCap: 'round', lineJoin: 'round' }}
+                    />
+                    <Mapbox.LineLayer
+                        id="recordingMapboxTrafficHeavy"
+                        sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                        filter={['==', ['get', 'congestion'], 'heavy']}
+                        style={{ lineColor: TRAFFIC_RED, lineWidth: 3, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                    />
+                    <Mapbox.LineLayer
+                        id="recordingMapboxTrafficSevere"
+                        sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                        filter={['==', ['get', 'congestion'], 'severe']}
+                        style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 3.5, lineOpacity: 0.65, lineCap: 'round', lineJoin: 'round' }}
+                    />
+                </Mapbox.VectorSource>
                 {displayPoints.length > 0 && (
                     <Polygon
                         points={displayPoints}
-                        style={{ lineColor: theme.colors.primary, lineWidth: 4, lineOpacity: 1 }}
+                        style={{ lineColor: theme.colors.secondary, lineWidth: 3, lineOpacity: 0.55 }}
                     />
+                )}
+                {activeRouteShape && (
+                    <Mapbox.ShapeSource id="recordingActiveRouteSource" shape={activeRouteShape}>
+                        <Mapbox.LineLayer
+                            id="recordingActiveRouteLine"
+                            style={{ lineColor: theme.colors.primary, lineWidth: 6, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                    </Mapbox.ShapeSource>
+                )}
+                {congestionShape && (
+                    <Mapbox.ShapeSource id="recordingTrafficRouteSource" shape={congestionShape}>
+                        <Mapbox.LineLayer
+                            id="recordingModerateTrafficRouteLine"
+                            filter={['==', ['get', 'congestion'], 'moderate']}
+                            style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                        <Mapbox.LineLayer
+                            id="recordingHeavyTrafficRouteLine"
+                            filter={['==', ['get', 'congestion'], 'heavy']}
+                            style={{ lineColor: TRAFFIC_RED, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                        <Mapbox.LineLayer
+                            id="recordingSevereTrafficRouteLine"
+                            filter={['==', ['get', 'congestion'], 'severe']}
+                            style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 10, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                    </Mapbox.ShapeSource>
                 )}
                 <Mapbox.Camera
                     animationDuration={0}

@@ -1,5 +1,6 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme, ActivityIndicator } from 'react-native-paper';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
@@ -58,90 +59,98 @@ export default function PostTripQuestionnaire() {
             return;
         }
 
-        router.push(
-            `/main/(tabs)/record/reason-for-deviation?rideId=${encodeURIComponent(
-                rideId
-            )}&deviationIndex=0&deviationCount=${totalDeviationCount}&language=${language}`
-        );
+        router.push({
+            pathname: '/main/(tabs)/record/change-routes' as never,
+            params: { rideId, deviationCount: String(totalDeviationCount), language },
+        });
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <KeyboardAvoidingView
+            style={[styles.container, { backgroundColor: theme.colors.background }]}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
             <Stack.Screen
                 options={{
                     title: postTripText.title[language],
-                    headerLeft: () => <Button onPress={goBackToNewTrip}>{postTripText.back[language]}</Button>,
+                    headerLeft: () => <HeaderBackButton onPress={goBackToNewTrip} />,
                 }}
             />
-            <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]}> 
-                <Text style={styles.title}>{postTripText.title[language]}</Text>
-                <SegmentedButtons
-                    value={language}
-                    onValueChange={value => setLanguage(value as QuestionnaireLanguage)}
-                    buttons={[
-                        { value: 'en', label: LANGUAGE_LABELS.en },
-                        { value: 'tl', label: LANGUAGE_LABELS.tl },
-                    ]}
-                    style={styles.languageToggle}
-                />
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+                    <Text style={styles.title}>{postTripText.title[language]}</Text>
+                    <SegmentedButtons
+                        value={language}
+                        onValueChange={value => setLanguage(value as QuestionnaireLanguage)}
+                        buttons={[
+                            { value: 'en', label: LANGUAGE_LABELS.en },
+                            { value: 'tl', label: LANGUAGE_LABELS.tl },
+                        ]}
+                        style={styles.languageToggle}
+                    />
 
-                <Text style={styles.question}>{postTripText.arrival[language]}</Text>
-                <View style={styles.optionsRow}>
-                    {arrivalOptions.map(option => (
-                        <Button
-                            key={option}
-                            mode={arrival === option ? 'contained' : 'outlined'}
-                            onPress={() => setArrival(option)}
-                            style={styles.optionButton}
-                        >
-                            {arrivalLabels[option][language]}
+                    <Text style={styles.question}>{postTripText.arrival[language]}</Text>
+                    <View style={styles.optionsRow}>
+                        {arrivalOptions.map(option => (
+                            <Button
+                                key={option}
+                                mode={arrival === option ? 'contained' : 'outlined'}
+                                onPress={() => setArrival(option)}
+                                style={styles.optionButton}
+                            >
+                                {arrivalLabels[option][language]}
+                            </Button>
+                        ))}
+                    </View>
+
+                    <Text style={styles.question}>{postTripText.eta[language]}</Text>
+                    <View style={styles.optionsRow}>
+                        {ratingOptions.map(value => (
+                            <Button
+                                key={value}
+                                mode={etaRating === value ? 'contained' : 'outlined'}
+                                onPress={() => setEtaRating(value)}
+                                style={styles.optionButton}
+                            >
+                                {value}
+                            </Button>
+                        ))}
+                    </View>
+
+                    <Text style={styles.question}>{postTripText.stress[language]}</Text>
+                    <View style={styles.optionsRow}>
+                        {ratingOptions.map(value => (
+                            <Button
+                                key={value}
+                                mode={stressRating === value ? 'contained' : 'outlined'}
+                                onPress={() => setStressRating(value)}
+                                style={styles.optionButton}
+                            >
+                                {value}
+                            </Button>
+                        ))}
+                    </View>
+
+                    <View style={styles.actionsRow}>
+                        <Button mode="outlined" onPress={goBackToNewTrip} style={styles.navButton}>
+                            {postTripText.back[language]}
                         </Button>
-                    ))}
-                </View>
-
-                <Text style={styles.question}>{postTripText.eta[language]}</Text>
-                <View style={styles.optionsRow}>
-                    {ratingOptions.map(value => (
                         <Button
-                            key={value}
-                            mode={etaRating === value ? 'contained' : 'outlined'}
-                            onPress={() => setEtaRating(value)}
-                            style={styles.optionButton}
+                            mode="contained"
+                            onPress={handleNext}
+                            style={styles.navButton}
+                            disabled={!rideId || !arrival || etaRating === 0 || stressRating === 0 || submitting}
                         >
-                            {value}
+                            {submitting ? <ActivityIndicator size={16} color={theme.colors.onPrimary} /> : totalDeviationCount > 0 ? postTripText.next[language] : postTripText.finish[language]}
                         </Button>
-                    ))}
-                </View>
-
-                <Text style={styles.question}>{postTripText.stress[language]}</Text>
-                <View style={styles.optionsRow}>
-                    {ratingOptions.map(value => (
-                        <Button
-                            key={value}
-                            mode={stressRating === value ? 'contained' : 'outlined'}
-                            onPress={() => setStressRating(value)}
-                            style={styles.optionButton}
-                        >
-                            {value}
-                        </Button>
-                    ))}
-                </View>
-
-                <View style={styles.actionsRow}>
-                    <Button mode="outlined" onPress={goBackToNewTrip} style={styles.navButton}>
-                        {postTripText.back[language]}
-                    </Button>
-                    <Button
-                        mode="contained"
-                        onPress={handleNext}
-                        style={styles.navButton}
-                        disabled={!rideId || !arrival || etaRating === 0 || stressRating === 0 || submitting}
-                    >
-                        {submitting ? <ActivityIndicator size={16} color={theme.colors.onPrimary} /> : totalDeviationCount > 0 ? postTripText.next[language] : postTripText.finish[language]}
-                    </Button>
-                </View>
-            </Surface>
-        </View>
+                    </View>
+                </Surface>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -149,6 +158,10 @@ const getStyles = (theme?: MD3Theme) =>
     StyleSheet.create({
         container: {
             flex: 1,
+        },
+        scrollContent: {
+            flexGrow: 1,
+            paddingBottom: sizes.large,
         },
         card: {
             margin: sizes.large,

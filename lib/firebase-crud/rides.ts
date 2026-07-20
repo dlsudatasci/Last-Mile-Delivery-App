@@ -30,6 +30,8 @@ export interface RideData {
     endTime: number;
     duration: number;
     distance: number;
+    suggestedRouteDistanceM?: number;
+    suggestedRouteDurationSec?: number;
     averageSpeed: number;
     maxSpeed: number;
     elevationGain: number;
@@ -253,7 +255,7 @@ export const getRide = async (userId: string, rideId: string): Promise<FetchRide
         const rideDoc = await getDoc(rideDocRef);
 
         if (!rideDoc.exists()) {
-            throw new Error('Ride not found');
+            throw new Error('Trip not found');
         }
         const rideData = rideDoc.data() as FetchRideData;
 

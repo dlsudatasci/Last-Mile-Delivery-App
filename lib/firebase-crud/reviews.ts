@@ -31,10 +31,10 @@ export const submitTripReview = async (rideId: string) => {
             }, { merge: true }); // Use merge in case of retries
         }
 
-        // 2. Submit Deviations & Deviation Responses
+        // 2. Submit route change metadata and responses using the existing Firebase deviation collections.
         if (review.answers && Object.keys(review.answers).length > 0) {
             for (const [deviationId, answer] of Object.entries(review.answers)) {
-                // A. Save the Deviation Metadata itself
+                    // A. Save the route change metadata itself.
                 if (answer.metadata) {
                     const deviationRef = doc(firestore, 'deviations', deviationId);
                     
@@ -64,7 +64,7 @@ export const submitTripReview = async (rideId: string) => {
                     }, { merge: true });
                 }
 
-                // B. Save the Deviation Questionnaire Response
+                // B. Save the route change questionnaire response.
                 if (answer.questionnaire) {
                     const deviationResponseRef = doc(collection(firestore, 'deviationResponses'));
                     batch.set(deviationResponseRef, {

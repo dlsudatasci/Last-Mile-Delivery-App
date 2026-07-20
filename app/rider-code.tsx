@@ -1,3 +1,4 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
 import { getAccountForRiderCode, isValidRiderCode, sanitizeRiderCode } from '@/lib/local-db/riderCodes';
@@ -7,7 +8,7 @@ import { useUser } from '@/stores/useUser';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
-import { Button, IconButton, Text, TextInput } from 'react-native-paper';
+import { Button, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TEAL = '#0E6E73';
@@ -78,7 +79,7 @@ export default function RiderCode() {
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <View style={styles.content}>
-                    <IconButton icon="chevron-left" size={sizes.size32} onPress={handleBack} style={styles.backButton} />
+                    <HeaderBackButton onPress={handleBack} style={styles.backButton} />
                     <Text style={styles.title}>Enter your{'\n'}rider code</Text>
                     <Text style={styles.subtitle}>Use the 6-digit study code assigned to you by the research team.</Text>
 

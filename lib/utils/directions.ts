@@ -4,7 +4,7 @@
 // current location. Coordinates are [longitude, latitude] (Mapbox order).
 // -----------------------------------------------------------------------------
 
-const MAPBOX_TOKEN =
+export const MAPBOX_TOKEN =
     'pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg';
 
 export type LngLat = [number, number];
@@ -655,6 +655,31 @@ export async function getRoute(from: LngLat, to: LngLat): Promise<RouteResult | 
         console.warn('getRoute failed:', error);
         return null;
     }
+}
+
+export function calculateSpeedAdjustedEtaSec(options: {
+    trafficRemainingSec: number;
+    remainingDistanceM: number;
+    currentSpeedMps: number;
+}): number {
+    const trafficRemainingSec = Math.max(0, options.trafficRemainingSec);
+    const remainingDistanceM = Math.max(0, options.remainingDistanceM);
+    const currentSpeedMps = options.currentSpeedMps;
+
+    if (
+        trafficRemainingSec <= 0 ||
+        remainingDistanceM <= 0 ||
+        !Number.isFinite(currentSpeedMps) ||
+        currentSpeedMps < 1.35
+    ) {
+        return trafficRemainingSec;
+    }
+
+    const speedBasedSec = remainingDistanceM / currentSpeedMps;
+    if (!Number.isFinite(speedBasedSec) || speedBasedSec <= 0) return trafficRemainingSec;
+
+    const clampedSpeedBasedSec = Math.min(trafficRemainingSec * 2.5, Math.max(trafficRemainingSec * 0.45, speedBasedSec));
+    return Math.round(trafficRemainingSec * 0.65 + clampedSpeedBasedSec * 0.35);
 }
 
 /** "28 min" / "1 h 5 min" from a duration in seconds. */

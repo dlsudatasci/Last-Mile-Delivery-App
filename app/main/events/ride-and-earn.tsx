@@ -174,7 +174,7 @@ export default function EventDetails() {
                 <View style={styles.eventListItemContainer}>
                     <Icon source="numeric-2-circle-outline" size={sizes.medium} />
                     <Text style={styles.eventParagraph}>
-                        Each trip must include GPS recording and the post-trip deviation questionnaire when applicable.
+                        Each trip must include GPS recording and the post-trip route change questionnaire when applicable.
                     </Text>
                 </View>
                 <View style={styles.eventListItemContainer}>

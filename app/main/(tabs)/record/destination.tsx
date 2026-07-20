@@ -1,3 +1,4 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { formatSearchDistance, LngLat, SearchResult, searchPlaces } from '@/lib/utils/directions';
 import { getRecentDestinations, RecentDestination, saveRecentDestination } from '@/lib/local-db/recentDestinations';
 import { auth } from '@/lib/utils/firebaseConfig';
@@ -6,7 +7,7 @@ import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, MD3Theme, Text, TextInput, TouchableRipple, useTheme } from 'react-native-paper';
+import { Icon, MD3Theme, Text, TextInput, TouchableRipple, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Destination() {
@@ -146,7 +147,7 @@ export default function Destination() {
     return (
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <View style={styles.header}>
-                <IconButton icon="chevron-left" size={sizes.size32} onPress={() => router.back()} />
+                <HeaderBackButton onPress={() => router.back()} />
                 <Text style={styles.headerTitle}>New Trip</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>

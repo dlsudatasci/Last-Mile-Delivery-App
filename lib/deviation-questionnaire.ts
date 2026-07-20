@@ -144,8 +144,8 @@ export const AVOID_ROAD_FREQUENCY_OPTIONS: LocalizedOption[] = [
 
 export const QUESTION_TEXT = {
     primaryReason: {
-        en: 'What was the PRIMARY reason you deviated from this road?',
-        tl: 'Ano ang PANGUNAHING dahilan kung bakit ka nag-iba ng ruta mula sa kalsadang ito?',
+        en: 'What was the PRIMARY reason for this route change?',
+        tl: 'Ano ang PANGUNAHING dahilan ng route change na ito?',
     },
     trafficSeverity: { en: 'Rate the traffic severity.', tl: 'I-rate ang lala ng trapik.' },
     rushHourCause: {
@@ -166,8 +166,8 @@ export const QUESTION_TEXT = {
         tl: 'Tinatayang gaano katagal ang iyong paghinto?',
     },
     deviateAgainFrequency: {
-        en: 'How often would you deviate again under the same circumstances?',
-        tl: 'Gaano ka kadalas umiiba ng ruta sa ilalim ng parehong sitwasyon?',
+        en: 'How often would you make this route change again under the same circumstances?',
+        tl: 'Gaano mo kadalas gagawin ulit ang route change na ito sa parehong sitwasyon?',
     },
     avoidRoadFrequency: {
         en: 'How often do you usually avoid this road?',

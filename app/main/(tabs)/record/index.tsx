@@ -3,12 +3,13 @@ import SpinningWheel from '@/components/common/SpinningWheel';
 import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
 import { calculateRemainingDistanceM, getAsyncFlag, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
-import { getDistanceToRouteM, getRoute, LngLat } from '@/lib/utils/directions';
+import { calculateSpeedAdjustedEtaSec, getDistanceToRouteM, getRoute, LngLat } from '@/lib/utils/directions';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { buildTripRouteTitle } from '@/lib/utils/tripTitle';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import {
     Button,
@@ -45,6 +46,13 @@ export default function Record() {
         duration,
         points,
         activeRouteSteps,
+        activeRouteCoordinates,
+        activeRouteDestination,
+        activeRouteDurationSec,
+        activeRouteDistanceM,
+        activeRouteUpdatedAt,
+        routeUpdateStatus,
+        deviationEvents,
         startRide,
         finishRide,
         increaseDuration,
@@ -52,32 +60,40 @@ export default function Record() {
         resetRide,
         addAnnotation,
         setRecording,
-        setActiveRouteSteps,
+        setActiveRoute,
+        setRouteUpdateStatus,
+        addDeviationEvent,
     } = useRideStore();
 
     // const [duration, setDuration] = useState(0);
     const [backgroundPermissionWarningShown, setBackgroundPermissionWarningShown] = useState(false);
 
     // ETA generated on the Route Preview screen; counts down as the trip runs.
-    const { etaSec, routeDistanceM, destLng, destLat } = useLocalSearchParams<{
+    const { etaSec, routeDistanceM, destLng, destLat, destination } = useLocalSearchParams<{
         etaSec?: string;
         destination?: string;
         routeDistanceM?: string;
         destLng?: string;
         destLat?: string;
     }>();
-    const etaTotalSec = Number(etaSec ?? 0);
-    const [routeEtaTotalSec, setRouteEtaTotalSec] = useState(etaTotalSec);
+    const etaTotalSec = activeRouteDurationSec || Number(etaSec ?? 0);
     const initialRouteDistanceM = Number(routeDistanceM ?? 0);
-    const [currentRouteDistanceM, setCurrentRouteDistanceM] = useState(initialRouteDistanceM);
-    const [isRerouting, setIsRerouting] = useState(false);
-    const etaRemainingSec = routeEtaTotalSec > 0 ? Math.max(0, routeEtaTotalSec - duration) : 0;
-    const destinationPoint: RidePoint | null =
-        destLng && destLat && Number.isFinite(Number(destLng)) && Number.isFinite(Number(destLat))
+    const currentRouteDistanceM = activeRouteDistanceM || initialRouteDistanceM;
+    const etaElapsedSinceUpdateSec = activeRouteUpdatedAt ? Math.max(0, Math.floor((Date.now() - activeRouteUpdatedAt) / 1000)) : duration;
+    const etaRemainingSec = etaTotalSec > 0 ? Math.max(0, etaTotalSec - etaElapsedSinceUpdateSec) : 0;
+    const destinationCoordinates: LngLat | null = useMemo(
+        () =>
+            activeRouteDestination ??
+            (destLng && destLat && Number.isFinite(Number(destLng)) && Number.isFinite(Number(destLat))
+                ? [Number(destLng), Number(destLat)]
+                : null),
+        [activeRouteDestination, destLat, destLng]
+    );
+    const destinationPoint: RidePoint | null = destinationCoordinates
             ? {
                   coordinate: {
-                      longitude: Number(destLng),
-                      latitude: Number(destLat),
+                      longitude: destinationCoordinates[0],
+                      latitude: destinationCoordinates[1],
                   },
                   timestamp: Date.now(),
               }
@@ -92,9 +108,16 @@ export default function Record() {
         traveledDistanceM: totalDistance,
         previousRemainingM: previousRemainingDistanceM,
     });
+    const speedAdjustedEtaRemainingSec = calculateSpeedAdjustedEtaSec({
+        trafficRemainingSec: etaRemainingSec,
+        remainingDistanceM,
+        currentSpeedMps: currentSpeed,
+    });
     const autoStartedRef = useRef(false);
     const offRouteCountRef = useRef(0);
     const lastRerouteAtRef = useRef(0);
+    const lastTrafficRefreshAtRef = useRef(0);
+    const isRouteRequestActiveRef = useRef(false);
 
     // Timer effect for duration
     useEffect(() => {
@@ -111,13 +134,12 @@ export default function Record() {
     }, [remainingDistanceM]);
 
     useEffect(() => {
-        if (!isRecording || isPaused || !currentPoint || !destinationPoint || activeRouteSteps.length < 2 || isRerouting) {
+        if (!isRecording || isPaused || !currentPoint || !destinationCoordinates || activeRouteCoordinates.length < 2 || isRouteRequestActiveRef.current) {
             return;
         }
 
-        const routeLine = activeRouteSteps.map(step => step.location);
         const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
-        const distanceFromRouteM = getDistanceToRouteM(currentLngLat, routeLine);
+        const distanceFromRouteM = getDistanceToRouteM(currentLngLat, activeRouteCoordinates);
         const now = Date.now();
 
         if (distanceFromRouteM < 90) {
@@ -132,21 +154,75 @@ export default function Record() {
 
         lastRerouteAtRef.current = now;
         offRouteCountRef.current = 0;
-        setIsRerouting(true);
+        isRouteRequestActiveRef.current = true;
+        const previousInstruction = nextInstruction?.text;
+        const previousEtaSec = etaRemainingSec;
+        setRouteUpdateStatus('rerouting');
 
-        getRoute(currentLngLat, [destinationPoint.coordinate.longitude, destinationPoint.coordinate.latitude])
+        getRoute(currentLngLat, destinationCoordinates)
             .then(route => {
                 if (!route) return;
-                setActiveRouteSteps(route.steps);
-                setRouteEtaTotalSec(route.durationSec);
-                setCurrentRouteDistanceM(route.distanceM);
+                setActiveRoute(route, destinationCoordinates);
                 setPreviousRemainingDistanceM(route.distanceM);
+                addDeviationEvent({
+                    timestamp: now,
+                    location: currentLngLat,
+                    offRouteDistanceM: distanceFromRouteM,
+                    previousInstruction,
+                    newInstruction: route.steps[0]?.instruction,
+                    previousEtaSec,
+                    newEtaSec: route.durationSec,
+                });
             })
             .catch(error => {
                 console.warn('Failed to reroute after deviation:', error);
             })
-            .finally(() => setIsRerouting(false));
-    }, [activeRouteSteps, currentPoint, destinationPoint, isPaused, isRecording, isRerouting, setActiveRouteSteps]);
+            .finally(() => {
+                isRouteRequestActiveRef.current = false;
+                setRouteUpdateStatus('idle');
+            });
+    }, [
+        activeRouteCoordinates,
+        addDeviationEvent,
+        currentPoint,
+        destinationCoordinates,
+        etaRemainingSec,
+        isPaused,
+        isRecording,
+        nextInstruction?.text,
+        setActiveRoute,
+        setRouteUpdateStatus,
+    ]);
+
+    useEffect(() => {
+        if (!isRecording || isPaused || !currentPoint || !destinationCoordinates || isRouteRequestActiveRef.current) {
+            return;
+        }
+
+        const now = Date.now();
+        const refreshEveryMs = 3 * 60 * 1000;
+        const lastRefresh = lastTrafficRefreshAtRef.current || activeRouteUpdatedAt || 0;
+        if (now - lastRefresh < refreshEveryMs) return;
+
+        lastTrafficRefreshAtRef.current = now;
+        isRouteRequestActiveRef.current = true;
+        setRouteUpdateStatus('traffic');
+
+        const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
+        getRoute(currentLngLat, destinationCoordinates)
+            .then(route => {
+                if (!route) return;
+                setActiveRoute(route, destinationCoordinates);
+                setPreviousRemainingDistanceM(route.distanceM);
+            })
+            .catch(error => {
+                console.warn('Failed to refresh live traffic route:', error);
+            })
+            .finally(() => {
+                isRouteRequestActiveRef.current = false;
+                setRouteUpdateStatus('idle');
+            });
+    }, [activeRouteUpdatedAt, currentPoint, destinationCoordinates, isPaused, isRecording, setActiveRoute, setRouteUpdateStatus]);
 
     // Check background location permission on mount
     useEffect(() => {
@@ -281,15 +357,36 @@ export default function Record() {
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
-        // Start saving the ride using mock
-        const result = await finishRide();
+        const latestRidePoints = useRideStore.getState().points;
+        let originPoint = latestRidePoints[0] ?? currentPoint;
+        if (!originPoint) {
+            try {
+                const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                originPoint = {
+                    coordinate: {
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                    },
+                    timestamp: location.timestamp,
+                };
+            } catch (locationError) {
+                console.warn('Unable to resolve current location for trip title', locationError);
+            }
+        }
+
+        const tripName = buildTripRouteTitle({
+            origin: originPoint?.coordinate,
+            destination: destinationPoint?.coordinate,
+            destinationLabel: destination,
+        });
+        const result = await finishRide(tripName);
 
         if (result.success) {
             setProgressText('Trip saved successfully!');
             router.replace(
                 `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
                     result.rideId as string
-                )}&deviationCount=0`
+                )}&deviationCount=${deviationEvents.length}`
             );
             setIsSaving(false);
         } else {
@@ -464,9 +561,13 @@ export default function Record() {
                 )}
                 {isRecording && nextInstruction && (
                     <Surface style={styles.guidanceBanner}>
-                        <Icon source={isRerouting ? 'routes' : 'navigation-variant'} size={sizes.medium} color={theme.colors.onPrimaryContainer} />
+                        <Icon source={routeUpdateStatus === 'idle' ? 'navigation-variant' : 'routes'} size={sizes.medium} color={theme.colors.onPrimaryContainer} />
                         <Text style={styles.guidanceText} numberOfLines={1}>
-                            {isRerouting ? 'Adjusting route from your current location...' : nextInstruction.text}
+                            {routeUpdateStatus === 'rerouting'
+                                ? 'Adjusting route from your current location...'
+                                : routeUpdateStatus === 'traffic'
+                                  ? 'Updating traffic and ETA...'
+                                  : nextInstruction.text}
                         </Text>
                     </Surface>
                 )}
@@ -484,7 +585,7 @@ export default function Record() {
                         <View style={{ width: 1, backgroundColor: theme.colors.outlineVariant, height: '70%' }} />
                         <View style={styles.statItem}>
                             <Text style={styles.statLabel}>ETA</Text>
-                            <Text style={styles.statNumber}>{formatEta(etaRemainingSec)}</Text>
+                            <Text style={styles.statNumber}>{formatEta(speedAdjustedEtaRemainingSec)}</Text>
                             <Text style={styles.statUnit}>remaining</Text>
                         </View>
                     </View>

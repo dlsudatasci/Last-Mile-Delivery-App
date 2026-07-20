@@ -1,5 +1,6 @@
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useRidesStore } from '@/lib/store/useRidesStore';
+import { formatRideRouteTitle } from '@/lib/trip-record-display';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
@@ -46,20 +47,29 @@ export default function TripsList() {
                             key={ride.id}
                             style={styles.tripCard}
                             borderless
-                            onPress={() => router.push({ pathname: '/main/rides/ride/[id]', params: { id: ride.id } })}
+                            onPress={() =>
+                                router.push({
+                                    pathname: '/main/(tabs)/map/trip-record' as never,
+                                    params: { id: ride.id },
+                                })
+                            }
                         >
-                            <View style={styles.tripRow}>
-                                <View style={styles.tripIcon}>
-                                    <Icon source="map-marker-path" size={sizes.medium} color={theme.colors.primary} />
-                                </View>
+                            <View style={styles.tripCardContent}>
+                                <View style={styles.tripAccent} />
                                 <View style={styles.tripInfo}>
-                                    <Text style={styles.tripTitle}>{ride.rideName || 'Recorded Trip'}</Text>
                                     <Text style={styles.tripMeta}>
-                                        {date.toLocaleDateString()} · {(ride.distance / 1000).toFixed(2)} km · {Math.round(ride.duration / 60)} min
+                                        {date.toLocaleDateString([], {
+                                            month: 'long',
+                                            day: 'numeric',
+                                            year: 'numeric',
+                                        })}{' '}
+                                        · {date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                                     </Text>
-                                    <Text style={styles.tripMeta}>No deviation required unless detected during review.</Text>
+                                    <Text style={styles.tripTitle}>{formatRideRouteTitle(ride)}</Text>
                                 </View>
-                                <Icon source="chevron-right" size={sizes.size28} color={theme.colors.onSurfaceVariant} />
+                                <View style={styles.tripIcon}>
+                                    <Icon source="map-marker-path" size={sizes.size28} color={theme.colors.primary} />
+                                </View>
                             </View>
                         </TouchableRipple>
                     );
@@ -80,7 +90,7 @@ const getStyles = (theme: MD3Theme) =>
             borderRadius: sizes.medium,
             padding: sizes.large,
             borderWidth: 1,
-            borderColor: theme.colors.outlineVariant ?? '#E2E8F0',
+            borderColor: theme.colors.outlineVariant,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -102,19 +112,26 @@ const getStyles = (theme: MD3Theme) =>
             backgroundColor: theme.colors.surface,
             borderRadius: sizes.medium,
             borderWidth: 1,
-            borderColor: theme.colors.outlineVariant ?? '#E2E8F0',
-            padding: sizes.medium,
+            borderColor: theme.colors.outlineVariant,
             marginBottom: sizes.small,
+            overflow: 'hidden',
         },
-        tripRow: {
+        tripCardContent: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: sizes.medium,
+            padding: sizes.medium,
+            gap: sizes.small,
+        },
+        tripAccent: {
+            alignSelf: 'stretch',
+            width: 6,
+            borderRadius: 3,
+            backgroundColor: theme.colors.primary,
         },
         tripIcon: {
-            width: sizes.size48,
-            height: sizes.size48,
-            borderRadius: sizes.size48 / 2,
+            width: sizes.size64,
+            height: sizes.size64,
+            borderRadius: sizes.small,
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: theme.colors.primaryContainer,
@@ -126,6 +143,7 @@ const getStyles = (theme: MD3Theme) =>
             fontFamily: 'LGEIHeadline-Bold',
             fontSize: fontSizes.small,
             color: theme.colors.onSurface,
+            marginTop: sizes.tiny,
         },
         tripMeta: {
             fontFamily: 'LGEIText-Regular',

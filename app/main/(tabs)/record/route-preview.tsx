@@ -1,3 +1,4 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { formatDistance, formatEta, getRoute, LngLat, RouteCongestionLevel, RouteResult } from '@/lib/utils/directions';
 import { useRideStore } from '@/lib/store/useRideStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
@@ -6,7 +7,7 @@ import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
-import { Button, Icon, IconButton, MD3Theme, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, MD3Theme, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
@@ -30,7 +31,7 @@ export default function RoutePreview() {
     const [route, setRoute] = useState<RouteResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const setActiveRouteSteps = useRideStore(state => state.setActiveRouteSteps);
+    const setActiveRoute = useRideStore(state => state.setActiveRoute);
 
     useEffect(() => {
         let active = true;
@@ -112,7 +113,7 @@ export default function RoutePreview() {
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
             <View style={styles.header}>
-                <IconButton icon="chevron-left" size={sizes.size32} onPress={() => router.back()} />
+                <HeaderBackButton onPress={() => router.back()} />
                 <Text style={styles.headerTitle}>Route Preview</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>
@@ -125,33 +126,6 @@ export default function RoutePreview() {
                         followZoomLevel={14}
                     />
                     <Mapbox.LocationPuck />
-                    {lineShape && (
-                        <Mapbox.ShapeSource id="routeSource" shape={lineShape}>
-                            <Mapbox.LineLayer
-                                id="routeLine"
-                                style={{ lineColor: theme.colors.primary, lineWidth: 5, lineCap: 'round', lineJoin: 'round' }}
-                            />
-                        </Mapbox.ShapeSource>
-                    )}
-                    {congestionShape && (
-                        <Mapbox.ShapeSource id="trafficRouteSource" shape={congestionShape}>
-                            <Mapbox.LineLayer
-                                id="moderateTrafficRouteLine"
-                                filter={['==', ['get', 'congestion'], 'moderate']}
-                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 7, lineOpacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
-                            />
-                            <Mapbox.LineLayer
-                                id="heavyTrafficRouteLine"
-                                filter={['==', ['get', 'congestion'], 'heavy']}
-                                style={{ lineColor: TRAFFIC_RED, lineWidth: 7, lineOpacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
-                            />
-                            <Mapbox.LineLayer
-                                id="severeTrafficRouteLine"
-                                filter={['==', ['get', 'congestion'], 'severe']}
-                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 8, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
-                            />
-                        </Mapbox.ShapeSource>
-                    )}
                     <Mapbox.VectorSource id="mapboxTrafficTiles" url={TRAFFIC_TILESET_URL}>
                         <Mapbox.LineLayer
                             id="mapboxTrafficModerate"
@@ -172,6 +146,33 @@ export default function RoutePreview() {
                             style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 3.5, lineOpacity: 0.75, lineCap: 'round', lineJoin: 'round' }}
                         />
                     </Mapbox.VectorSource>
+                    {lineShape && (
+                        <Mapbox.ShapeSource id="routeSource" shape={lineShape}>
+                            <Mapbox.LineLayer
+                                id="routeLine"
+                                style={{ lineColor: theme.colors.primary, lineWidth: 6, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                        </Mapbox.ShapeSource>
+                    )}
+                    {congestionShape && (
+                        <Mapbox.ShapeSource id="trafficRouteSource" shape={congestionShape}>
+                            <Mapbox.LineLayer
+                                id="moderateTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'moderate']}
+                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                            <Mapbox.LineLayer
+                                id="heavyTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'heavy']}
+                                style={{ lineColor: TRAFFIC_RED, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                            <Mapbox.LineLayer
+                                id="severeTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'severe']}
+                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 10, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                        </Mapbox.ShapeSource>
+                    )}
                     {to && (
                         <Mapbox.PointAnnotation id="dest" coordinate={to}>
                             <Icon source="map-marker" size={sizes.size32} color={theme.colors.error} />
@@ -215,8 +216,8 @@ export default function RoutePreview() {
                     labelStyle={styles.buttonLabel}
                     disabled={!route}
                     onPress={() => {
-                        if (route) {
-                            setActiveRouteSteps(route.steps);
+                        if (route && to) {
+                            setActiveRoute(route, to);
                         }
                         router.push({
                             pathname: '/main/(tabs)/record',

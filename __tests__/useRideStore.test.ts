@@ -34,6 +34,7 @@ jest.mock("../lib/firebase-crud/rides", () => ({
 jest.mock("expo-location", () => ({
     Accuracy: {
         BestForNavigation: 6,
+        Balanced: 3,
     },
     hasStartedLocationUpdatesAsync: jest.fn(),
     stopLocationUpdatesAsync: jest.fn(),
@@ -72,6 +73,16 @@ describe("useRideStore", () => {
             averageSpeed: 0,
             maxSpeed: 0,
             activeRouteSteps: [],
+            activeRouteCoordinates: [],
+            activeRouteCongestionSegments: [],
+            activeRouteDestination: null,
+            activeRouteDurationSec: 0,
+            activeRouteDistanceM: 0,
+            suggestedRouteDurationSec: 0,
+            suggestedRouteDistanceM: 0,
+            activeRouteUpdatedAt: null,
+            routeUpdateStatus: "idle",
+            deviationEvents: [],
 
             annotations: [],
         });
@@ -649,6 +660,103 @@ describe("useRideStore", () => {
         expect(Location.startLocationUpdatesAsync).toHaveBeenCalled();
     });
 
+    test("startRide preserves active generated route for recording map", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
+        (Location.startLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
+
+        useRideStore.getState().setActiveRoute(
+            {
+                coordinates: [
+                    [121.0, 14.0],
+                    [121.1, 14.1],
+                ],
+                durationSec: 900,
+                mapboxDurationSec: 900,
+                distanceM: 5000,
+                congestionSegments: [
+                    {
+                        coordinates: [
+                            [121.0, 14.0],
+                            [121.1, 14.1],
+                        ],
+                        congestion: "heavy",
+                        distanceM: 5000,
+                    },
+                ],
+                score: 1,
+                trafficDelaySec: 0,
+                restrictedRoadExposure: 0,
+                congestionSummary: {
+                    unknown: { distanceM: 0, count: 0 },
+                    low: { distanceM: 0, count: 0 },
+                    moderate: { distanceM: 0, count: 0 },
+                    heavy: { distanceM: 5000, count: 1 },
+                    severe: { distanceM: 0, count: 0 },
+                },
+                steps: [
+                    {
+                        instruction: "Turn left",
+                        maneuverType: "turn",
+                        maneuverModifier: "left",
+                        location: [121.0, 14.0],
+                        distanceM: 100,
+                    },
+                ],
+            },
+            [121.1, 14.1]
+        );
+
+        await useRideStore.getState().startRide();
+
+        const state = useRideStore.getState();
+        expect(state.activeRouteCoordinates).toHaveLength(2);
+        expect(state.activeRouteCongestionSegments[0].congestion).toBe("heavy");
+        expect(state.activeRouteDestination).toEqual([121.1, 14.1]);
+        expect(state.activeRouteDurationSec).toBe(900);
+        expect(state.activeRouteDistanceM).toBe(5000);
+        expect(state.suggestedRouteDurationSec).toBe(900);
+        expect(state.suggestedRouteDistanceM).toBe(5000);
+    });
+
+    test("setActiveRoute preserves original suggested route while recording reroutes", () => {
+        useRideStore.setState({
+            isRecording: true,
+            suggestedRouteDurationSec: 900,
+            suggestedRouteDistanceM: 5000,
+        });
+
+        useRideStore.getState().setActiveRoute(
+            {
+                coordinates: [
+                    [121.0, 14.0],
+                    [121.2, 14.2],
+                ],
+                durationSec: 1200,
+                mapboxDurationSec: 1200,
+                distanceM: 7000,
+                congestionSegments: [],
+                score: 1,
+                trafficDelaySec: 0,
+                restrictedRoadExposure: 0,
+                congestionSummary: {
+                    unknown: { distanceM: 0, count: 0 },
+                    low: { distanceM: 0, count: 0 },
+                    moderate: { distanceM: 0, count: 0 },
+                    heavy: { distanceM: 0, count: 0 },
+                    severe: { distanceM: 0, count: 0 },
+                },
+                steps: [],
+            },
+            [121.2, 14.2]
+        );
+
+        const state = useRideStore.getState();
+        expect(state.activeRouteDurationSec).toBe(1200);
+        expect(state.activeRouteDistanceM).toBe(7000);
+        expect(state.suggestedRouteDurationSec).toBe(900);
+        expect(state.suggestedRouteDistanceM).toBe(5000);
+    });
+
     // #16
     test("startRide stops existing location updates before starting", async () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(true);
@@ -816,6 +924,8 @@ describe("useRideStore", () => {
             totalElevationGain: 15,
             averageSpeed: 4,
             maxSpeed: 8,
+            suggestedRouteDistanceM: 1200,
+            suggestedRouteDurationSec: 420,
             annotations: [],
             points: [
                 {
@@ -837,10 +947,44 @@ describe("useRideStore", () => {
                 averageSpeed: 4,
                 maxSpeed: 8,
                 duration: 60,
+                suggestedRouteDistanceM: 1200,
+                suggestedRouteDurationSec: 420,
                 points: expect.any(Array),
                 annotations: [],
-                rideName: "New Delivery Trip",
+                rideName: "Metro Manila Trip",
                 isPublic: false,
+            })
+        );
+    });
+
+    test("finishRide uses provided trip route title", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
+        (saveRide as jest.Mock).mockResolvedValue("ride-123");
+
+        useRideStore.setState({
+            startTime: 100,
+            duration: 60,
+            totalDistance: 200,
+            totalElevationGain: 15,
+            averageSpeed: 4,
+            maxSpeed: 8,
+            annotations: [],
+            points: [
+                {
+                    coordinate: {
+                        latitude: 14.56,
+                        longitude: 120.99,
+                    },
+                    timestamp: 1,
+                },
+            ],
+        });
+
+        await useRideStore.getState().finishRide("Manila → Quezon City");
+
+        expect(saveRide).toHaveBeenCalledWith(
+            expect.objectContaining({
+                rideName: "Manila → Quezon City",
             })
         );
     });

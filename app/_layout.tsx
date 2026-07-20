@@ -1,3 +1,4 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { themeColors } from '@/lib/common/colors';
 import { useCustomFonts } from '@/lib/hooks/useFonts';
 import { getAsyncFlag, useRideStore } from '@/lib/store/useRideStore';
@@ -11,9 +12,9 @@ import { router, Stack } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
 import * as Updates from 'expo-updates';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Linking, Platform, Text, TouchableOpacity, useColorScheme } from 'react-native';
+import { Alert, Linking, Platform, Text, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Button, Dialog, Icon, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
+import { Button, Dialog, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
 
 Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
 
@@ -185,11 +186,7 @@ export default function RootLayout() {
                         initialRouteName="index"
                         screenOptions={{
                             ...commonScreenOptions,
-                            headerLeft: () => (
-                                <TouchableOpacity onPress={() => router.dismiss()}>
-                                    <Icon source={'chevron-left'} size={sizes.size32} />
-                                </TouchableOpacity>
-                            ),
+                            headerLeft: () => <HeaderBackButton onPress={() => router.dismiss()} />,
                         }}
                     >
                         <Stack.Screen
@@ -231,20 +228,6 @@ export default function RootLayout() {
                             name="study-enrollment"
                             options={{
                                 title: 'Study Enrollment',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="study-consent"
-                            options={{
-                                title: 'Study Consent',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="enrollment-complete"
-                            options={{
-                                title: 'Enrollment Complete',
                                 headerShown: false,
                             }}
                         />
