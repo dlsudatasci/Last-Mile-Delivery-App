@@ -17,6 +17,8 @@ configureMapboxAccessToken(Mapbox);
 const TRAFFIC_RED = '#DC2626';
 const TRAFFIC_DARK_RED = '#991B1B';
 const TRAFFIC_ORANGE = '#F59E0B';
+// Generated/upcoming route = blue (no travelled portion exists yet during preview).
+const ROUTE_BLUE = '#2563EB';
 const TRAFFIC_TILESET_URL = 'mapbox://mapbox.mapbox-traffic-v1';
 const TRAFFIC_SOURCE_LAYER = 'traffic';
 
@@ -127,7 +129,6 @@ export default function RoutePreview() {
             sw: [Math.min(...lons), Math.min(...lats)] as LngLat,
         };
     }, [route]);
-    const previewOrigin = route?.coordinates[0] ?? from;
 
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
@@ -175,7 +176,7 @@ export default function RoutePreview() {
                         <Mapbox.ShapeSource id="routeSource" shape={lineShape}>
                             <Mapbox.LineLayer
                                 id="routeLine"
-                                style={{ lineColor: theme.colors.primary, lineWidth: 6, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: ROUTE_BLUE, lineWidth: 8, lineOpacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
                             />
                         </Mapbox.ShapeSource>
                     )}
@@ -184,26 +185,19 @@ export default function RoutePreview() {
                             <Mapbox.LineLayer
                                 id="moderateTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'moderate']}
-                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
                             />
                             <Mapbox.LineLayer
                                 id="heavyTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'heavy']}
-                                style={{ lineColor: TRAFFIC_RED, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_RED, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
                             />
                             <Mapbox.LineLayer
                                 id="severeTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'severe']}
-                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 10, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 5.5, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
                             />
                         </Mapbox.ShapeSource>
-                    )}
-                    {previewOrigin && (
-                        <Mapbox.PointAnnotation id="preview-origin" coordinate={previewOrigin}>
-                            <View style={styles.riderMarker}>
-                                <View style={styles.riderMarkerCore} />
-                            </View>
-                        </Mapbox.PointAnnotation>
                     )}
                     {to && (
                         <Mapbox.PointAnnotation id="dest" coordinate={to}>
@@ -318,22 +312,6 @@ const getStyles = (theme: MD3Theme) =>
         button: { borderRadius: sizes.small },
         buttonContent: { height: sizes.size56 },
         buttonLabel: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small },
-        riderMarker: {
-            width: 24,
-            height: 24,
-            borderRadius: 12,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#ffffff',
-            borderWidth: 2,
-            borderColor: '#075985',
-        },
-        riderMarkerCore: {
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            backgroundColor: '#22D3EE',
-        },
         destinationMarker: {
             width: sizes.size48,
             height: sizes.size48,

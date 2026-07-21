@@ -1,7 +1,8 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
-import { getAccountForRiderCode, isValidRiderCode, sanitizeRiderCode } from '@/lib/local-db/riderCodes';
+import { getLocalAccount } from '@/lib/local-db/accounts';
+import { getRiderCodeRegistration, isValidRiderCode, sanitizeRiderCode } from '@/lib/local-db/riderCodes';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
@@ -45,27 +46,36 @@ export default function RiderCode() {
 
         setIsLoading(true);
         try {
-            const account = await getAccountForRiderCode(riderCode);
-            if (!account) {
+            const registration = await getRiderCodeRegistration(riderCode);
+            if (!registration) {
+                // Code not yet registered — start the sign-up flow (privacy consent,
+                // join study, user details). This path is intentionally unchanged.
                 setRiderCode(riderCode);
                 router.push('/study-enrollment');
                 return;
             }
 
-            const { user } = await signUpOrSignInWithPhone(account.phone);
-            setUser({
-                id: user.uid,
-                username: account.fullName,
-                fullName: account.fullName,
-                avatarUrl: null,
-                email: user.email,
-                phone: account.phone,
-                gender: account.gender,
-                ageRange: account.ageRange,
-                city: account.city,
-                yearsExperience: account.yearsExperience,
-                createdAt: new Date(account.createdAt),
-            });
+            // Code is already registered — sign the rider in from the registered phone and
+            // go straight to home. We branch on registration status (not local-account
+            // existence) so a registered code still lands on home even if the on-device
+            // profile is missing (e.g. reinstall / cleared local data).
+            const { user } = await signUpOrSignInWithPhone(registration.phone);
+            const account = await getLocalAccount(registration.phone);
+            if (account) {
+                setUser({
+                    id: user.uid,
+                    username: account.fullName,
+                    fullName: account.fullName,
+                    avatarUrl: null,
+                    email: user.email,
+                    phone: account.phone,
+                    gender: account.gender,
+                    ageRange: account.ageRange,
+                    city: account.city,
+                    yearsExperience: account.yearsExperience,
+                    createdAt: new Date(account.createdAt),
+                });
+            }
             reset();
             router.replace('/main/(tabs)/home');
         } catch (error) {
