@@ -1,6 +1,7 @@
 import StudyOverviewModal from '@/components/onboarding/StudyOverviewModal';
 import ActiveStudyCard from '@/components/studies/ActiveStudyCard';
 import { enrollInStudy, getStudyParticipation } from '@/lib/firebase-crud/study';
+import { isTransientFirestoreError } from '@/lib/firebase-crud/rides';
 import { useRidesStore } from '@/lib/store/useRidesStore';
 import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { formatRideRouteTitle } from '@/lib/trip-record-display';
@@ -68,7 +69,11 @@ export default function Home() {
                             if (user.isEnrolled !== true) setUser({ ...user, isEnrolled: true });
                         }
                     } catch (error) {
-                        console.error('Failed to check participation:', error);
+                        if (isTransientFirestoreError(error)) {
+                            console.warn('Failed to check participation (offline/transient):', error);
+                        } else {
+                            console.error('Failed to check participation:', error);
+                        }
                     }
                 }
             };
@@ -88,7 +93,11 @@ export default function Home() {
             setUser({ ...user, isEnrolled: true });
             setShowStudyModal(false);
         } catch (error) {
-            console.error('Failed to enroll:', error);
+            if (isTransientFirestoreError(error)) {
+                console.warn('Failed to enroll (offline/transient):', error);
+            } else {
+                console.error('Failed to enroll:', error);
+            }
         } finally {
             setIsJoining(false);
         }

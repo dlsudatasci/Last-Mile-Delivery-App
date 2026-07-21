@@ -6,6 +6,7 @@ import { useRidesStore } from '@/lib/store/useRidesStore';
 import { auth } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useUser } from '@/stores/useUser';
+import { signOut } from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -41,12 +42,11 @@ export default function Profile() {
 
     const handleLogout = async () => {
         try {
-            await auth.signOut();
+            await signOut(auth);
             clearUser();
             clearRides();
             clearEvents();
             clearCommunityRides();
-            router.dismissAll();
             router.replace('/get-started');
         } catch (error) {
             console.error('Error signing out:', error);

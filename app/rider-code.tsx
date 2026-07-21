@@ -1,6 +1,7 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { signInWithPhone } from '@/lib/firebase-crud/auth';
+import { isTransientFirestoreError } from '@/lib/firebase-crud/rides';
 import { firestore } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
@@ -66,7 +67,7 @@ export default function RiderCode() {
                 return;
             }
 
-            // Code is already claimed. Attempt to log in the user.
+            // Code is already claimed. Route to enter-phone for login verification.
             const claimedBy = data?.claimedBy;
             if (!claimedBy) {
                 showError('This code is claimed but missing user data.');
@@ -74,47 +75,14 @@ export default function RiderCode() {
                 return;
             }
 
-            // Fetch the user's phone number to perform silent login
-            const userRef = doc(firestore, 'users', claimedBy);
-            const userSnap = await getDoc(userRef);
-
-            if (!userSnap.exists) {
-                showError('User profile not found for this code.');
-                setIsLoading(false);
-                return;
-            }
-
-            const userData = userSnap.data();
-            const phone = userData?.phone;
-
-            if (!phone) {
-                showError('No phone number associated with this account.');
-                setIsLoading(false);
-                return;
-            }
-
-            // Perform silent login using the derived phone credential
-            const user = await signInWithPhone(phone);
-            
-            // Populate local store so the app knows who we are
-            setUser({
-                id: user.uid,
-                username: userData?.fullName || userData?.username,
-                fullName: userData?.fullName || userData?.username,
-                avatarUrl: userData?.avatarUrl || null,
-                email: user.email,
-                phone: userData?.phone,
-                gender: userData?.gender,
-                ageRange: userData?.ageRange,
-                city: userData?.city,
-                yearsExperience: userData?.yearsExperience,
-                createdAt: new Date(userData?.createdAt || Date.now()),
-            });
-            reset();
-            router.replace('/main/(tabs)/home');
-
+            setRiderCode(riderCode);
+            router.push({ pathname: '/enter-phone', params: { loginOnly: 'true' } } as any);
         } catch (error) {
-            showError(error instanceof Error ? error.message : 'Could not continue. Please try again.');
+            if (isTransientFirestoreError(error)) {
+                showError('You appear to be offline. Please connect to the internet to verify your code.');
+            } else {
+                showError(error instanceof Error ? error.message : 'Could not continue. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }
