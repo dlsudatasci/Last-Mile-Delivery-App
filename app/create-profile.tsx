@@ -1,12 +1,12 @@
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { SelectField } from '@/components/onboarding/FormFields';
 import { saveOnboardingProfile, signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
-import { enrollInStudy } from '@/lib/firebase-crud/study';
 import { saveLocalAccount } from '@/lib/local-db/accounts';
-import { registerRiderCode } from '@/lib/local-db/riderCodes';
+import { firestore } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
+import { doc, setDoc } from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
@@ -32,6 +32,7 @@ const CITIES = [
 ];
 const EXPERIENCE = ['Less than 6 months', '6 months–1 year', '1–3 years', '3–5 years', 'More than 5 years'];
 const AGE_RANGES = ['18–24', '25–34', '35–44', '45–54', '55+'];
+const PLATFORMS = ['Grab', 'Foodpanda', 'Lalamove', 'JoyRide', 'Borzo', 'Other'];
 
 export default function CreateProfile() {
     const { riderCode, phone, acceptedPolicies, reset } = useOnboarding();
@@ -42,6 +43,7 @@ export default function CreateProfile() {
     const [ageRange, setAgeRange] = useState('');
     const [city, setCity] = useState('');
     const [yearsExperience, setYearsExperience] = useState('');
+    const [deliveryPlatform, setDeliveryPlatform] = useState('');
 
     const [submitted, setSubmitted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -59,7 +61,7 @@ export default function CreateProfile() {
         if (isLoading) return;
         setSubmitted(true);
 
-        if (!fullName.trim() || !gender || !ageRange || !city || !yearsExperience) {
+        if (!fullName.trim() || !gender || !ageRange || !city || !yearsExperience || !deliveryPlatform) {
             showError('Please complete all fields to continue.');
             return;
         }
@@ -78,10 +80,12 @@ export default function CreateProfile() {
         const trimmedName = fullName.trim();
         const profile = {
             fullName: trimmedName,
+            preferredName: trimmedName,
             gender,
             ageRange,
             city,
             yearsExperience,
+            deliveryPlatform,
         };
 
         setIsLoading(true);
@@ -92,17 +96,12 @@ export default function CreateProfile() {
                 await saveOnboardingProfile(user.uid, {
                     ...profile,
                     phone,
+                    riderCode,
                     acceptedPolicies,
                 });
             } catch (remoteError) {
                 console.warn('Remote profile save failed (kept locally after registration):', remoteError);
             }
-
-            await enrollInStudy({
-                acceptedPrivacyPolicy: true,
-                acceptedDataUsage: true,
-                acceptedParticipationTerms: true,
-            });
 
             const createdAt = new Date().toISOString();
             await saveLocalAccount({
@@ -112,7 +111,13 @@ export default function CreateProfile() {
                 acceptedPolicies,
                 createdAt,
             });
-            await registerRiderCode(riderCode, phone);
+
+            // Mark the rider code as claimed in Firestore
+            await setDoc(doc(firestore, 'riderCodes', riderCode), {
+                isClaimed: true,
+                claimedBy: user.uid,
+                claimedAt: Date.now()
+            }, { merge: true });
 
             setUser({
                 id: user.uid,
@@ -195,6 +200,14 @@ export default function CreateProfile() {
                         options={EXPERIENCE}
                         onSelect={setYearsExperience}
                         error={submitted && !yearsExperience}
+                    />
+                    <SelectField
+                        label="Delivery Platform"
+                        value={deliveryPlatform}
+                        placeholder="Select your primary platform"
+                        options={PLATFORMS}
+                        onSelect={setDeliveryPlatform}
+                        error={submitted && !deliveryPlatform}
                     />
 
                     <Button

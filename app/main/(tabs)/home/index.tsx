@@ -1,12 +1,14 @@
+import StudyOverviewModal from '@/components/onboarding/StudyOverviewModal';
 import ActiveStudyCard from '@/components/studies/ActiveStudyCard';
-import { getJoinedDeviaRouteStudy } from '@/lib/studies';
+import { enrollInStudy, getStudyParticipation } from '@/lib/firebase-crud/study';
 import { useRidesStore } from '@/lib/store/useRidesStore';
+import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { formatRideRouteTitle } from '@/lib/trip-record-display';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useUser } from '@/stores/useUser';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, MD3Theme, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
@@ -42,14 +44,53 @@ export default function Home() {
     const theme = useTheme();
     const styles = getStyles(theme);
 
-    const { user } = useUser();
+    const { user, setUser } = useUser();
     const { rides, totalRideCount, isRefreshing, fetchRides } = useRidesStore();
+
+    const [showStudyModal, setShowStudyModal] = useState(false);
+    const [isJoining, setIsJoining] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
             fetchRides(true);
-        }, [fetchRides])
+
+            // Check if user is enrolled in the study
+            const checkParticipation = async () => {
+                if (user?.id) {
+                    try {
+                        const participation = await getStudyParticipation(user.id);
+                        if (!participation) {
+                            if (user.isEnrolled !== false) setUser({ ...user, isEnrolled: false });
+                            setShowStudyModal(true);
+                        } else {
+                            if (user.isEnrolled !== true) setUser({ ...user, isEnrolled: true });
+                        }
+                    } catch (error) {
+                        console.error('Failed to check participation:', error);
+                    }
+                }
+            };
+            checkParticipation();
+        }, [fetchRides, user])
     );
+
+    const handleJoinStudy = async () => {
+        if (!user) return;
+        setIsJoining(true);
+        try {
+            await enrollInStudy({
+                acceptedPrivacyPolicy: true,
+                acceptedDataUsage: true,
+                acceptedParticipationTerms: true,
+            });
+            setUser({ ...user, isEnrolled: true });
+            setShowStudyModal(false);
+        } catch (error) {
+            console.error('Failed to enroll:', error);
+        } finally {
+            setIsJoining(false);
+        }
+    };
 
     // --- Derived display values ----------------------------------------------
     const firstName = (user?.fullName || user?.username || 'there').split(' ')[0];
@@ -71,7 +112,7 @@ export default function Home() {
             recentTrips: rides.slice(0, 3),
         };
     }, [rides, totalRideCount]);
-    const activeStudy = getJoinedDeviaRouteStudy(stats.totalTrips);
+    const activeStudy = getJoinedDeviaRouteStudy(stats.totalTrips, user?.isEnrolled ?? false);
 
     return (
         <View style={styles.safe}>
@@ -81,7 +122,7 @@ export default function Home() {
                 </Text>
 
                 {/* Overview */}
-                <Text style={styles.sectionLabel}>OVERVIEW</Text>
+                <Text style={styles.sectionLabel}>{user?.isEnrolled ? 'OVERVIEW' : 'AVAILABLE STUDY'}</Text>
                 <ActiveStudyCard
                     study={activeStudy}
                     onPress={() =>
@@ -90,7 +131,7 @@ export default function Home() {
                             params: {
                                 id: activeStudy.id,
                                 name: activeStudy.name,
-                                joined: '1',
+                                joined: activeStudy.joined ? '1' : '0',
                                 tripsDone: String(activeStudy.tripsRecorded),
                                 tripsRequired: String(activeStudy.tripsRequired),
                                 reward: String(activeStudy.reward),
@@ -175,6 +216,12 @@ export default function Home() {
                 </View>
             </ScrollView>
 
+            <StudyOverviewModal
+                visible={showStudyModal}
+                onJoin={handleJoinStudy}
+                onClose={() => setShowStudyModal(false)}
+                loading={isJoining}
+            />
         </View>
     );
 }
@@ -279,6 +326,7 @@ const getStyles = (theme: MD3Theme) =>
             fontFamily: 'LGEIText-SemiBold',
             fontSize: fontSizes.tiny,
             color: theme.colors.onSurfaceVariant,
+            rowGap: sizes.tiny,
         },
         overviewStatValue: {
             fontFamily: 'LGEIHeadline-Bold',

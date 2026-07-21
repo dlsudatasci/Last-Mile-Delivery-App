@@ -71,11 +71,14 @@ export async function signInWithPhone(phone: string) {
 
 export interface OnboardingProfileData {
     fullName: string;
+    preferredName: string;
     gender: string;
     ageRange: string;
     city: string;
     yearsExperience: string;
+    deliveryPlatform: string;
     phone: string;
+    riderCode: string;
     acceptedPolicies: boolean;
 }
 
@@ -90,10 +93,13 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
             // keep `username` populated so existing home/profile screens work
             username: data.fullName,
             fullName: data.fullName,
+            preferredName: data.preferredName,
+            riderCode: data.riderCode,
             gender: data.gender,
             ageRange: data.ageRange,
             city: data.city,
             yearsExperience: data.yearsExperience,
+            deliveryPlatform: data.deliveryPlatform,
             phone: data.phone,
             acceptedPolicies: data.acceptedPolicies,
             updatedAt: new Date().toISOString(),

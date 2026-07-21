@@ -1,10 +1,11 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
-import { signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
-import { getAccountForRiderCode, isValidRiderCode, sanitizeRiderCode } from '@/lib/local-db/riderCodes';
+import { signInWithPhone } from '@/lib/firebase-crud/auth';
+import { firestore } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
+import { doc, getDoc } from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
@@ -12,6 +13,7 @@ import { Button, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TEAL = '#0E6E73';
+const sanitizeRiderCode = (code: string) => code.replace(/\D/g, '').slice(0, 6);
 
 export default function RiderCode() {
     const { setRiderCode, reset } = useOnboarding();
@@ -38,36 +40,80 @@ export default function RiderCode() {
         if (isLoading) return;
 
         const riderCode = sanitizeRiderCode(code);
-        if (!isValidRiderCode(riderCode)) {
+        if (riderCode.length !== 6) {
             showError('Enter a valid 6-digit rider code.');
             return;
         }
 
         setIsLoading(true);
         try {
-            const account = await getAccountForRiderCode(riderCode);
-            if (!account) {
+            // Check Firestore for the code
+            const codeRef = doc(firestore, 'riderCodes', riderCode);
+            const codeSnap = await getDoc(codeRef);
+
+            if (!codeSnap.exists) {
+                showError('Invalid code. Please check and try again.');
+                setIsLoading(false);
+                return;
+            }
+
+            const data = codeSnap.data();
+
+            if (data?.isClaimed === false) {
+                // Code is valid and unclaimed -> proceed to registration
                 setRiderCode(riderCode);
                 router.push('/study-enrollment');
                 return;
             }
 
-            const { user } = await signUpOrSignInWithPhone(account.phone);
+            // Code is already claimed. Attempt to log in the user.
+            const claimedBy = data?.claimedBy;
+            if (!claimedBy) {
+                showError('This code is claimed but missing user data.');
+                setIsLoading(false);
+                return;
+            }
+
+            // Fetch the user's phone number to perform silent login
+            const userRef = doc(firestore, 'users', claimedBy);
+            const userSnap = await getDoc(userRef);
+
+            if (!userSnap.exists) {
+                showError('User profile not found for this code.');
+                setIsLoading(false);
+                return;
+            }
+
+            const userData = userSnap.data();
+            const phone = userData?.phone;
+
+            if (!phone) {
+                showError('No phone number associated with this account.');
+                setIsLoading(false);
+                return;
+            }
+
+            // Perform silent login using the derived phone credential
+            const user = await signInWithPhone(phone);
+            
+            // Populate local store so the app knows who we are
             setUser({
                 id: user.uid,
-                username: account.fullName,
-                fullName: account.fullName,
-                avatarUrl: null,
+                username: userData?.fullName || userData?.username,
+                fullName: userData?.fullName || userData?.username,
+                avatarUrl: userData?.avatarUrl || null,
                 email: user.email,
-                phone: account.phone,
-                gender: account.gender,
-                ageRange: account.ageRange,
-                city: account.city,
-                yearsExperience: account.yearsExperience,
-                createdAt: new Date(account.createdAt),
+                phone: userData?.phone,
+                gender: userData?.gender,
+                ageRange: userData?.ageRange,
+                city: userData?.city,
+                yearsExperience: userData?.yearsExperience,
+                createdAt: new Date(userData?.createdAt || Date.now()),
             });
+
             reset();
             router.replace('/main/(tabs)/home');
+
         } catch (error) {
             showError(error instanceof Error ? error.message : 'Could not continue. Please try again.');
         } finally {

@@ -13,7 +13,7 @@ export interface JoinedStudy extends StudyProgress {
     description: string;
     tripsRequired: number;
     org: string;
-    joined: true;
+    joined: boolean;
 }
 
 export const DEVIA_ROUTE_STUDY = {
@@ -42,9 +42,9 @@ export const getStudyProgress = (tripsRecorded: number, tripsRequired: number = 
     };
 };
 
-export const getJoinedDeviaRouteStudy = (tripsRecorded: number): JoinedStudy => ({
+export const getJoinedDeviaRouteStudy = (tripsRecorded: number, joined: boolean = false): JoinedStudy => ({
     ...DEVIA_ROUTE_STUDY,
-    joined: true,
+    joined,
     ...getStudyProgress(tripsRecorded, DEVIA_ROUTE_STUDY.tripsRequired),
 });
 

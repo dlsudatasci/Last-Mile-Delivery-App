@@ -1,10 +1,10 @@
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import {
     getStudyParticipation,
     isValidPhilippineMobileNumber,
     joinStudy,
     StudyParticipation,
 } from '@/lib/firebase-crud/study';
+import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useUser } from '@/stores/useUser';
 import { useEffect, useState } from 'react';
 import { Alert, Image, StyleSheet, View } from 'react-native';
@@ -14,10 +14,6 @@ import { Button, Checkbox, Icon, MD3Theme, Text, TextInput, useTheme } from 'rea
 export default function EventDetails() {
     const theme = useTheme();
     const { user } = useUser();
-    const [riderName, setRiderName] = useState(user?.username || '');
-    const [phoneNumber, setPhoneNumber] = useState('');
-    const [deliveryPlatform, setDeliveryPlatform] = useState('');
-    const [vehicleType, setVehicleType] = useState('');
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
     const [participation, setParticipation] = useState<StudyParticipation | null>(null);
@@ -46,10 +42,6 @@ export default function EventDetails() {
                 const existingParticipation = await getStudyParticipation();
                 setParticipation(existingParticipation);
                 if (existingParticipation) {
-                    setRiderName(existingParticipation.riderName);
-                    setPhoneNumber(existingParticipation.phoneNumber);
-                    setDeliveryPlatform(existingParticipation.deliveryPlatform);
-                    setVehicleType(existingParticipation.vehicleType);
                     setAcceptedTerms(existingParticipation.acceptedTerms);
                     setAcceptedPrivacy(existingParticipation.acceptedPrivacy);
                 }
@@ -69,22 +61,6 @@ export default function EventDetails() {
         });
 
     const handleJoinStudy = async () => {
-        if (!riderName.trim()) {
-            Alert.alert('Missing rider name', 'Please enter your full rider name.');
-            return;
-        }
-        if (!isValidPhilippineMobileNumber(phoneNumber)) {
-            Alert.alert('Invalid phone number', 'Enter an 11-digit Philippine mobile number starting with 09.');
-            return;
-        }
-        if (!deliveryPlatform.trim()) {
-            Alert.alert('Missing platform', 'Please enter your delivery platform.');
-            return;
-        }
-        if (!vehicleType.trim()) {
-            Alert.alert('Missing vehicle type', 'Please enter your vehicle type.');
-            return;
-        }
         if (!acceptedTerms || !acceptedPrivacy) {
             Alert.alert('Consent required', 'Please accept the terms and privacy policy to join the study.');
             return;
@@ -93,10 +69,6 @@ export default function EventDetails() {
         try {
             setIsSubmitting(true);
             const savedParticipation = await joinStudy({
-                riderName,
-                phoneNumber,
-                deliveryPlatform,
-                vehicleType,
                 acceptedTerms,
                 acceptedPrivacy,
             });
@@ -197,38 +169,6 @@ export default function EventDetails() {
                     </View>
                 ) : (
                     <>
-                        <TextInput
-                            label="Rider full name"
-                            value={riderName}
-                            onChangeText={setRiderName}
-                            mode="outlined"
-                            style={styles.input}
-                        />
-                        <TextInput
-                            label="Mobile number"
-                            value={phoneNumber}
-                            onChangeText={setPhoneNumber}
-                            keyboardType="phone-pad"
-                            mode="outlined"
-                            placeholder="09XXXXXXXXX"
-                            style={styles.input}
-                        />
-                        <TextInput
-                            label="Delivery platform"
-                            value={deliveryPlatform}
-                            onChangeText={setDeliveryPlatform}
-                            mode="outlined"
-                            placeholder="Grab, Lalamove, Foodpanda, etc."
-                            style={styles.input}
-                        />
-                        <TextInput
-                            label="Vehicle type"
-                            value={vehicleType}
-                            onChangeText={setVehicleType}
-                            mode="outlined"
-                            placeholder="Motorcycle, bicycle, e-bike, etc."
-                            style={styles.input}
-                        />
                         <View style={styles.checkboxRow}>
                             <Checkbox
                                 status={acceptedTerms ? 'checked' : 'unchecked'}
