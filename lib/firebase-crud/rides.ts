@@ -77,48 +77,50 @@ export const getRides = async (
     community: boolean = false
 ): Promise<PaginatedResponse<FetchRideData>> => {
     try {
-        const ridesCollectionRef = collection(getFirestore(), 'rides');
-        let q;
+        return await retryWithBackoff(async () => {
+            const ridesCollectionRef = collection(getFirestore(), 'rides');
+            let q;
 
-        if (community) {
-            q = query(
-                ridesCollectionRef,
-                where('isPublic', '==', true),
-                orderBy('createdAt', 'desc'),
-                limit(options.limit)
-            );
-        } else {
-            q = query(
-                ridesCollectionRef,
-                where('userId', '==', userId),
-                orderBy('createdAt', 'desc'),
-                limit(options.limit)
-            );
-        }
-
-        if (options.startAfter) {
-            const lastDoc = await getDoc(doc(ridesCollectionRef, options.startAfter));
-            if (lastDoc.exists()) {
-                q = query(q, startAfter(lastDoc));
+            if (community) {
+                q = query(
+                    ridesCollectionRef,
+                    where('isPublic', '==', true),
+                    orderBy('createdAt', 'desc'),
+                    limit(options.limit)
+                );
+            } else {
+                q = query(
+                    ridesCollectionRef,
+                    where('userId', '==', userId),
+                    orderBy('createdAt', 'desc'),
+                    limit(options.limit)
+                );
             }
-        }
 
-        const snapshot = await getDocs(q);
-        const rides: FetchRideData[] = [];
+            if (options.startAfter) {
+                const lastDoc = await getDoc(doc(ridesCollectionRef, options.startAfter));
+                if (lastDoc.exists()) {
+                    q = query(q, startAfter(lastDoc));
+                }
+            }
 
-        for (const doc of snapshot.docs) {
-            const data = doc.data();
-            rides.push({
-                id: doc.id,
-                ...data,
-            } as FetchRideData);
-        }
+            const snapshot = await getDocs(q);
+            const rides: FetchRideData[] = [];
 
-        return {
-            items: rides,
-            lastDocId: snapshot.docs[snapshot.docs.length - 1]?.id || null,
-            hasMore: snapshot.docs.length === options.limit,
-        };
+            for (const doc of snapshot.docs) {
+                const data = doc.data();
+                rides.push({
+                    id: doc.id,
+                    ...data,
+                } as FetchRideData);
+            }
+
+            return {
+                items: rides,
+                lastDocId: snapshot.docs[snapshot.docs.length - 1]?.id || null,
+                hasMore: snapshot.docs.length === options.limit,
+            };
+        });
     } catch (error) {
         console.error('Error fetching rides:', error);
         throw error;
@@ -279,12 +281,38 @@ export const updateRideName = async (userId: string, rideId: string, newName: st
     }
 };
 
+const retryWithBackoff = async <T,>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    initialDelayMs: number = 1000
+): Promise<T> => {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            const isRetryable =
+                (error instanceof Error && (error.message.includes('unavailable') || error.message.includes('UNAVAILABLE'))) ||
+                (error instanceof Error && error.message.includes('Failed to get document'));
+            if (!isRetryable || attempt === maxRetries - 1) {
+                throw error;
+            }
+            const delayMs = initialDelayMs * Math.pow(2, attempt);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+    throw lastError || new Error('Retry failed');
+};
+
 export const getTotalRideCount = async (userId: string): Promise<number> => {
     try {
-        const ridesCollectionRef = collection(firestore, 'rides');
-        const q = query(ridesCollectionRef, where('userId', '==', userId));
-        const count = await getCountFromServer(q);
-        return count.data().count;
+        return await retryWithBackoff(async () => {
+            const ridesCollectionRef = collection(firestore, 'rides');
+            const q = query(ridesCollectionRef, where('userId', '==', userId));
+            const count = await getCountFromServer(q);
+            return count.data().count;
+        });
     } catch (error) {
         console.error('Error fetching total rides:', error);
         throw error;
@@ -293,15 +321,17 @@ export const getTotalRideCount = async (userId: string): Promise<number> => {
 
 export const getWeeklyRideCount = async (userId: string) => {
     try {
-        const ridesCollectionRef = collection(firestore, 'rides');
-        const q = query(
-            ridesCollectionRef,
-            where('userId', '==', userId),
-            where('createdAt', '>=', startOfWeek(new Date()).getTime()),
-            where('createdAt', '<=', new Date().getTime())
-        );
-        const count = await getCountFromServer(q);
-        return count.data().count;
+        return await retryWithBackoff(async () => {
+            const ridesCollectionRef = collection(firestore, 'rides');
+            const q = query(
+                ridesCollectionRef,
+                where('userId', '==', userId),
+                where('createdAt', '>=', startOfWeek(new Date()).getTime()),
+                where('createdAt', '<=', new Date().getTime())
+            );
+            const count = await getCountFromServer(q);
+            return count.data().count;
+        });
     } catch (error) {
         console.error('Error fetching weekly rides:', error);
         throw error;
@@ -310,22 +340,24 @@ export const getWeeklyRideCount = async (userId: string) => {
 
 export const getMonthlyDistanceAndCount = async (userId: string): Promise<{ distance: number; count: number }> => {
     try {
-        const ridesCollectionRef = collection(firestore, 'rides');
-        const q = query(
-            ridesCollectionRef,
-            where('userId', '==', userId),
-            where('createdAt', '>=', startOfMonth(new Date()).getTime()),
-            where('createdAt', '<=', new Date().getTime())
-        );
-        const snapshot = await getAggregateFromServer(q, {
-            distance: sum('distance'),
-            count: count(),
+        return await retryWithBackoff(async () => {
+            const ridesCollectionRef = collection(firestore, 'rides');
+            const q = query(
+                ridesCollectionRef,
+                where('userId', '==', userId),
+                where('createdAt', '>=', startOfMonth(new Date()).getTime()),
+                where('createdAt', '<=', new Date().getTime())
+            );
+            const snapshot = await getAggregateFromServer(q, {
+                distance: sum('distance'),
+                count: count(),
+            });
+            if (!snapshot.data()) {
+                return { distance: 0, count: 0 };
+            }
+            const data: { distance: number; count: number } = snapshot.data() as { distance: number; count: number };
+            return { distance: data?.distance || 0, count: data?.count || 0 };
         });
-        if (!snapshot.data()) {
-            return { distance: 0, count: 0 };
-        }
-        const data: { distance: number; count: number } = snapshot.data() as { distance: number; count: number };
-        return { distance: data?.distance || 0, count: data?.count || 0 };
     } catch (error) {
         console.error('Error fetching monthly distance:', error);
         throw error;
@@ -336,33 +368,35 @@ export const getTotalDistanceAndCountAndAverageSpeedAndElevation = async (
     userId: string
 ): Promise<{ distance: number; count: number; averageSpeed: number; elevation: number }> => {
     try {
-        const ridesCollectionRef = collection(firestore, 'rides');
-        const q = query(ridesCollectionRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
-        const snapshot = await getAggregateFromServer(q, {
-            distance: sum('distance'),
-            count: count(),
-            averageSpeed: average('averageSpeed'),
-            elevationGain: sum('elevationGain'),
-        });
+        return await retryWithBackoff(async () => {
+            const ridesCollectionRef = collection(firestore, 'rides');
+            const q = query(ridesCollectionRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+            const snapshot = await getAggregateFromServer(q, {
+                distance: sum('distance'),
+                count: count(),
+                averageSpeed: average('averageSpeed'),
+                elevationGain: sum('elevationGain'),
+            });
 
-        if (!snapshot.data()) {
-            return { distance: 0, count: 0, averageSpeed: 0, elevation: 0 };
-        }
+            if (!snapshot.data()) {
+                return { distance: 0, count: 0, averageSpeed: 0, elevation: 0 };
+            }
 
-        const data: { distance: number; count: number; averageSpeed: number; elevationGain: number } =
-            snapshot.data() as {
-                distance: number;
-                count: number;
-                averageSpeed: number;
-                elevationGain: number;
+            const data: { distance: number; count: number; averageSpeed: number; elevationGain: number } =
+                snapshot.data() as {
+                    distance: number;
+                    count: number;
+                    averageSpeed: number;
+                    elevationGain: number;
+                };
+
+            return {
+                distance: data?.distance || 0,
+                count: data?.count || 0,
+                averageSpeed: data?.averageSpeed || 0,
+                elevation: data?.elevationGain || 0,
             };
-
-        return {
-            distance: data?.distance || 0,
-            count: data?.count || 0,
-            averageSpeed: data?.averageSpeed || 0,
-            elevation: data?.elevationGain || 0,
-        };
+        });
     } catch (error) {
         console.error('Error fetching total distance:', error);
         throw error;
@@ -371,13 +405,15 @@ export const getTotalDistanceAndCountAndAverageSpeedAndElevation = async (
 
 export const getLongestRide = async (userId: string): Promise<number> => {
     try {
-        const ridesCollectionRef = collection(firestore, 'rides');
-        const q = query(ridesCollectionRef, where('userId', '==', userId), orderBy('distance', 'desc'), limit(1));
-        const snapshot = await getDocs(q);
-        if (snapshot.docs.length === 0) {
-            return 0;
-        }
-        return snapshot.docs[0].data().distance;
+        return await retryWithBackoff(async () => {
+            const ridesCollectionRef = collection(firestore, 'rides');
+            const q = query(ridesCollectionRef, where('userId', '==', userId), orderBy('distance', 'desc'), limit(1));
+            const snapshot = await getDocs(q);
+            if (snapshot.docs.length === 0) {
+                return 0;
+            }
+            return snapshot.docs[0].data().distance;
+        });
     } catch (error) {
         console.error('Error fetching longest ride:', error);
         throw error;

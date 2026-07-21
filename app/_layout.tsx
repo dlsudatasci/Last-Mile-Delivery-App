@@ -13,9 +13,11 @@ import { router, Stack } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
 import * as Updates from 'expo-updates';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Linking, Platform, Text, useColorScheme } from 'react-native';
+import { Alert, Linking, Platform, Text, useColorScheme, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Button, Dialog, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
+
+LogBox.ignoreLogs(['new NativeEventEmitter', '`removeEventListener`']);
 
 configureMapboxAccessToken(Mapbox);
 

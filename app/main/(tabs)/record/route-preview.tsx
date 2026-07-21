@@ -60,15 +60,25 @@ export default function RoutePreview() {
                 }
                 setTo(dest);
 
-                const r = await getRoute(origin, dest);
+                let r = await getRoute(origin, dest);
                 if (!active) return;
                 if (!r) {
-                    setError("Couldn't generate a route to that destination.");
-                    return;
+                    r = await getRoute(origin, dest);
+                    if (!r) {
+                        setError("Couldn't generate a route. Check your internet connection and try again.");
+                        return;
+                    }
                 }
                 setRoute(r);
-            } catch {
-                if (active) setError('Something went wrong generating the route.');
+            } catch (error) {
+                if (active) {
+                    const errorMessage = error instanceof Error ? error.message : 'Something went wrong generating the route.';
+                    if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+                        setError('Network error. Please check your internet connection.');
+                    } else {
+                        setError('Something went wrong generating the route.');
+                    }
+                }
             } finally {
                 if (active) setLoading(false);
             }
