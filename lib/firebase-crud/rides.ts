@@ -298,7 +298,14 @@ const isTransientFirestoreError = (error: unknown): boolean => {
         message.includes('failed to get document') ||
         message.includes('network') ||
         message.includes('deadline') ||
-        message.includes('offline')
+        message.includes('offline') ||
+        // When DNS/connectivity is broken, the RN Firebase native bridge can fail in
+        // a way that produces a malformed error object; its own error-normalization
+        // code then throws "Cannot read property 'code' of undefined" (Hermes) or
+        // "Cannot read properties of undefined (reading 'code')" (V8). Treat that
+        // native-bridge failure as a transient/offline condition, not a real bug.
+        message.includes("property 'code' of undefined") ||
+        message.includes("(reading 'code')")
     );
 };
 
