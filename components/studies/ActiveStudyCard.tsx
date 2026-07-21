@@ -16,22 +16,33 @@ export default function ActiveStudyCard({ study, onPress }: { study: JoinedStudy
                     <Text style={styles.name} numberOfLines={1}>
                         {study.name}
                     </Text>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>Joined</Text>
+                    <View style={[styles.badge, study.joined ? styles.badgeJoined : styles.badgeNotJoined]}>
+                        <Text style={[styles.badgeText, study.joined ? styles.badgeTextJoined : styles.badgeTextNotJoined]}>
+                            {study.joined ? 'Joined' : 'Not Joined'}
+                        </Text>
                     </View>
                 </View>
-                <Text style={styles.progressLabel}>Progress</Text>
-                <View style={styles.progressRow}>
-                    <Text style={styles.progressValue}>
-                        {study.creditedTrips} / {study.tripsRequired} credited trips
-                    </Text>
-                    <Text style={styles.progressPercent}>{Math.round(study.progress * 100)}%</Text>
-                </View>
-                <ProgressBar progress={study.progress} color={theme.colors.primary} style={styles.progressBar} />
-                <View style={styles.statsRow}>
-                    <Text style={styles.statText}>{study.tripsRecorded} recorded</Text>
-                    <Text style={styles.statText}>{study.overLimitTrips} over limit</Text>
-                </View>
+                {study.joined ? (
+                    <>
+                        <Text style={styles.progressLabel}>Progress</Text>
+                        <View style={styles.progressRow}>
+                            <Text style={styles.progressValue}>
+                                {study.creditedTrips} / {study.tripsRequired} credited trips
+                            </Text>
+                            <Text style={styles.progressPercent}>{Math.round(study.progress * 100)}%</Text>
+                        </View>
+                        <ProgressBar progress={study.progress} color={theme.colors.primary} style={styles.progressBar} />
+                        <View style={styles.statsRow}>
+                            <Text style={styles.statText}>{study.tripsRecorded} recorded</Text>
+                            <Text style={styles.statText}>{study.overLimitTrips} over limit</Text>
+                        </View>
+                    </>
+                ) : (
+                    <View style={styles.notJoinedContainer}>
+                        <Text style={styles.progressLabel}>{study.description}</Text>
+                        <Text style={styles.rewardText}>Earn ₱{study.reward}</Text>
+                    </View>
+                )}
             </View>
         </TouchableRipple>
     );
@@ -55,13 +66,16 @@ const getStyles = (theme: MD3Theme) =>
             color: theme.colors.onSurface,
         },
         badge: {
-            backgroundColor: '#DCFCE7',
             paddingHorizontal: sizes.regular,
             paddingVertical: sizes.tiny,
             borderRadius: sizes.size32,
             marginLeft: sizes.small,
         },
-        badgeText: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.tiny, color: '#16A34A' },
+        badgeJoined: { backgroundColor: '#DCFCE7' },
+        badgeNotJoined: { backgroundColor: theme.colors.surfaceVariant },
+        badgeText: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.tiny },
+        badgeTextJoined: { color: '#16A34A' },
+        badgeTextNotJoined: { color: theme.colors.onSurfaceVariant },
         progressLabel: {
             fontFamily: 'LGEIText-Regular',
             fontSize: fontSizes.tiny,
@@ -74,4 +88,11 @@ const getStyles = (theme: MD3Theme) =>
         progressBar: { marginTop: sizes.small, height: sizes.small, borderRadius: sizes.small },
         statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: sizes.small },
         statText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onSurfaceVariant },
+        notJoinedContainer: { marginTop: sizes.small },
+        rewardText: {
+            fontFamily: 'LGEIText-SemiBold',
+            fontSize: fontSizes.tinyPlus,
+            color: theme.colors.primary,
+            marginTop: sizes.small,
+        },
     });

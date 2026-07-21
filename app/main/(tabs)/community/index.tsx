@@ -1,5 +1,6 @@
 import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { useRidesStore } from '@/lib/store/useRidesStore';
+import { useUser } from '@/stores/useUser';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -16,9 +17,10 @@ const QUICK_LINKS = [
 export default function Studies() {
     const theme = useTheme();
     const styles = getStyles(theme);
+    const { user } = useUser();
     const { rides, totalRideCount, fetchRides } = useRidesStore();
     const recordedTrips = Math.max(totalRideCount, rides.length);
-    const joinedStudies = useMemo(() => [getJoinedDeviaRouteStudy(recordedTrips)], [recordedTrips]);
+    const joinedStudies = useMemo(() => [getJoinedDeviaRouteStudy(recordedTrips, user?.isEnrolled ?? false)], [recordedTrips, user?.isEnrolled]);
 
     useFocusEffect(
         useCallback(() => {
@@ -73,8 +75,10 @@ export default function Studies() {
                                     <Text style={styles.availName}>{study.name}</Text>
                                     <Text style={styles.availOrg}>{study.org}</Text>
                                 </View>
-                                <View style={[styles.badge, styles.badgeJoined]}>
-                                    <Text style={[styles.badgeText, styles.badgeTextJoined]}>Joined</Text>
+                                <View style={[styles.badge, study.joined ? styles.badgeJoined : styles.badgeNotJoined]}>
+                                    <Text style={[styles.badgeText, study.joined ? styles.badgeTextJoined : styles.badgeTextNotJoined]}>
+                                        {study.joined ? 'Joined' : 'Not Joined'}
+                                    </Text>
                                 </View>
                             </View>
 

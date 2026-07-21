@@ -76,5 +76,10 @@ service cloud.firestore {
     match /generatedRoutes/{docId} {
       allow read, write: if isSignedIn();
     }
+
+    match /riderCodes/{codeId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
   }
 }

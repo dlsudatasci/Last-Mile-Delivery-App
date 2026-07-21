@@ -99,8 +99,9 @@ describe("getStudyParticipation()", () => {
 
     test("returns participant data when document exists", async () => {
         const participant = {
-            riderName: "Juan Dela Cruz",
-            phoneNumber: "09171234567",
+            eventId: "devia-route-study",
+            acceptedTerms: true,
+            acceptedPrivacy: true,
             status: "joined",
         };
 
@@ -227,10 +228,6 @@ describe("joinStudy()", () => {
     });
 
     const validData = {
-        riderName: "Juan Dela Cruz",
-        phoneNumber: "09171234567",
-        deliveryPlatform: "Grab",
-        vehicleType: "Motorcycle",
         acceptedTerms: true,
         acceptedPrivacy: true,
     };
@@ -241,74 +238,14 @@ describe("joinStudy()", () => {
         expect(setDoc).toHaveBeenCalledTimes(1);
 
         expect(result).toMatchObject({
-            riderName: "Juan Dela Cruz",
-            phoneNumber: "09171234567",
-            deliveryPlatform: "Grab",
-            vehicleType: "Motorcycle",
             userId: "user123",
             email: "user@test.com",
+            eventId: "devia-route-study",
             status: "joined",
         });
     });
 
-    test("trims whitespace before saving", async () => {
-        await joinStudy({
-            ...validData,
-            riderName: "  Juan  ",
-            phoneNumber: "0917 123-4567",
-            deliveryPlatform: " Grab ",
-            vehicleType: " Motorcycle ",
-        });
 
-        expect(setDoc).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                riderName: "Juan",
-                phoneNumber: "09171234567",
-                deliveryPlatform: "Grab",
-                vehicleType: "Motorcycle",
-            }),
-            { merge: true }
-        );
-    });
-
-    test("throws when rider name is blank", async () => {
-        await expect(
-            joinStudy({
-                ...validData,
-                riderName: "",
-            })
-        ).rejects.toThrow("Rider name is required.");
-    });
-
-    test("throws when phone number is invalid", async () => {
-        await expect(
-            joinStudy({
-                ...validData,
-                phoneNumber: "08123456789",
-            })
-        ).rejects.toThrow(
-            "Use a valid Philippine mobile number starting with 09."
-        );
-    });
-
-    test("throws when delivery platform is blank", async () => {
-        await expect(
-            joinStudy({
-                ...validData,
-                deliveryPlatform: "",
-            })
-        ).rejects.toThrow("Delivery platform is required.");
-    });
-
-    test("throws when vehicle type is blank", async () => {
-        await expect(
-            joinStudy({
-                ...validData,
-                vehicleType: "",
-            })
-        ).rejects.toThrow("Vehicle type is required.");
-    });
 
     test("throws when terms are not accepted", async () => {
         await expect(
@@ -369,39 +306,17 @@ describe("enrollInStudy()", () => {
         expect(setDoc).toHaveBeenCalledTimes(1);
 
         expect(result).toMatchObject({
-            riderName: "Juan Dela Cruz",
-            phoneNumber: "09171234567",
+            userId: "user123",
+            email: "user@test.com",
             acceptedDataUsage: true,
             acceptedPrivacy: true,
             acceptedTerms: true,
+            eventId: "devia-route-study",
             status: "joined",
         });
     });
 
-    test("uses username when fullName is unavailable", async () => {
-        (getDoc as jest.Mock).mockResolvedValue({
-            exists: () => true,
-            data: () => ({
-                username: "Juan123",
-                phone: "09171234567",
-            }),
-        });
 
-        const result = await enrollInStudy(validConsent);
-
-        expect(result.riderName).toBe("Juan123");
-    });
-
-    test("uses empty values when profile does not exist", async () => {
-        (getDoc as jest.Mock).mockResolvedValue({
-            exists: () => false,
-        });
-
-        const result = await enrollInStudy(validConsent);
-
-        expect(result.riderName).toBe("");
-        expect(result.phoneNumber).toBe("");
-    });
 
     test("throws when privacy policy is not accepted", async () => {
         await expect(
