@@ -1,16 +1,26 @@
-import { formatDistance, formatEta, geocode, getRoute, LngLat, RouteResult } from '@/lib/utils/directions';
+import HeaderBackButton from '@/components/common/HeaderBackButton';
+import { useRideStore } from '@/lib/store/useRideStore';
+import { formatDistance, formatEta, getRoute, LngLat, RouteCongestionLevel, RouteResult } from '@/lib/utils/directions';
+import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
+import { isOnline, useIsOnline } from '@/lib/utils/network';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
-import { Button, Icon, IconButton, MD3Theme, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, MD3Theme, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-Mapbox.setAccessToken('pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA');
+configureMapboxAccessToken(Mapbox);
 
-const TEAL = '#0E6E73';
+const TRAFFIC_RED = '#DC2626';
+const TRAFFIC_DARK_RED = '#991B1B';
+const TRAFFIC_ORANGE = '#F59E0B';
+// Generated/upcoming route = blue (no travelled portion exists yet during preview).
+const ROUTE_BLUE = '#2563EB';
+const TRAFFIC_TILESET_URL = 'mapbox://mapbox.mapbox-traffic-v1';
+const TRAFFIC_SOURCE_LAYER = 'traffic';
 
 export default function RoutePreview() {
     const theme = useTheme();
@@ -18,13 +28,15 @@ export default function RoutePreview() {
     const styles = getStyles(theme);
     const mapStyle = colorScheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
 
-    const { destination } = useLocalSearchParams<{ destination?: string }>();
+    const { destination, destLng, destLat } = useLocalSearchParams<{ destination?: string; destLng?: string; destLat?: string }>();
 
     const [from, setFrom] = useState<LngLat | null>(null);
     const [to, setTo] = useState<LngLat | null>(null);
     const [route, setRoute] = useState<RouteResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const online = useIsOnline();
+    const setActiveRoute = useRideStore(state => state.setActiveRoute);
 
     useEffect(() => {
         let active = true;
@@ -40,23 +52,42 @@ export default function RoutePreview() {
                 if (!active) return;
                 setFrom(origin);
 
-                const dest = await geocode(destination ?? '', origin);
+                let dest: LngLat | null = null;
+                if (destLng && destLat) {
+                    const parsedDest: LngLat = [parseFloat(destLng), parseFloat(destLat)];
+                    dest = parsedDest.every(Number.isFinite) ? parsedDest : null;
+                }
                 if (!active) return;
                 if (!dest) {
-                    setError(`Couldn't find "${destination}". Try a more specific place.`);
+                    setError('Select a destination from search results before generating a route.');
                     return;
                 }
                 setTo(dest);
 
-                const r = await getRoute(origin, dest);
-                if (!active) return;
-                if (!r) {
-                    setError("Couldn't generate a route to that destination.");
+                if (!(await isOnline())) {
+                    if (active) setError('You appear to be offline. Connect to the internet to generate a route.');
                     return;
                 }
+
+                let r = await getRoute(origin, dest);
+                if (!active) return;
+                if (!r) {
+                    r = await getRoute(origin, dest);
+                    if (!r) {
+                        setError("Couldn't generate a route. Check your internet connection and try again.");
+                        return;
+                    }
+                }
                 setRoute(r);
-            } catch {
-                if (active) setError('Something went wrong generating the route.');
+            } catch (error) {
+                if (active) {
+                    const errorMessage = error instanceof Error ? error.message : 'Something went wrong generating the route.';
+                    if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+                        setError('Network error. Please check your internet connection.');
+                    } else {
+                        setError('Something went wrong generating the route.');
+                    }
+                }
             } finally {
                 if (active) setLoading(false);
             }
@@ -64,7 +95,7 @@ export default function RoutePreview() {
         return () => {
             active = false;
         };
-    }, [destination]);
+    }, [destination, destLng, destLat]);
 
     const lineShape = useMemo(
         () =>
@@ -73,6 +104,21 @@ export default function RoutePreview() {
                 : null,
         [route]
     );
+
+    const congestionShape = useMemo(() => {
+        const segments =
+            route?.congestionSegments.filter(segment => segment.congestion === 'moderate' || segment.congestion === 'heavy' || segment.congestion === 'severe') ??
+            [];
+        if (segments.length === 0) return null;
+        return {
+            type: 'FeatureCollection' as const,
+            features: segments.map(segment => ({
+                type: 'Feature' as const,
+                properties: { congestion: segment.congestion satisfies RouteCongestionLevel },
+                geometry: { type: 'LineString' as const, coordinates: segment.coordinates },
+            })),
+        };
+    }, [route]);
 
     const bounds = useMemo(() => {
         if (!route || route.coordinates.length === 0) return null;
@@ -87,10 +133,17 @@ export default function RoutePreview() {
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
             <View style={styles.header}>
-                <IconButton icon="chevron-left" size={sizes.size32} onPress={() => router.back()} />
+                <HeaderBackButton onPress={() => router.back()} />
                 <Text style={styles.headerTitle}>Route Preview</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>
+
+            {!online && (
+                <View style={styles.offlineBanner}>
+                    <Icon source="wifi-off" size={sizes.medium} color={theme.colors.onErrorContainer} />
+                    <Text style={styles.offlineBannerText}>You&apos;re offline — map and routing need a connection.</Text>
+                </View>
+            )}
 
             <View style={styles.mapWrap}>
                 <Mapbox.MapView style={StyleSheet.absoluteFill} styleURL={mapStyle} logoEnabled={false} attributionEnabled={false}>
@@ -99,26 +152,66 @@ export default function RoutePreview() {
                         followUserLocation={!route}
                         followZoomLevel={14}
                     />
-                    <Mapbox.LocationPuck />
+                    <Mapbox.VectorSource id="mapboxTrafficTiles" url={TRAFFIC_TILESET_URL}>
+                        <Mapbox.LineLayer
+                            id="mapboxTrafficModerate"
+                            sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                            filter={['==', ['get', 'congestion'], 'moderate']}
+                            style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 2.5, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                        <Mapbox.LineLayer
+                            id="mapboxTrafficHeavy"
+                            sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                            filter={['==', ['get', 'congestion'], 'heavy']}
+                            style={{ lineColor: TRAFFIC_RED, lineWidth: 3, lineOpacity: 0.65, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                        <Mapbox.LineLayer
+                            id="mapboxTrafficSevere"
+                            sourceLayerID={TRAFFIC_SOURCE_LAYER}
+                            filter={['==', ['get', 'congestion'], 'severe']}
+                            style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 3.5, lineOpacity: 0.75, lineCap: 'round', lineJoin: 'round' }}
+                        />
+                    </Mapbox.VectorSource>
                     {lineShape && (
                         <Mapbox.ShapeSource id="routeSource" shape={lineShape}>
                             <Mapbox.LineLayer
                                 id="routeLine"
-                                style={{ lineColor: TEAL, lineWidth: 5, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: ROUTE_BLUE, lineWidth: 8, lineOpacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                        </Mapbox.ShapeSource>
+                    )}
+                    {congestionShape && (
+                        <Mapbox.ShapeSource id="trafficRouteSource" shape={congestionShape}>
+                            <Mapbox.LineLayer
+                                id="moderateTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'moderate']}
+                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                            <Mapbox.LineLayer
+                                id="heavyTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'heavy']}
+                                style={{ lineColor: TRAFFIC_RED, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                            />
+                            <Mapbox.LineLayer
+                                id="severeTrafficRouteLine"
+                                filter={['==', ['get', 'congestion'], 'severe']}
+                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 5.5, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
                             />
                         </Mapbox.ShapeSource>
                     )}
                     {to && (
                         <Mapbox.PointAnnotation id="dest" coordinate={to}>
-                            <Icon source="map-marker" size={sizes.size32} color="#DC2626" />
+                            <View style={styles.destinationMarker}>
+                                <Icon source="map-marker" size={sizes.size32} color={theme.colors.primary} />
+                            </View>
                         </Mapbox.PointAnnotation>
                     )}
                 </Mapbox.MapView>
 
                 {loading && (
                     <View style={styles.mapOverlay}>
-                        <ActivityIndicator color={TEAL} />
-                        <Text style={styles.overlayText}>Generating shortest route…</Text>
+                        <ActivityIndicator color={theme.colors.primary} />
+                        <Text style={styles.overlayText}>Generating recommended rider route…</Text>
                     </View>
                 )}
                 {!loading && error !== '' && (
@@ -144,18 +237,30 @@ export default function RoutePreview() {
 
                 <Button
                     mode="contained"
-                    buttonColor={TEAL}
-                    textColor="#ffffff"
+                    buttonColor={theme.colors.primary}
+                    textColor={theme.colors.onPrimary}
                     style={styles.button}
                     contentStyle={styles.buttonContent}
                     labelStyle={styles.buttonLabel}
                     disabled={!route}
-                    onPress={() =>
+                    onPress={() => {
+                        if (route && to) {
+                            setActiveRoute(route, to);
+                        }
                         router.push({
                             pathname: '/main/(tabs)/record',
-                            params: from && to ? { destination: destination ?? '', etaSec: String(route?.durationSec ?? 0) } : {},
-                        })
-                    }
+                            params:
+                                from && to && route
+                                    ? {
+                                          destination: destination ?? '',
+                                          etaSec: String(route.durationSec),
+                                          routeDistanceM: String(route.distanceM),
+                                          destLng: String(to[0]),
+                                          destLat: String(to[1]),
+                                      }
+                                    : {},
+                        });
+                    }}
                 >
                     Start Trip
                 </Button>
@@ -168,6 +273,16 @@ const getStyles = (theme: MD3Theme) =>
     StyleSheet.create({
         safe: { flex: 1, backgroundColor: theme.colors.background },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: sizes.small },
+        offlineBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: sizes.tiny,
+            backgroundColor: theme.colors.errorContainer,
+            paddingVertical: sizes.tiny,
+            paddingHorizontal: sizes.small,
+        },
+        offlineBannerText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onErrorContainer },
         headerTitle: { flex: 1, textAlign: 'center', fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.regular, color: theme.colors.onBackground },
         mapWrap: { flex: 1, overflow: 'hidden' },
         mapOverlay: {
@@ -197,4 +312,10 @@ const getStyles = (theme: MD3Theme) =>
         button: { borderRadius: sizes.small },
         buttonContent: { height: sizes.size56 },
         buttonLabel: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small },
+        destinationMarker: {
+            width: sizes.size48,
+            height: sizes.size48,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
     });

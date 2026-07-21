@@ -192,7 +192,7 @@ describe("getRide()", () => {
                 "user123",
                 "ride123"
             )
-        ).rejects.toThrow("Ride not found");
+        ).rejects.toThrow("Trip not found");
     });
 
     test("rethrows firestore errors", async () => {

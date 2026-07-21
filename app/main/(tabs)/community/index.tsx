@@ -1,7 +1,9 @@
-import ActiveStudyCard from '@/components/studies/ActiveStudyCard';
-import { MOCK_ACTIVE_STUDIES, MOCK_AVAILABLE_STUDIES } from '@/lib/mock/studies';
+import { getJoinedDeviaRouteStudy } from '@/lib/studies';
+import { useRidesStore } from '@/lib/store/useRidesStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
+import { useCallback, useMemo } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, MD3Theme, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
@@ -14,11 +16,21 @@ const QUICK_LINKS = [
 export default function Studies() {
     const theme = useTheme();
     const styles = getStyles(theme);
+    const { rides, totalRideCount, fetchRides } = useRidesStore();
+    const recordedTrips = Math.max(totalRideCount, rides.length);
+    const joinedStudies = useMemo(() => [getJoinedDeviaRouteStudy(recordedTrips)], [recordedTrips]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchRides(true);
+        }, [fetchRides])
+    );
 
     const openStudy = (study: {
         id: string;
         name: string;
         joined: boolean;
+        tripsRecorded?: number;
         tripsDone?: number;
         tripsRequired?: number;
         reward?: number;
@@ -30,8 +42,8 @@ export default function Studies() {
                 id: study.id,
                 name: study.name,
                 joined: study.joined ? '1' : '0',
-                tripsDone: String(study.tripsDone ?? 0),
-                tripsRequired: String(study.tripsRequired ?? 10),
+                tripsDone: String(study.tripsRecorded ?? study.tripsDone ?? 0),
+                tripsRequired: String(study.tripsRequired ?? 5),
                 reward: String(study.reward ?? 250),
                 dates: study.dates ?? '',
             },
@@ -48,12 +60,12 @@ export default function Studies() {
 
                 {/* Available studies */}
                 <Text style={styles.sectionLabel}>AVAILABLE STUDIES</Text>
-                {MOCK_AVAILABLE_STUDIES.map(study => (
+                {joinedStudies.map(study => (
                     <TouchableRipple
                         key={study.id}
                         style={styles.availCard}
                         borderless
-                        onPress={() => openStudy({ ...study, joined: false })}
+                        onPress={() => openStudy(study)}
                     >
                         <View>
                             <View style={styles.cardTopRow}>
@@ -61,8 +73,8 @@ export default function Studies() {
                                     <Text style={styles.availName}>{study.name}</Text>
                                     <Text style={styles.availOrg}>{study.org}</Text>
                                 </View>
-                                <View style={[styles.badge, styles.badgeNotJoined]}>
-                                    <Text style={[styles.badgeText, styles.badgeTextNotJoined]}>Not Joined</Text>
+                                <View style={[styles.badge, styles.badgeJoined]}>
+                                    <Text style={[styles.badgeText, styles.badgeTextJoined]}>Joined</Text>
                                 </View>
                             </View>
 
@@ -75,11 +87,9 @@ export default function Studies() {
                                 </View>
                                 <View style={styles.metaItem}>
                                     <Icon source="map-marker-path" size={sizes.medium} color={theme.colors.primary} />
-                                    <Text style={styles.metaText}>{study.tripsRequired} trips</Text>
-                                </View>
-                                <View style={styles.metaItem}>
-                                    <Icon source="account-group-outline" size={sizes.medium} color={theme.colors.primary} />
-                                    <Text style={styles.metaText}>{study.slotsLeft} slots left</Text>
+                                    <Text style={styles.metaText}>
+                                        {study.creditedTrips} / {study.tripsRequired} credited
+                                    </Text>
                                 </View>
                                 <View style={styles.metaItem}>
                                     <Icon source="calendar-range" size={sizes.medium} color={theme.colors.primary} />
@@ -87,25 +97,18 @@ export default function Studies() {
                                 </View>
                             </View>
 
+                            <View style={styles.progressMeta}>
+                                <Text style={styles.progressMetaText}>{study.tripsRecorded} trips recorded</Text>
+                                <Text style={styles.progressMetaText}>{study.overLimitTrips} over limit</Text>
+                            </View>
+
                             <View style={styles.viewCta}>
-                                <Text style={styles.viewCtaText}>View details & join</Text>
+                                <Text style={styles.viewCtaText}>View details</Text>
                                 <Icon source="chevron-right" size={sizes.size28} color={theme.colors.primary} />
                             </View>
                         </View>
                     </TouchableRipple>
                 ))}
-
-                {/* Active studies */}
-                <Text style={styles.sectionLabel}>ACTIVE STUDY</Text>
-                {MOCK_ACTIVE_STUDIES.length === 0 ? (
-                    <View style={styles.card}>
-                        <Text style={styles.emptyText}>You haven&apos;t joined a study yet.</Text>
-                    </View>
-                ) : (
-                    MOCK_ACTIVE_STUDIES.map(study => (
-                        <ActiveStudyCard key={study.id} study={study} onPress={() => openStudy({ ...study, joined: true })} />
-                    ))
-                )}
 
                 {/* Quick links */}
                 <View style={styles.linksCard}>
@@ -203,6 +206,17 @@ const getStyles = (theme: MD3Theme) =>
             fontFamily: 'LGEIText-SemiBold',
             fontSize: fontSizes.tiny,
             color: theme.colors.onSurface,
+        },
+        progressMeta: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            gap: sizes.small,
+            marginTop: sizes.tiny,
+        },
+        progressMetaText: {
+            fontFamily: 'LGEIText-Regular',
+            fontSize: fontSizes.tiny,
+            color: theme.colors.onSurfaceVariant,
         },
         viewCta: {
             flexDirection: 'row',

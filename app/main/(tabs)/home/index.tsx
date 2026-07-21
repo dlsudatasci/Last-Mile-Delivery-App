@@ -1,30 +1,15 @@
-import StudyOverviewModal from '@/components/onboarding/StudyOverviewModal';
 import ActiveStudyCard from '@/components/studies/ActiveStudyCard';
-import { MOCK_ACTIVE_STUDIES } from '@/lib/mock/studies';
+import { getJoinedDeviaRouteStudy } from '@/lib/studies';
+import { useRidesStore } from '@/lib/store/useRidesStore';
+import { formatRideRouteTitle } from '@/lib/trip-record-display';
+import { useIsOnline } from '@/lib/utils/network';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, MD3Theme, Text, useTheme } from 'react-native-paper';
-
-// TODO: replace with real data. Mock values so the dashboard previews fully.
-const MOCK_STATS = {
-    weeklyTrips: 26,
-    weeklyDistanceKm: 142,
-    weeklyTime: '4h 10m',
-    totalTrips: 96,
-    totalDistanceKm: 1245,
-    totalTime: '38h 20m',
-    deviationsFound: 23,
-};
-
-const MOCK_RECENT_TRIP = {
-    date: 'June 13, 2025',
-    name: 'Makati → BGC',
-    status: 'Approved',
-};
+import { Icon, MD3Theme, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 const greetingForNow = () => {
     const hour = new Date().getHours();
@@ -33,33 +18,62 @@ const greetingForNow = () => {
     return 'Good evening';
 };
 
+const startOfWeekMs = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = now.getDate() - day;
+    const start = new Date(now);
+    start.setDate(diff);
+    start.setHours(0, 0, 0, 0);
+    return start.getTime();
+};
+
+const formatDuration = (seconds: number) => {
+    const safeSeconds = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+};
+
+const rideTimestamp = (ride: { createdAt?: number; endTime?: number; startTime: number }) =>
+    ride.createdAt || ride.endTime || ride.startTime;
+
 export default function Home() {
     const theme = useTheme();
     const styles = getStyles(theme);
 
     const { user } = useUser();
-    const { pendingStudyOffer, setPendingStudyOffer } = useOnboarding();
+    const { rides, totalRideCount, isRefreshing, fetchRides } = useRidesStore();
+    const online = useIsOnline();
 
-    const [studyOfferVisible, setStudyOfferVisible] = useState(false);
-
-    // Show the Join Study offer once, right after the user finishes onboarding.
-    useEffect(() => {
-        if (pendingStudyOffer) {
-            setStudyOfferVisible(true);
-            setPendingStudyOffer(false);
-        }
-    }, [pendingStudyOffer, setPendingStudyOffer]);
-
-    const handleJoinStudyOffer = () => {
-        setStudyOfferVisible(false);
-        router.push('/study-consent');
-    };
+    useFocusEffect(
+        useCallback(() => {
+            fetchRides(true);
+        }, [fetchRides])
+    );
 
     // --- Derived display values ----------------------------------------------
     const firstName = (user?.fullName || user?.username || 'there').split(' ')[0];
-    // Mock for now — swap these for the user's real studies/trip data later.
-    const activeStudies = MOCK_ACTIVE_STUDIES;
-    const recentTrip = MOCK_RECENT_TRIP;
+    const stats = useMemo(() => {
+        const weekStart = startOfWeekMs();
+        const weeklyRides = rides.filter(ride => rideTimestamp(ride) >= weekStart);
+        const totalDistanceKm = rides.reduce((sum, ride) => sum + ride.distance / 1000, 0);
+        const totalDurationSec = rides.reduce((sum, ride) => sum + ride.duration, 0);
+        const weeklyDistanceKm = weeklyRides.reduce((sum, ride) => sum + ride.distance / 1000, 0);
+        const weeklyDurationSec = weeklyRides.reduce((sum, ride) => sum + ride.duration, 0);
+        const recordedTrips = Math.max(totalRideCount, rides.length);
+        return {
+            weeklyTrips: weeklyRides.length,
+            weeklyDistanceKm,
+            weeklyTime: formatDuration(weeklyDurationSec),
+            totalTrips: recordedTrips,
+            totalDistanceKm,
+            totalTime: formatDuration(totalDurationSec),
+            recentTrips: rides.slice(0, 3),
+        };
+    }, [rides, totalRideCount]);
+    const activeStudy = getJoinedDeviaRouteStudy(stats.totalTrips);
 
     return (
         <View style={styles.safe}>
@@ -68,112 +82,108 @@ export default function Home() {
                     {greetingForNow()}, {firstName}!
                 </Text>
 
+                {!online && (
+                    <View style={styles.offlineBanner}>
+                        <Icon source="wifi-off" size={sizes.medium} color={theme.colors.onErrorContainer} />
+                        <Text style={styles.offlineBannerText}>You&apos;re offline. Showing your last saved trips.</Text>
+                    </View>
+                )}
+
                 {/* Overview */}
                 <Text style={styles.sectionLabel}>OVERVIEW</Text>
-                {activeStudies.length === 0 ? (
-                    <View style={styles.card}>
-                        <View style={styles.overviewRow}>
-                            <View style={styles.overviewIcon}>
-                                <Icon source="book-open-variant" size={sizes.size32} color={theme.colors.primary} />
-                            </View>
-                            <View style={styles.overviewStat}>
-                                <Text style={styles.joinTitle}>No study joined yet</Text>
-                                <Text style={styles.overviewStatHint}>Your trips are still recorded. Join a study to contribute them to research and earn rewards.</Text>
-                            </View>
-                        </View>
-                        <Button
-                            mode="contained"
-                            buttonColor={theme.colors.primary}
-                            textColor="#ffffff"
-                            style={styles.joinButton}
-                            labelStyle={styles.joinButtonLabel}
-                            onPress={() => router.push('/main/(tabs)/community')}
-                        >
-                            Browse Studies
-                        </Button>
-                    </View>
-                ) : (
-                    activeStudies.map(study => (
-                        <ActiveStudyCard
-                            key={study.id}
-                            study={study}
-                            onPress={() =>
-                                router.push({
-                                    pathname: '/main/(tabs)/community/study-details',
-                                    params: {
-                                        id: study.id,
-                                        name: study.name,
-                                        joined: '1',
-                                        tripsDone: String(study.tripsDone),
-                                        tripsRequired: String(study.tripsRequired),
-                                        reward: '250',
-                                        dates: '',
-                                    },
-                                })
-                            }
-                        />
-                    ))
-                )}
+                <ActiveStudyCard
+                    study={activeStudy}
+                    onPress={() =>
+                        router.push({
+                            pathname: '/main/(tabs)/community/study-details',
+                            params: {
+                                id: activeStudy.id,
+                                name: activeStudy.name,
+                                joined: '1',
+                                tripsDone: String(activeStudy.tripsRecorded),
+                                tripsRequired: String(activeStudy.tripsRequired),
+                                reward: String(activeStudy.reward),
+                                dates: activeStudy.dates,
+                            },
+                        })
+                    }
+                />
 
                 {/* This week */}
                 <Text style={styles.sectionLabel}>THIS WEEK</Text>
                 <View style={styles.statRow}>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>Trips Recorded</Text>
-                        <Text style={styles.statValue}>{MOCK_STATS.weeklyTrips}</Text>
+                        <Text style={styles.statValue}>{stats.weeklyTrips}</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>Distance Traveled</Text>
-                        <Text style={styles.statValue}>{MOCK_STATS.weeklyDistanceKm} km</Text>
+                        <Text style={styles.statValue}>{stats.weeklyDistanceKm.toFixed(1)} km</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>Time Spent</Text>
-                        <Text style={styles.statValue}>{MOCK_STATS.weeklyTime}</Text>
+                        <Text style={styles.statValue}>{stats.weeklyTime}</Text>
                     </View>
                 </View>
 
                 {/* Recent trip */}
                 <Text style={styles.sectionLabel}>RECENT TRIP</Text>
-                <View style={styles.card}>
-                    <View style={styles.recentRow}>
-                        <View style={styles.flex}>
-                            <Text style={styles.recentDate}>{recentTrip.date}</Text>
-                            <Text style={styles.recentTitle} numberOfLines={1}>
-                                {recentTrip.name}
-                            </Text>
-                        </View>
-                        <View style={styles.statusBadge}>
-                            <Text style={styles.statusText}>{recentTrip.status}</Text>
-                        </View>
+                {stats.recentTrips.length === 0 ? (
+                    <View style={styles.card}>
+                        <Text style={styles.emptyText}>{isRefreshing ? 'Refreshing trips...' : 'No trips recorded yet.'}</Text>
                     </View>
-                </View>
+                ) : (
+                    stats.recentTrips.map(ride => {
+                        const date = new Date(rideTimestamp(ride));
+                        return (
+                            <TouchableRipple
+                                key={ride.id}
+                                style={styles.recentTripCard}
+                                borderless
+                                onPress={() =>
+                                    router.push({
+                                        pathname: '/main/(tabs)/map/trip-record' as never,
+                                        params: { id: ride.id },
+                                    })
+                                }
+                            >
+                                <View style={styles.recentTripRow}>
+                                    <View style={styles.recentTripIcon}>
+                                        <Icon source="map-marker-path" size={sizes.medium} color={theme.colors.primary} />
+                                    </View>
+                                    <View style={styles.flex}>
+                                        <Text style={styles.recentTripTitle}>{formatRideRouteTitle(ride)}</Text>
+                                        <Text style={styles.recentTripMeta}>
+                                            {date.toLocaleDateString()} · {(ride.distance / 1000).toFixed(2)} km · {formatDuration(ride.duration)}
+                                        </Text>
+                                    </View>
+                                    <Icon source="chevron-right" size={sizes.size28} color={theme.colors.onSurfaceVariant} />
+                                </View>
+                            </TouchableRipple>
+                        );
+                    })
+                )}
 
                 {/* Quick summary */}
                 <Text style={styles.sectionLabel}>QUICK SUMMARY (All Time)</Text>
                 <View style={styles.card}>
-                    <SummaryRow icon="map-marker-path" label="Total Trips" value={String(MOCK_STATS.totalTrips)} theme={theme} />
+                    <SummaryRow icon="map-marker-path" label="Total Trips" value={String(stats.totalTrips)} theme={theme} />
+                    <SummaryRow
+                        icon="check-decagram"
+                        label="Credited Study Trips"
+                        value={`${activeStudy.creditedTrips} / ${activeStudy.tripsRequired}`}
+                        theme={theme}
+                    />
                     <SummaryRow
                         icon="map-marker-distance"
                         label="Total Distance"
-                        value={`${MOCK_STATS.totalDistanceKm.toLocaleString()} km`}
+                        value={`${stats.totalDistanceKm.toFixed(1)} km`}
                         theme={theme}
                     />
-                    <SummaryRow icon="clock-outline" label="Total Time" value={MOCK_STATS.totalTime} theme={theme} />
-                    <SummaryRow
-                        icon="alert-circle-outline"
-                        label="Deviations Found"
-                        value={String(MOCK_STATS.deviationsFound)}
-                        theme={theme}
-                        last
-                    />
+                    <SummaryRow icon="clock-outline" label="Total Time" value={stats.totalTime} theme={theme} last />
                 </View>
             </ScrollView>
 
-            <StudyOverviewModal
-                visible={studyOfferVisible}
-                onJoin={handleJoinStudyOffer}
-                onClose={() => setStudyOfferVisible(false)}
-            />
         </View>
     );
 }
@@ -213,6 +223,45 @@ const getStyles = (theme: MD3Theme) =>
             fontFamily: 'LGEIHeadline-Bold',
             fontSize: fontSizes.regular,
             color: theme.colors.onBackground,
+        },
+        offlineBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: sizes.tiny,
+            backgroundColor: theme.colors.errorContainer,
+            borderRadius: sizes.small,
+            paddingVertical: sizes.small,
+            paddingHorizontal: sizes.medium,
+            marginTop: sizes.medium,
+        },
+        offlineBannerText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onErrorContainer },
+        recentTripCard: {
+            backgroundColor: theme.colors.surface,
+            borderRadius: sizes.medium,
+            padding: sizes.medium,
+            borderWidth: 1,
+            borderColor: theme.colors.outlineVariant ?? '#E2E8F0',
+            marginBottom: sizes.small,
+        },
+        recentTripRow: { flexDirection: 'row', alignItems: 'center', gap: sizes.medium },
+        recentTripIcon: {
+            width: sizes.size48,
+            height: sizes.size48,
+            borderRadius: sizes.size48 / 2,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.colors.primaryContainer,
+        },
+        recentTripTitle: {
+            fontFamily: 'LGEIHeadline-Bold',
+            fontSize: fontSizes.small,
+            color: theme.colors.onSurface,
+        },
+        recentTripMeta: {
+            fontFamily: 'LGEIText-Regular',
+            fontSize: fontSizes.tiny,
+            color: theme.colors.onSurfaceVariant,
+            marginTop: 2,
         },
         greetingSub: {
             fontFamily: 'LGEIText-Regular',
@@ -304,29 +353,6 @@ const getStyles = (theme: MD3Theme) =>
             fontSize: fontSizes.regular,
             color: theme.colors.onSurface,
             marginTop: sizes.tiny,
-        },
-        recentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        recentDate: {
-            fontFamily: 'LGEIText-Regular',
-            fontSize: fontSizes.tiny,
-            color: theme.colors.onSurfaceVariant,
-        },
-        recentTitle: {
-            fontFamily: 'LGEIText-SemiBold',
-            fontSize: fontSizes.small,
-            color: theme.colors.onSurface,
-            marginTop: 2,
-        },
-        statusBadge: {
-            backgroundColor: '#DCFCE7',
-            paddingHorizontal: sizes.regular,
-            paddingVertical: sizes.tiny,
-            borderRadius: sizes.size32,
-        },
-        statusText: {
-            fontFamily: 'LGEIText-SemiBold',
-            fontSize: fontSizes.tiny,
-            color: '#16A34A',
         },
         emptyText: {
             fontFamily: 'LGEIText-Regular',

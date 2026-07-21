@@ -1,14 +1,13 @@
-import { ActiveStudy } from '@/lib/mock/studies';
+import { JoinedStudy } from '@/lib/studies';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { StyleSheet, View } from 'react-native';
 import { MD3Theme, ProgressBar, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 // Shared card for an in-progress (joined) study. Used on both Home and Studies
 // so the two screens always show the same design and layout.
-export default function ActiveStudyCard({ study, onPress }: { study: ActiveStudy; onPress?: () => void }) {
+export default function ActiveStudyCard({ study, onPress }: { study: JoinedStudy; onPress?: () => void }) {
     const theme = useTheme();
     const styles = getStyles(theme);
-    const progress = study.tripsRequired ? study.tripsDone / study.tripsRequired : 0;
 
     return (
         <TouchableRipple style={styles.card} borderless onPress={onPress} disabled={!onPress}>
@@ -24,11 +23,15 @@ export default function ActiveStudyCard({ study, onPress }: { study: ActiveStudy
                 <Text style={styles.progressLabel}>Progress</Text>
                 <View style={styles.progressRow}>
                     <Text style={styles.progressValue}>
-                        {study.tripsDone} / {study.tripsRequired} Trips
+                        {study.creditedTrips} / {study.tripsRequired} credited trips
                     </Text>
-                    <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
+                    <Text style={styles.progressPercent}>{Math.round(study.progress * 100)}%</Text>
                 </View>
-                <ProgressBar progress={progress} color={theme.colors.primary} style={styles.progressBar} />
+                <ProgressBar progress={study.progress} color={theme.colors.primary} style={styles.progressBar} />
+                <View style={styles.statsRow}>
+                    <Text style={styles.statText}>{study.tripsRecorded} recorded</Text>
+                    <Text style={styles.statText}>{study.overLimitTrips} over limit</Text>
+                </View>
             </View>
         </TouchableRipple>
     );
@@ -69,4 +72,6 @@ const getStyles = (theme: MD3Theme) =>
         progressValue: { fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.regular, color: theme.colors.onSurface },
         progressPercent: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small, color: theme.colors.primary },
         progressBar: { marginTop: sizes.small, height: sizes.small, borderRadius: sizes.small },
+        statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: sizes.small },
+        statText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onSurfaceVariant },
     });

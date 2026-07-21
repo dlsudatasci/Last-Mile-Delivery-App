@@ -60,5 +60,21 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    match /postTripQuestionnaire_response/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /deviationResponses/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /deviations/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /generatedRoutes/{docId} {
+      allow read, write: if isSignedIn();
+    }
   }
 }
