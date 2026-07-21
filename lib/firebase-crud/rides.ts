@@ -122,7 +122,11 @@ export const getRides = async (
             };
         });
     } catch (error) {
-        console.error('Error fetching rides:', error);
+        if (isTransientFirestoreError(error)) {
+            console.warn('Fetching rides: offline or unavailable.');
+        } else {
+            console.error('Error fetching rides:', error);
+        }
         throw error;
     }
 };
@@ -281,10 +285,27 @@ export const updateRideName = async (userId: string, rideId: string, newName: st
     }
 };
 
+/**
+ * True when a Firestore error represents a transient/offline condition rather than
+ * a real bug. These are expected on flaky mobile networks and should not be logged
+ * as errors or surfaced to the rider as failures.
+ */
+const isTransientFirestoreError = (error: unknown): boolean => {
+    if (!(error instanceof Error)) return false;
+    const message = error.message.toLowerCase();
+    return (
+        message.includes('unavailable') ||
+        message.includes('failed to get document') ||
+        message.includes('network') ||
+        message.includes('deadline') ||
+        message.includes('offline')
+    );
+};
+
 const retryWithBackoff = async <T,>(
     fn: () => Promise<T>,
     maxRetries: number = 3,
-    initialDelayMs: number = 1000
+    initialDelayMs: number = 800
 ): Promise<T> => {
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -292,10 +313,7 @@ const retryWithBackoff = async <T,>(
             return await fn();
         } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
-            const isRetryable =
-                (error instanceof Error && (error.message.includes('unavailable') || error.message.includes('UNAVAILABLE'))) ||
-                (error instanceof Error && error.message.includes('Failed to get document'));
-            if (!isRetryable || attempt === maxRetries - 1) {
+            if (!isTransientFirestoreError(error) || attempt === maxRetries - 1) {
                 throw error;
             }
             const delayMs = initialDelayMs * Math.pow(2, attempt);
@@ -305,106 +323,138 @@ const retryWithBackoff = async <T,>(
     throw lastError || new Error('Retry failed');
 };
 
-export const getTotalRideCount = async (userId: string): Promise<number> => {
+/**
+ * Server-only aggregation queries (getCountFromServer / getAggregateFromServer)
+ * cannot read from the offline cache and fail hard when the device is offline.
+ * This runs a server aggregation first (with retry for transient blips) and, if
+ * that fails for an offline/transient reason, falls back to reading the matching
+ * documents — which DO serve from cache — and computing the value locally.
+ */
+const withCacheFallback = async <T,>(
+    serverFn: () => Promise<T>,
+    cacheFn: () => Promise<T>,
+    label: string
+): Promise<T> => {
     try {
-        return await retryWithBackoff(async () => {
-            const ridesCollectionRef = collection(firestore, 'rides');
-            const q = query(ridesCollectionRef, where('userId', '==', userId));
-            const count = await getCountFromServer(q);
-            return count.data().count;
-        });
+        return await retryWithBackoff(serverFn);
     } catch (error) {
-        console.error('Error fetching total rides:', error);
+        if (isTransientFirestoreError(error)) {
+            try {
+                const cached = await cacheFn();
+                console.warn(`${label}: server unavailable, served from cache.`);
+                return cached;
+            } catch (cacheError) {
+                console.warn(`${label}: offline and no cached data available.`);
+                throw cacheError;
+            }
+        }
         throw error;
     }
+};
+
+export const getTotalRideCount = async (userId: string): Promise<number> => {
+    const ridesCollectionRef = collection(firestore, 'rides');
+    const q = query(ridesCollectionRef, where('userId', '==', userId));
+    return withCacheFallback(
+        async () => (await getCountFromServer(q)).data().count,
+        async () => (await getDocs(q)).size,
+        'Total ride count'
+    );
 };
 
 export const getWeeklyRideCount = async (userId: string) => {
-    try {
-        return await retryWithBackoff(async () => {
-            const ridesCollectionRef = collection(firestore, 'rides');
-            const q = query(
-                ridesCollectionRef,
-                where('userId', '==', userId),
-                where('createdAt', '>=', startOfWeek(new Date()).getTime()),
-                where('createdAt', '<=', new Date().getTime())
-            );
-            const count = await getCountFromServer(q);
-            return count.data().count;
-        });
-    } catch (error) {
-        console.error('Error fetching weekly rides:', error);
-        throw error;
-    }
+    const ridesCollectionRef = collection(firestore, 'rides');
+    const q = query(
+        ridesCollectionRef,
+        where('userId', '==', userId),
+        where('createdAt', '>=', startOfWeek(new Date()).getTime()),
+        where('createdAt', '<=', new Date().getTime())
+    );
+    return withCacheFallback(
+        async () => (await getCountFromServer(q)).data().count,
+        async () => (await getDocs(q)).size,
+        'Weekly ride count'
+    );
 };
 
 export const getMonthlyDistanceAndCount = async (userId: string): Promise<{ distance: number; count: number }> => {
-    try {
-        return await retryWithBackoff(async () => {
-            const ridesCollectionRef = collection(firestore, 'rides');
-            const q = query(
-                ridesCollectionRef,
-                where('userId', '==', userId),
-                where('createdAt', '>=', startOfMonth(new Date()).getTime()),
-                where('createdAt', '<=', new Date().getTime())
-            );
+    const ridesCollectionRef = collection(firestore, 'rides');
+    const q = query(
+        ridesCollectionRef,
+        where('userId', '==', userId),
+        where('createdAt', '>=', startOfMonth(new Date()).getTime()),
+        where('createdAt', '<=', new Date().getTime())
+    );
+    return withCacheFallback(
+        async () => {
             const snapshot = await getAggregateFromServer(q, {
                 distance: sum('distance'),
                 count: count(),
             });
-            if (!snapshot.data()) {
-                return { distance: 0, count: 0 };
-            }
-            const data: { distance: number; count: number } = snapshot.data() as { distance: number; count: number };
+            const data = snapshot.data() as { distance: number; count: number } | undefined;
             return { distance: data?.distance || 0, count: data?.count || 0 };
-        });
-    } catch (error) {
-        console.error('Error fetching monthly distance:', error);
-        throw error;
-    }
+        },
+        async () => {
+            const snapshot = await getDocs(q);
+            let distance = 0;
+            for (const docSnap of snapshot.docs) {
+                distance += (docSnap.data() as { distance?: number }).distance || 0;
+            }
+            return { distance, count: snapshot.size };
+        },
+        'Monthly distance'
+    );
 };
 
 export const getTotalDistanceAndCountAndAverageSpeedAndElevation = async (
     userId: string
 ): Promise<{ distance: number; count: number; averageSpeed: number; elevation: number }> => {
-    try {
-        return await retryWithBackoff(async () => {
-            const ridesCollectionRef = collection(firestore, 'rides');
-            const q = query(ridesCollectionRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    const ridesCollectionRef = collection(firestore, 'rides');
+    const q = query(ridesCollectionRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    return withCacheFallback(
+        async () => {
             const snapshot = await getAggregateFromServer(q, {
                 distance: sum('distance'),
                 count: count(),
                 averageSpeed: average('averageSpeed'),
                 elevationGain: sum('elevationGain'),
             });
-
-            if (!snapshot.data()) {
-                return { distance: 0, count: 0, averageSpeed: 0, elevation: 0 };
-            }
-
-            const data: { distance: number; count: number; averageSpeed: number; elevationGain: number } =
-                snapshot.data() as {
-                    distance: number;
-                    count: number;
-                    averageSpeed: number;
-                    elevationGain: number;
-                };
-
+            const data = snapshot.data() as
+                | { distance: number; count: number; averageSpeed: number; elevationGain: number }
+                | undefined;
             return {
                 distance: data?.distance || 0,
                 count: data?.count || 0,
                 averageSpeed: data?.averageSpeed || 0,
                 elevation: data?.elevationGain || 0,
             };
-        });
-    } catch (error) {
-        console.error('Error fetching total distance:', error);
-        throw error;
-    }
+        },
+        async () => {
+            const snapshot = await getDocs(q);
+            let distance = 0;
+            let elevation = 0;
+            let speedSum = 0;
+            for (const docSnap of snapshot.docs) {
+                const data = docSnap.data() as { distance?: number; elevationGain?: number; averageSpeed?: number };
+                distance += data.distance || 0;
+                elevation += data.elevationGain || 0;
+                speedSum += data.averageSpeed || 0;
+            }
+            const count = snapshot.size;
+            return {
+                distance,
+                count,
+                averageSpeed: count > 0 ? speedSum / count : 0,
+                elevation,
+            };
+        },
+        'Total distance'
+    );
 };
 
 export const getLongestRide = async (userId: string): Promise<number> => {
     try {
+        // getDocs already serves from cache when offline, so a single call is enough.
         return await retryWithBackoff(async () => {
             const ridesCollectionRef = collection(firestore, 'rides');
             const q = query(ridesCollectionRef, where('userId', '==', userId), orderBy('distance', 'desc'), limit(1));
@@ -415,6 +465,10 @@ export const getLongestRide = async (userId: string): Promise<number> => {
             return snapshot.docs[0].data().distance;
         });
     } catch (error) {
+        if (isTransientFirestoreError(error)) {
+            console.warn('Longest ride: offline, returning 0.');
+            return 0;
+        }
         console.error('Error fetching longest ride:', error);
         throw error;
     }

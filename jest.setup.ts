@@ -149,6 +149,11 @@ jest.mock("expo-sqlite", () => ({
 
 jest.mock("expo-location");
 
+// NetInfo — use the library's shipped mock (defaults to a connected state)
+jest.mock("@react-native-community/netinfo", () =>
+    require("@react-native-community/netinfo/jest/netinfo-mock")
+);
+
 // Firebase App
 jest.mock("@react-native-firebase/app", () => ({}));
 

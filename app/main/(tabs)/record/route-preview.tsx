@@ -2,6 +2,7 @@ import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { useRideStore } from '@/lib/store/useRideStore';
 import { formatDistance, formatEta, getRoute, LngLat, RouteCongestionLevel, RouteResult } from '@/lib/utils/directions';
 import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
+import { isOnline, useIsOnline } from '@/lib/utils/network';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
@@ -32,6 +33,7 @@ export default function RoutePreview() {
     const [route, setRoute] = useState<RouteResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const online = useIsOnline();
     const setActiveRoute = useRideStore(state => state.setActiveRoute);
 
     useEffect(() => {
@@ -59,6 +61,11 @@ export default function RoutePreview() {
                     return;
                 }
                 setTo(dest);
+
+                if (!(await isOnline())) {
+                    if (active) setError('You appear to be offline. Connect to the internet to generate a route.');
+                    return;
+                }
 
                 let r = await getRoute(origin, dest);
                 if (!active) return;
@@ -129,6 +136,13 @@ export default function RoutePreview() {
                 <Text style={styles.headerTitle}>Route Preview</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>
+
+            {!online && (
+                <View style={styles.offlineBanner}>
+                    <Icon source="wifi-off" size={sizes.medium} color={theme.colors.onErrorContainer} />
+                    <Text style={styles.offlineBannerText}>You&apos;re offline — map and routing need a connection.</Text>
+                </View>
+            )}
 
             <View style={styles.mapWrap}>
                 <Mapbox.MapView style={StyleSheet.absoluteFill} styleURL={mapStyle} logoEnabled={false} attributionEnabled={false}>
@@ -265,6 +279,16 @@ const getStyles = (theme: MD3Theme) =>
     StyleSheet.create({
         safe: { flex: 1, backgroundColor: theme.colors.background },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: sizes.small },
+        offlineBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: sizes.tiny,
+            backgroundColor: theme.colors.errorContainer,
+            paddingVertical: sizes.tiny,
+            paddingHorizontal: sizes.small,
+        },
+        offlineBannerText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onErrorContainer },
         headerTitle: { flex: 1, textAlign: 'center', fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.regular, color: theme.colors.onBackground },
         mapWrap: { flex: 1, overflow: 'hidden' },
         mapOverlay: {
