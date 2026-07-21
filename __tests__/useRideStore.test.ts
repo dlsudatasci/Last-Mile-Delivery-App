@@ -8,6 +8,7 @@ import {
     calculateRemainingDistanceM,
     calculateSpeedFromMovement,
     formatNavigationInstruction,
+    getNextDisplayPoints,
     getNextNavigationInstruction,
     haversineDistance,
     sanitizeLocationSpeed,
@@ -15,6 +16,7 @@ import {
     smoothSpeed,
     useRideStore,
 } from "../lib/store/useRideStore";
+import { snapLngLatToRoute } from "../lib/utils/routeSnapping";
 
 // Mocks
 jest.mock("../lib/utils/firebaseConfig", () => ({
@@ -442,6 +444,90 @@ describe("useRideStore", () => {
         expect(state.displayPoints).toHaveLength(2);
 
         expect(state.points).toHaveLength(2);
+    });
+
+    test("route snapping projects nearby GPS onto the active route", () => {
+        const snapped = snapLngLatToRoute(
+            [121.005, 14.00012],
+            [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+            55
+        );
+
+        expect(snapped).not.toBeNull();
+        expect(snapped?.coordinate[0]).toBeCloseTo(121.005, 4);
+        expect(snapped?.coordinate[1]).toBeCloseTo(14.0, 4);
+    });
+
+    test("route snapping rejects GPS points far from the active route", () => {
+        const snapped = snapLngLatToRoute(
+            [121.005, 14.01],
+            [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+            55
+        );
+
+        expect(snapped).toBeNull();
+    });
+
+    test("addPoint keeps raw GPS but only moves display trace when near the active route", () => {
+        useRideStore.setState({
+            activeRouteCoordinates: [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+        });
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 14.0001,
+                longitude: 121.001,
+                altitude: 0,
+                accuracy: 10,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 14.01,
+                longitude: 121.002,
+                altitude: 0,
+                accuracy: 10,
+            },
+            timestamp: 3000,
+        } as any);
+
+        const state = useRideStore.getState();
+        expect(state.points).toHaveLength(2);
+        expect(state.displayPoints).toHaveLength(1);
+        expect(state.displayPoints[0].coordinate.latitude).toBeCloseTo(14.0, 4);
+    });
+
+    test("display trace remains still when a raw GPS point is far off-route", () => {
+        const existingDisplayPoint = {
+            coordinate: { latitude: 14.0, longitude: 121.001 },
+            timestamp: 1,
+        };
+        const nextDisplayPoints = getNextDisplayPoints({
+            rawPoint: {
+                coordinate: { latitude: 14.01, longitude: 121.002 },
+                timestamp: 2,
+            },
+            rawPoints: [],
+            displayPoints: [existingDisplayPoint],
+            routeCoordinates: [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+        });
+
+        expect(nextDisplayPoints).toEqual([existingDisplayPoint]);
     });
 
     // #8 haverineDistance

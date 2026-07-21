@@ -269,7 +269,7 @@ export default function ReasonForDeviation() {
                     />
                     {answers.primaryReason === 'Other' && (
                         <TextInput
-                            label={language === 'tl' ? 'I-type ang sagot' : 'Type answer'}
+                            label={language === 'tl' ? 'Ilagay ang dahilan' : 'Type the reason'}
                             value={answers.primaryReasonOther ?? ''}
                             onChangeText={value => setAnswer('primaryReasonOther', value)}
                             mode="outlined"
@@ -318,7 +318,7 @@ export default function ReasonForDeviation() {
                             />
                             {answers.blockageReason === 'Other' && (
                                 <TextInput
-                                    label={language === 'tl' ? 'Iba pa' : 'Other'}
+                                    label={language === 'tl' ? 'Ilagay kung ano ang harang' : 'Describe the blockage'}
                                     value={answers.blockageReasonOther ?? ''}
                                     onChangeText={value => setAnswer('blockageReasonOther', value)}
                                     mode="outlined"
@@ -340,7 +340,7 @@ export default function ReasonForDeviation() {
                             />
                             {answers.personalStopReason?.includes('Other') && (
                                 <TextInput
-                                    label={language === 'tl' ? 'I-type dito' : 'Type here'}
+                                    label={language === 'tl' ? 'Ilagay ang dahilan ng stop' : 'Type the stop reason'}
                                     value={answers.personalStopOther ?? ''}
                                     onChangeText={value => setAnswer('personalStopOther', value)}
                                     mode="outlined"

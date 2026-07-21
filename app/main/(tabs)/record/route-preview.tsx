@@ -1,6 +1,7 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
-import { formatDistance, formatEta, getRoute, LngLat, RouteCongestionLevel, RouteResult } from '@/lib/utils/directions';
 import { useRideStore } from '@/lib/store/useRideStore';
+import { formatDistance, formatEta, getRoute, LngLat, RouteCongestionLevel, RouteResult } from '@/lib/utils/directions';
+import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
@@ -10,7 +11,7 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 import { Button, Icon, MD3Theme, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
+configureMapboxAccessToken(Mapbox);
 
 const TRAFFIC_RED = '#DC2626';
 const TRAFFIC_DARK_RED = '#991B1B';
@@ -109,6 +110,7 @@ export default function RoutePreview() {
             sw: [Math.min(...lons), Math.min(...lats)] as LngLat,
         };
     }, [route]);
+    const previewOrigin = route?.coordinates[0] ?? from;
 
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
@@ -125,7 +127,6 @@ export default function RoutePreview() {
                         followUserLocation={!route}
                         followZoomLevel={14}
                     />
-                    <Mapbox.LocationPuck />
                     <Mapbox.VectorSource id="mapboxTrafficTiles" url={TRAFFIC_TILESET_URL}>
                         <Mapbox.LineLayer
                             id="mapboxTrafficModerate"
@@ -173,9 +174,18 @@ export default function RoutePreview() {
                             />
                         </Mapbox.ShapeSource>
                     )}
+                    {previewOrigin && (
+                        <Mapbox.PointAnnotation id="preview-origin" coordinate={previewOrigin}>
+                            <View style={styles.riderMarker}>
+                                <View style={styles.riderMarkerCore} />
+                            </View>
+                        </Mapbox.PointAnnotation>
+                    )}
                     {to && (
                         <Mapbox.PointAnnotation id="dest" coordinate={to}>
-                            <Icon source="map-marker" size={sizes.size32} color={theme.colors.error} />
+                            <View style={styles.destinationMarker}>
+                                <Icon source="map-marker" size={sizes.size32} color={theme.colors.primary} />
+                            </View>
                         </Mapbox.PointAnnotation>
                     )}
                 </Mapbox.MapView>
@@ -274,4 +284,26 @@ const getStyles = (theme: MD3Theme) =>
         button: { borderRadius: sizes.small },
         buttonContent: { height: sizes.size56 },
         buttonLabel: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small },
+        riderMarker: {
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#ffffff',
+            borderWidth: 2,
+            borderColor: '#075985',
+        },
+        riderMarkerCore: {
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: '#22D3EE',
+        },
+        destinationMarker: {
+            width: sizes.size48,
+            height: sizes.size48,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
     });

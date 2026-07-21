@@ -1,14 +1,13 @@
 import { useRideStore } from '@/lib/store/useRideStore';
+import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { UserTrackingMode } from '@rnmapbox/maps';
-
 import Mapbox from '@rnmapbox/maps';
 import { useMemo, useState } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
-import { FAB, MD3Theme, useTheme } from 'react-native-paper';
+import { FAB, Icon, MD3Theme, useTheme } from 'react-native-paper';
 import { Polygon } from './polygon';
 
-Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
+configureMapboxAccessToken(Mapbox);
 
 const TRAFFIC_RED = '#DC2626';
 const TRAFFIC_DARK_RED = '#991B1B';
@@ -22,7 +21,7 @@ export default function MapRender() {
     const mapboxStyle =
         colorScheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
 
-    const { displayPoints, activeRouteCoordinates, activeRouteCongestionSegments } = useRideStore();
+    const { displayPoints, activeRouteCoordinates, activeRouteCongestionSegments, activeRouteDestination } = useRideStore();
 
     const [zoomLevel, setZoomLevel] = useState(16);
     const recenterMap = () => {
@@ -45,6 +44,11 @@ export default function MapRender() {
                 : null,
         [activeRouteCoordinates]
     );
+    const displayedLocation = displayPoints.length > 0 ? displayPoints[displayPoints.length - 1] : null;
+    const displayedLocationCoordinate = displayedLocation
+        ? ([displayedLocation.coordinate.longitude, displayedLocation.coordinate.latitude] as [number, number])
+        : null;
+    const cameraCenter = displayedLocationCoordinate ?? activeRouteCoordinates[0] ?? activeRouteDestination;
     const congestionShape = useMemo(() => {
         const segments = activeRouteCongestionSegments.filter(
             segment => segment.congestion === 'moderate' || segment.congestion === 'heavy' || segment.congestion === 'severe'
@@ -95,7 +99,8 @@ export default function MapRender() {
                 {displayPoints.length > 0 && (
                     <Polygon
                         points={displayPoints}
-                        style={{ lineColor: theme.colors.secondary, lineWidth: 3, lineOpacity: 0.55 }}
+                        style={{ lineColor: '#0EA5E9', lineWidth: 4, lineOpacity: 0.85, lineCap: 'round', lineJoin: 'round' }}
+                        showEndpointMarkers={false}
                     />
                 )}
                 {activeRouteShape && (
@@ -125,14 +130,32 @@ export default function MapRender() {
                         />
                     </Mapbox.ShapeSource>
                 )}
-                <Mapbox.Camera
-                    animationDuration={0}
-                    animationMode="none"
-                    followUserLocation={true}
-                    followUserMode={UserTrackingMode.FollowWithCourse}
-                    followZoomLevel={zoomLevel}
-                />
-                <Mapbox.LocationPuck puckBearing="course" puckBearingEnabled />
+                {cameraCenter ? (
+                    <Mapbox.Camera
+                        animationDuration={0}
+                        animationMode="none"
+                        followUserLocation={false}
+                        centerCoordinate={cameraCenter}
+                        followZoomLevel={zoomLevel}
+                        zoomLevel={zoomLevel}
+                    />
+                ) : (
+                    <Mapbox.Camera animationDuration={0} animationMode="none" followUserLocation followZoomLevel={zoomLevel} />
+                )}
+                {displayedLocationCoordinate && (
+                    <Mapbox.PointAnnotation id="snapped-rider-location" coordinate={displayedLocationCoordinate}>
+                        <View style={styles.riderMarker}>
+                            <View style={styles.riderMarkerCore} />
+                        </View>
+                    </Mapbox.PointAnnotation>
+                )}
+                {activeRouteDestination && (
+                    <Mapbox.PointAnnotation id="active-route-destination" coordinate={activeRouteDestination}>
+                        <View style={styles.destinationMarker}>
+                            <Icon source="map-marker" size={sizes.size32} color={theme.colors.primary} />
+                        </View>
+                    </Mapbox.PointAnnotation>
+                )}
             </Mapbox.MapView>
             <View
                 className="absolute flex flex-col items-center justify-center"
@@ -197,5 +220,27 @@ const getStyles = (theme: MD3Theme) =>
         },
         mapFAB: {
             backgroundColor: theme.colors.surface,
+        },
+        riderMarker: {
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#ffffff',
+            borderWidth: 2,
+            borderColor: '#075985',
+        },
+        riderMarkerCore: {
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: '#22D3EE',
+        },
+        destinationMarker: {
+            width: sizes.size48,
+            height: sizes.size48,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
     });

@@ -13,6 +13,7 @@ import {
     getPostTripRows,
     getReviewStatusLabel,
 } from '@/lib/trip-record-display';
+import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { getAuth } from '@react-native-firebase/auth';
 import Mapbox from '@rnmapbox/maps';
@@ -26,7 +27,7 @@ type TripRecord = FetchRideData;
 
 const STUDY_END_LABEL = 'Study ends July 24, 2025';
 
-Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
+configureMapboxAccessToken(Mapbox);
 
 function formatClock(timestamp?: number | null) {
     if (!timestamp) return 'Not available';

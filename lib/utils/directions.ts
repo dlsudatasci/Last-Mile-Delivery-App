@@ -4,8 +4,9 @@
 // current location. Coordinates are [longitude, latitude] (Mapbox order).
 // -----------------------------------------------------------------------------
 
-export const MAPBOX_TOKEN =
-    'pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg';
+import { MAPBOX_PUBLIC_TOKEN } from './mapbox';
+
+export const MAPBOX_TOKEN = MAPBOX_PUBLIC_TOKEN;
 
 export type LngLat = [number, number];
 

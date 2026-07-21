@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { Annotation } from '../firebase-crud/annotations';
 import { NewRideData, saveRide } from '../firebase-crud/rides';
 import { LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
+import { snapLngLatToRoute } from '../utils/routeSnapping';
 
 const setAsyncFlag = async (key: string, value: boolean) => {
     try {
@@ -315,7 +316,7 @@ export const useRideStore = create<RideState>((set, get) => ({
     },
 
     addPoint: (location: LocationObject) => {
-        const { points, displayPoints, currentElevation, totalElevationGain, totalDistance, maxSpeed } = get();
+        const { points, displayPoints, currentElevation, totalElevationGain, totalDistance, maxSpeed, activeRouteCoordinates } = get();
 
         const newPoint = locationToRidePoint(location);
 
@@ -348,14 +349,12 @@ export const useRideStore = create<RideState>((set, get) => ({
 
         const newPoints = [...points, newPoint];
 
-        let newDisplayPoints = displayPoints;
-        if (newPoints.length < 3) {
-            newDisplayPoints = newPoints;
-        } else {
-            if (newPoints.length % 5 === 0) {
-                newDisplayPoints = simplify(newPoints, 0.00005);
-            }
-        }
+        const newDisplayPoints = getNextDisplayPoints({
+            rawPoint: newPoint,
+            rawPoints: newPoints,
+            displayPoints,
+            routeCoordinates: activeRouteCoordinates,
+        });
 
         console.log('newPoints', newPoints.length, 'newDisplayPoints', newDisplayPoints.length);
 
@@ -442,6 +441,56 @@ export const useRideStore = create<RideState>((set, get) => ({
         set(state => ({ deviationEvents: [...state.deviationEvents, event] }));
     },
 }));
+
+const DISPLAY_ROUTE_SNAP_THRESHOLD_M = 55;
+const MIN_DISPLAY_POINT_DISTANCE_M = 1.5;
+
+export function getNextDisplayPoints({
+    rawPoint,
+    rawPoints,
+    displayPoints,
+    routeCoordinates,
+}: {
+    rawPoint: RidePoint;
+    rawPoints: RidePoint[];
+    displayPoints: RidePoint[];
+    routeCoordinates: LngLat[];
+}): RidePoint[] {
+    if (routeCoordinates.length > 1) {
+        const snapped = snapLngLatToRoute(
+            [rawPoint.coordinate.longitude, rawPoint.coordinate.latitude],
+            routeCoordinates,
+            DISPLAY_ROUTE_SNAP_THRESHOLD_M
+        );
+
+        if (!snapped) {
+            return displayPoints;
+        }
+
+        const snappedPoint: RidePoint = {
+            ...rawPoint,
+            coordinate: {
+                longitude: snapped.coordinate[0],
+                latitude: snapped.coordinate[1],
+            },
+        };
+        const lastDisplayPoint = displayPoints[displayPoints.length - 1];
+        if (lastDisplayPoint && haversineDistance(lastDisplayPoint, snappedPoint) < MIN_DISPLAY_POINT_DISTANCE_M) {
+            return displayPoints;
+        }
+        return [...displayPoints, snappedPoint];
+    }
+
+    if (rawPoints.length < 3) {
+        return rawPoints;
+    }
+
+    if (rawPoints.length % 5 === 0) {
+        return simplify(rawPoints, 0.00005);
+    }
+
+    return displayPoints;
+}
 
 export function simplify(points: RidePoint[], tolerance: number): RidePoint[] {
     if (points.length <= 2) {

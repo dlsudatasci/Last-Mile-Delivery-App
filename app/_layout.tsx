@@ -3,6 +3,7 @@ import { themeColors } from '@/lib/common/colors';
 import { useCustomFonts } from '@/lib/hooks/useFonts';
 import { getAsyncFlag, useRideStore } from '@/lib/store/useRideStore';
 import { firestore } from '@/lib/utils/firebaseConfig';
+import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { doc, getDoc } from '@react-native-firebase/firestore';
 import Mapbox from '@rnmapbox/maps';
@@ -16,7 +17,7 @@ import { Alert, Linking, Platform, Text, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Button, Dialog, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
 
-Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
+configureMapboxAccessToken(Mapbox);
 
 if (!TaskManager.isTaskDefined('location-recording')) {
     TaskManager.defineTask(

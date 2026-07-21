@@ -12,9 +12,15 @@ const arrivalOptions = ['Early', 'On time', 'Late'];
 const ratingOptions = [1, 2, 3, 4, 5];
 const postTripText = {
     title: { en: 'Post-Trip Questionnaire', tl: 'Post-Trip Questionnaire' },
-    arrival: { en: 'Q1: Did you arrive?', tl: 'Q1: Dumating ka ba?' },
-    eta: { en: 'Q2: How accurate is the suggested ETA?', tl: 'Q2: Gaano katumpak ang iminungkahing ETA?' },
-    stress: { en: 'Q3: How stressful was the trip?', tl: 'Q3: Gaano ka-stress ang biyahe?' },
+    arrival: { en: 'Q1: Did you arrive earlier, on time, or late?', tl: 'Q1: Maaga, sakto, o late ka ba dumating?' },
+    eta: {
+        en: 'Q2: How accurate was the ETA? Choose 1 for not accurate and 5 for very accurate.',
+        tl: 'Q2: Gaano ka-accurate ang ETA? Piliin ang 1 kung hindi accurate at 5 kung very accurate.',
+    },
+    stress: {
+        en: 'Q3: How stressful was the trip? Choose 1 for not stressful and 5 for very stressful.',
+        tl: 'Q3: Gaano ka-stress ang biyahe? Piliin ang 1 kung hindi stressful at 5 kung very stressful.',
+    },
     back: { en: 'Back', tl: 'Bumalik' },
     next: { en: 'Next', tl: 'Susunod' },
     finish: { en: 'Finish', tl: 'Tapusin' },

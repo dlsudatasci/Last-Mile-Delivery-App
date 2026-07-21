@@ -29,6 +29,7 @@ const emptyTables = (): FallbackTables => ({
 
 let dbPromise: Promise<LocalDb> | null = null;
 let initPromise: Promise<void> | null = null;
+let sqliteFallbackWarningShown = false;
 
 async function readFallbackTables(): Promise<FallbackTables> {
     try {
@@ -162,21 +163,40 @@ async function openNativeDb(): Promise<LocalDb | null> {
     try {
         // Keep this dynamic so older dev/test builds without the native module
         // do not crash during module evaluation.
-        if (!NativeModules.ExpoSQLite) return null;
-        const SQLite = require('expo-sqlite');
+        if (!NativeModules.ExpoSQLite) {
+            warnSqliteFallback('expo-sqlite native module is not available in this build.');
+            return null;
+        }
+
+        let SQLite: typeof import('expo-sqlite') | null = null;
+        try {
+            SQLite = require('expo-sqlite');
+        } catch {
+            warnSqliteFallback('expo-sqlite package could not be loaded in this build.');
+            return null;
+        }
+
         if (!SQLite?.openDatabaseAsync) return null;
         const db = await SQLite.openDatabaseAsync('devia-local.db');
         return {
             backend: 'sqlite',
             execAsync: (sql: string) => db.execAsync(sql),
-            runAsync: (sql: string, params?: QueryParams) => db.runAsync(sql, params ?? []),
+            runAsync: async (sql: string, params?: QueryParams) => {
+                await db.runAsync(sql, params ?? []);
+            },
             getFirstAsync: async <T>(sql: string, params?: QueryParams) => (await db.getFirstAsync(sql, params ?? [])) as T | null,
             getAllAsync: async <T>(sql: string, params?: QueryParams) => (await db.getAllAsync(sql, params ?? [])) as T[],
         };
     } catch (error) {
-        console.warn('expo-sqlite native module unavailable; using local storage fallback.', error);
+        warnSqliteFallback(error instanceof Error ? error.message : 'expo-sqlite failed to open.');
         return null;
     }
+}
+
+function warnSqliteFallback(reason: string) {
+    if (sqliteFallbackWarningShown) return;
+    sqliteFallbackWarningShown = true;
+    console.warn(`Using local storage fallback for local data. ${reason}`);
 }
 
 export async function isNativeSqliteAvailable(): Promise<boolean> {

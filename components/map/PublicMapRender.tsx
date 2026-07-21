@@ -1,11 +1,12 @@
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 
+import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import Mapbox from '@rnmapbox/maps';
 import { useState } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
 import { Dialog, FAB, MD3Theme, Portal, Text, useTheme } from 'react-native-paper';
 
-Mapbox.setAccessToken('pk.eyJ1IjoibnZyenNhIiwiYSI6ImNtcDl3OGpneDB0amkydXByNTR3bG5uNzEifQ.hgL01z3Qc9KzOrQCKjzbsg');
+configureMapboxAccessToken(Mapbox);
 
 export default function PublicMapRender() {
     const theme = useTheme();

@@ -1,5 +1,7 @@
 import {
+    PRIMARY_REASON_OPTIONS,
     QUESTION_TEXT,
+    TRAFFIC_SEVERITY_OPTIONS,
     isDeviationQuestionnaireComplete,
     shouldAskBlockageFollowUp,
     shouldAskPersonalStopFollowUps,
@@ -41,7 +43,21 @@ describe("deviation questionnaire helpers", () => {
     });
 
     test("english and tagalog labels share canonical question keys", () => {
-        expect(QUESTION_TEXT.primaryReason.en).toContain("PRIMARY reason");
-        expect(QUESTION_TEXT.primaryReason.tl).toContain("PANGUNAHING dahilan");
+        expect(QUESTION_TEXT.primaryReason.en).toContain("main reason");
+        expect(QUESTION_TEXT.primaryReason.tl).toContain("main reason");
+    });
+
+    test("traffic severity question explains the 1 to 5 scale", () => {
+        expect(QUESTION_TEXT.trafficSeverity.en).toContain("1 for very light");
+        expect(QUESTION_TEXT.trafficSeverity.en).toContain("5 for severe");
+        expect(QUESTION_TEXT.trafficSeverity.tl).toContain("1 kung maluwag");
+        expect(QUESTION_TEXT.trafficSeverity.tl).toContain("5 kung pinakamabigat");
+    });
+
+    test("tagalog labels are simple and rider-friendly", () => {
+        expect(PRIMARY_REASON_OPTIONS.find(option => option.value === "Traffic Congestion")?.label.tl).toBe(
+            "Traffic o mabagal ang daloy"
+        );
+        expect(TRAFFIC_SEVERITY_OPTIONS[4].label.tl).toContain("stop-and-go");
     });
 });

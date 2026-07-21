@@ -84,13 +84,13 @@ export function getPostTripRows(postTrip?: PostTripAnswers): DisplayRow[] {
     if (!postTrip) return [];
     const language = postTrip.language ?? 'en';
     return [
-        { label: language === 'tl' ? 'Dumating ka ba?' : 'Did you arrive?', value: postTrip.arrival },
+        { label: language === 'tl' ? 'Maaga, sakto, o late ka ba dumating?' : 'Did you arrive earlier, on time, or late?', value: postTrip.arrival },
         {
-            label: language === 'tl' ? 'Gaano katumpak ang ETA?' : 'How accurate is the suggested ETA?',
+            label: language === 'tl' ? 'Gaano ka-accurate ang ETA? (1 = hindi accurate, 5 = very accurate)' : 'How accurate was the ETA? (1 = not accurate, 5 = very accurate)',
             value: `${postTrip.etaRating}/5`,
         },
         {
-            label: language === 'tl' ? 'Gaano ka-stress ang biyahe?' : 'How stressful was the trip?',
+            label: language === 'tl' ? 'Gaano ka-stress ang biyahe? (1 = hindi stressful, 5 = very stressful)' : 'How stressful was the trip? (1 = not stressful, 5 = very stressful)',
             value: `${postTrip.stressRating}/5`,
         },
         { label: 'Language', value: LANGUAGE_LABELS[language] },
