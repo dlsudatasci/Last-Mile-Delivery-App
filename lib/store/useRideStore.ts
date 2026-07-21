@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { LocationObject } from 'expo-location';
 import { create } from 'zustand';
 import { Annotation } from '../firebase-crud/annotations';
-import { NewRideData, saveRide } from '../firebase-crud/rides';
+import { isTransientFirestoreError, NewRideData, saveRide } from '../firebase-crud/rides';
 import { LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
 import { snapLngLatToRoute } from '../utils/routeSnapping';
 
@@ -294,7 +294,13 @@ export const useRideStore = create<RideState>((set, get) => ({
             await setAsyncFlag('isRecording', false);
             return { success: true, rideId };
         } catch (error) {
-            console.error('Failed to save ride:', error);
+            // The record screen shows a retry state on failure and the ride data stays
+            // in this store, so an offline/transient failure is expected, not a crash.
+            if (isTransientFirestoreError(error)) {
+                console.warn('Failed to save ride (offline/unavailable) — rider can retry.');
+            } else {
+                console.error('Failed to save ride:', error);
+            }
             return { success: false, error };
         }
     },

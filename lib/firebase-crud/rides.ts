@@ -249,7 +249,14 @@ export const saveRide = async (rideData: NewRideData) => {
 
         return rideDocRef.id;
     } catch (error) {
-        console.error('Error saving ride:', error);
+        // Offline / broken-DNS writes surface as the RN Firebase native-bridge quirk.
+        // The caller (finishRide -> record screen) already keeps the ride data and shows
+        // a "please try again" state, so log a warning instead of a red error.
+        if (isTransientFirestoreError(error)) {
+            console.warn('Saving ride failed (offline/unavailable) — rider can retry.');
+        } else {
+            console.error('Error saving ride:', error);
+        }
         throw error;
     }
 };
@@ -290,7 +297,7 @@ export const updateRideName = async (userId: string, rideId: string, newName: st
  * a real bug. These are expected on flaky mobile networks and should not be logged
  * as errors or surfaced to the rider as failures.
  */
-const isTransientFirestoreError = (error: unknown): boolean => {
+export const isTransientFirestoreError = (error: unknown): boolean => {
     if (!(error instanceof Error)) return false;
     const message = error.message.toLowerCase();
     return (
