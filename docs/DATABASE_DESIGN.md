@@ -21,8 +21,8 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 
 ---
 
-## 2. Entity-Relationship Diagram (ERD)
-
+## 2. Entity-Relationship Diagram (ERD) 
+Last changed: 22/07/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
@@ -36,7 +36,7 @@ erDiagram
         enum gender  "Male, Female, Prefer not to Say"  
         enum ageRange  "---"  
         enum city  "---"  
-        int yearsExperience  ""  
+        enum yearsExperience  ""  
         string deliveryPlatform  "Grab, Foodpanda, Lalamove"    
         boolean acceptedPolicies  ""  
         number createdAt  "Unix Timestamp ms" 
@@ -246,23 +246,23 @@ erDiagram
 * **Document ID:** Firebase Auth UID. The document ID acts as the primary key; a separate `id` field is **not** stored in the Firestore document itself.
 * **Purpose:** Stores profile details and onboarding survey information of the rider.
 
+Last changed: 22/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `username` | String | Yes | Rider display name (same as `fullName` on onboarding) |
-| `fullName` | String | Yes | Full rider name from onboarding form |
+| `userId` | String | Yes | Firebase Auth UID |
+| `riderCode` | String | Yes | Unique rider code assigned to the participant for the study |
+| `preferredName` | String | Yes | Rider's preferred display name shown within the application |
 | `email` | String | Yes | Firebase Auth email address |
-| `phone` | String | Yes | Philippine mobile number, format: `09xxxxxxxxx` |
-| `gender` | String | Yes | Gender identity selected during onboarding |
-| `ageRange` | String | Yes | Age range category (e.g., "18-24", "25-34") |
-| `city` | String | Yes | Municipality/City where the rider delivers |
-| `yearsExperience` | String | Yes | Experience range (e.g., "<1 year", "1-2 years") |
-| `deliveryPlatform` | String | Yes | Delivery platform used (e.g., Grab, Foodpanda, Lalamove) |
-| `vehicleType` | String | Yes | Vehicle type used for deliveries (e.g., Motorcycle, Bicycle, Car) |
-| `acceptedPolicies` | Boolean | Yes | Must be `true`; agreed to Terms & Privacy |
-| `avatarUrl` | String | No | Firebase Storage download URL for profile photo |
-| `createdAt` | String | Yes | ISO 8601 string timestamp of account creation |
-| `updatedAt` | String | Yes | ISO 8601 string timestamp of last profile update |
-
+| `phoneNum` | Varchar | Yes | Philippine mobile number, format: `09xxxxxxxxx` |
+| `gender` | Enum | Yes | Gender identity selected during onboarding |
+| `ageRange` | Enum | Yes | Age range category (e.g., "18-24", "25-34") |
+| `city` | Enum |  Yes | Municipality/City where the rider primarily performs deliveries |
+| `yearsExperience` | Enum | Yes | Experience range (e.g., "<1 year", "1-2 years") |
+| `deliveryPlatform` | String | Yes | Primary delivery platform used (e.g., Grab, Foodpanda, Lalamove) |
+| `acceptedPolicies` | Boolean | Yes | Must be `true`; agreed to Terms of Service & Privacy Policy|
+| `createdAt` | Number | Yes | Unix timestamp (ms) when the user account was created |
+| `updatedAt` | Number | Yes | Unix timestamp (ms) when the profile was last updated |
+| `profilePicture` | String | No | Firebase Storage download URL for profile photo |
 ---
 
 ### 3.2. Collection: `rides`
