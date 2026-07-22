@@ -68,42 +68,45 @@ export default function RiderCode() {
 
             // Code is already claimed. Attempt to log in the user.
             const claimedBy = data?.claimedBy;
-            if (!claimedBy) {
+            const phone = data?.phone;
+
+            if (!phone && !claimedBy) {
                 showError('This code is claimed but missing user data.');
                 setIsLoading(false);
                 return;
             }
 
-            // Fetch the user's phone number to perform silent login
-            const userRef = doc(firestore, 'users', claimedBy);
-            const userSnap = await getDoc(userRef);
-
-            if (!userSnap.exists) {
-                showError('User profile not found for this code.');
+            // Perform silent login using the phone number FIRST if available
+            let user;
+            if (phone) {
+                user = await signInWithPhone(phone);
+            } else {
+                showError('Account phone number not linked to this code.');
                 setIsLoading(false);
                 return;
             }
 
-            const userData = userSnap.data();
-            const phone = userData?.phone;
-
-            if (!phone) {
-                showError('No phone number associated with this account.');
-                setIsLoading(false);
-                return;
+            // NOW that we are signed in (request.auth.uid === user.uid),
+            // fetching the user's profile from Firestore will succeed!
+            let userData = null;
+            try {
+                const userRef = doc(firestore, 'users', user.uid);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists) {
+                    userData = userSnap.data();
+                }
+            } catch (err) {
+                console.warn('Could not fetch user profile post-auth:', err);
             }
 
-            // Perform silent login using the derived phone credential
-            const user = await signInWithPhone(phone);
-            
             // Populate local store so the app knows who we are
             setUser({
                 id: user.uid,
-                username: userData?.fullName || userData?.username,
-                fullName: userData?.fullName || userData?.username,
+                username: userData?.fullName || userData?.username || 'Rider',
+                fullName: userData?.fullName || userData?.username || 'Rider',
                 avatarUrl: userData?.avatarUrl || null,
                 email: user.email,
-                phone: userData?.phone,
+                phone: userData?.phone || phone,
                 gender: userData?.gender,
                 ageRange: userData?.ageRange,
                 city: userData?.city,

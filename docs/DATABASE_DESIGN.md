@@ -90,7 +90,6 @@ erDiagram
         number sequence "Route generation order index"
         number generatedAt "Unix Timestamp ms"
         int eta "in minutes"
-        boolean isFaster "Is deviation faster or not"
         int remainingDistanceOriginal "in meters"
         int remainingDistanceNew "in meters" 
     }
@@ -103,7 +102,6 @@ erDiagram
         int index
         string originalRoute
         number dateTime "Unix Timestamp ms"
-        boolean isFaster
         string gpsLocation
         string originalRouteEdge
         string deviatedEdge
@@ -113,8 +111,6 @@ erDiagram
         string type "'point' or 'segment'"
         array points "GPS coordinates of the deviation"
         number timestamp "Unix ms"
-        number start_timestamp "Unix ms"
-        number end_timestamp "Unix ms"
         number createdAt "Unix Timestamp ms"
         string mapMatchedEdge "98547_93724"
     }
@@ -219,7 +215,6 @@ erDiagram
         string updated_at "Text"
     }
 
-    %% Original Relationships
     users ||--o{ rides : "records"
     users ||--o{ studyParticipants : "enrolls as"
     users ||--o{ tickets : "creates"
@@ -229,8 +224,6 @@ erDiagram
     rides ||--o{ generatedRoutes : "generates routes during trip"
     generatedRoutes ||--o{ deviations : "contains deviation markers"
     deviations ||--o| deviationResponses : "collects user feedback via"
-    
-    %% New Relationships Appended from Diagram
     rides ||--o| postTripQuestionnaire_response : "submits questionnaire"
     rides ||--o{ deviations : "directly detects deviations"
     local_accounts ||--o| rider_code_registrations : "registers rider code"
@@ -337,10 +330,7 @@ erDiagram
 | `type` | String | Yes | `'point'` (single location) or `'segment'` (range) |
 | `points` | Array (Object) | Yes | GPS coordinates of the deviation spot/segment |
 | `additionalTags` | Array (String) | No | Checklist reasons rider selected (e.g., `["Traffic"]`) |
-| `source` | String | No | `"auto-generated-from-video"` when created by AI |
-| `timestamp` | Number | No | Video/ride time offset in ms for point deviations |
-| `start_timestamp` | Number | No | Start of deviation range in ms for segment deviations |
-| `end_timestamp` | Number | No | End of deviation range in ms for segment deviations |
+| `timestamp` | Number | No | Ride time offset in ms for point deviations |
 | `createdAt` | Number | Yes | Unix timestamp (ms) of record creation |
 
 ---

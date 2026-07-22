@@ -116,6 +116,7 @@ export default function CreateProfile() {
             await setDoc(doc(firestore, 'riderCodes', riderCode), {
                 isClaimed: true,
                 claimedBy: user.uid,
+                phone: phone,
                 claimedAt: Date.now()
             }, { merge: true });
 
