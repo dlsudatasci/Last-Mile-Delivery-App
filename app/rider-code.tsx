@@ -69,7 +69,9 @@ export default function RiderCode() {
 
             // Code is already claimed. Route to enter-phone for login verification.
             const claimedBy = data?.claimedBy;
-            if (!claimedBy) {
+            const phone = data?.phone;
+
+            if (!phone && !claimedBy) {
                 showError('This code is claimed but missing user data.');
                 setIsLoading(false);
                 return;

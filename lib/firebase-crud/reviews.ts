@@ -45,7 +45,7 @@ export const submitTripReview = async (rideId: string) => {
 
                     batch.set(deviationRef, {
                         deviationId: deviationId,
-                        routeId: null, // Depending on if we have routeId
+                        routeId: answer.metadata.routeId ?? null,
                         rideId: rideId,
                         userId: userId,
                         dateTime: answer.metadata.dateTime || Date.now(),

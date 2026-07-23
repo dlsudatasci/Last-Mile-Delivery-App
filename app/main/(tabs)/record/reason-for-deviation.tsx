@@ -70,7 +70,7 @@ function buildDeviationMetadata(
     const streetName = extractStreetName(generatedInstruction ?? undefined) ?? extractStreetName(deviationInstruction ?? undefined);
     return {
         deviationId: rideId ? `dev-${rideId}-${deviationIndex}` : null,
-        routeId: null,
+        routeId: event?.activeRouteId ?? null,
         rideId: rideId ?? null,
         userId: null,
         index: deviationIndex,

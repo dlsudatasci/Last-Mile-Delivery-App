@@ -55,6 +55,19 @@ export interface NavigationInstruction {
     step: RouteStep;
 }
 
+export interface GeneratedRoute {
+    routeId: string;
+    rideId: string; // Will be set when saving the ride
+    type: 'Initial Route' | 'Regenerated Route';
+    routePoints: LngLat[];
+    sequence: number;
+    generatedAt: number;
+    remainingTravelTimeOriginal: number | null;
+    remainingTravelTimeNew: number;
+    remainingDistanceOriginal: number | null;
+    remainingDistanceNew: number;
+}
+
 export interface RideDeviationEvent {
     timestamp: number;
     location: LngLat;
@@ -63,6 +76,7 @@ export interface RideDeviationEvent {
     newInstruction?: string;
     previousEtaSec?: number;
     newEtaSec?: number;
+    activeRouteId?: string;
 }
 
 interface RideState {
@@ -94,6 +108,8 @@ interface RideState {
     activeRouteUpdatedAt: number | null;
     routeUpdateStatus: 'idle' | 'traffic' | 'rerouting';
     deviationEvents: RideDeviationEvent[];
+    generatedRoutes: GeneratedRoute[];
+    activeGeneratedRouteId: string | null;
     annotations: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>[];
 
     // Actions
@@ -154,6 +170,8 @@ export const useRideStore = create<RideState>((set, get) => ({
     activeRouteUpdatedAt: null,
     routeUpdateStatus: 'idle',
     deviationEvents: [],
+    generatedRoutes: [],
+    activeGeneratedRouteId: null,
     annotations: [],
 
     // Actions
@@ -173,6 +191,21 @@ export const useRideStore = create<RideState>((set, get) => ({
             // First, reset the ride state
             get().resetRide();
 
+            // Seed the initial generated route so the first suggested route is always captured
+            const initialRouteId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+            const initialGeneratedRoute: GeneratedRoute = {
+                routeId: initialRouteId,
+                rideId: '', // Will be populated in saveRide
+                type: 'Initial Route',
+                routePoints: activeRouteCoordinates,
+                sequence: 1,
+                generatedAt: Date.now(),
+                remainingTravelTimeOriginal: null,
+                remainingTravelTimeNew: activeRouteDurationSec,
+                remainingDistanceOriginal: null,
+                remainingDistanceNew: activeRouteDistanceM,
+            };
+
             // Then set the recording state
             set({
                 isRecording: true,
@@ -191,6 +224,8 @@ export const useRideStore = create<RideState>((set, get) => ({
                 suggestedRouteDurationSec,
                 suggestedRouteDistanceM,
                 activeRouteUpdatedAt,
+                generatedRoutes: activeRouteCoordinates.length >= 2 ? [initialGeneratedRoute] : [],
+                activeGeneratedRouteId: activeRouteCoordinates.length >= 2 ? initialRouteId : null,
             });
 
             // Finally, update AsyncStorage flags
@@ -259,6 +294,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 activeRouteDistanceM,
                 suggestedRouteDurationSec,
                 suggestedRouteDistanceM,
+                generatedRoutes,
             } = get();
             let pointsForSave = points;
             if (pointsForSave.length === 0) {
@@ -279,6 +315,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 suggestedRouteDurationSec: suggestedRouteDurationSec || activeRouteDurationSec || undefined,
                 rideName: tripName?.trim() || 'Metro Manila Trip',
                 annotations,
+                generatedRoutes,
                 isPublic: false,
                 isGPXUpload: false,
                 fromWeb: false,
@@ -410,6 +447,8 @@ export const useRideStore = create<RideState>((set, get) => ({
             activeRouteUpdatedAt: null,
             routeUpdateStatus: 'idle',
             deviationEvents: [],
+            generatedRoutes: [],
+            activeGeneratedRouteId: null,
             annotations: [],
         });
 
@@ -427,6 +466,31 @@ export const useRideStore = create<RideState>((set, get) => ({
         const state = get();
         const shouldRefreshSuggestedRoute =
             !state.isRecording || state.suggestedRouteDistanceM <= 0 || state.suggestedRouteDurationSec <= 0;
+            
+        let newGeneratedRoutes = state.generatedRoutes;
+        let newActiveGeneratedRouteId = state.activeGeneratedRouteId;
+
+        // If we are recording, save this as a generated route snapshot
+        if (state.isRecording) {
+            const sequence = state.generatedRoutes.length + 1;
+            const routeId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+            
+            const newGeneratedRoute: GeneratedRoute = {
+                routeId,
+                rideId: '', // Will be populated in saveRide
+                type: sequence === 1 ? 'Initial Route' : 'Regenerated Route',
+                routePoints: route.coordinates,
+                sequence,
+                generatedAt: Date.now(),
+                remainingTravelTimeOriginal: sequence === 1 ? null : state.activeRouteDurationSec,
+                remainingTravelTimeNew: route.durationSec,
+                remainingDistanceOriginal: sequence === 1 ? null : state.activeRouteDistanceM,
+                remainingDistanceNew: route.distanceM,
+            };
+            
+            newGeneratedRoutes = [...state.generatedRoutes, newGeneratedRoute];
+            newActiveGeneratedRouteId = routeId;
+        }
 
         set({
             activeRouteSteps: route.steps,
@@ -438,13 +502,16 @@ export const useRideStore = create<RideState>((set, get) => ({
             suggestedRouteDurationSec: shouldRefreshSuggestedRoute ? route.durationSec : state.suggestedRouteDurationSec,
             suggestedRouteDistanceM: shouldRefreshSuggestedRoute ? route.distanceM : state.suggestedRouteDistanceM,
             activeRouteUpdatedAt: Date.now(),
+            generatedRoutes: newGeneratedRoutes,
+            activeGeneratedRouteId: newActiveGeneratedRouteId,
         });
     },
     setRouteUpdateStatus: status => {
         set({ routeUpdateStatus: status });
     },
     addDeviationEvent: event => {
-        set(state => ({ deviationEvents: [...state.deviationEvents, event] }));
+        const activeRouteId = get().activeGeneratedRouteId ?? undefined;
+        set(state => ({ deviationEvents: [...state.deviationEvents, { ...event, activeRouteId }] }));
     },
 }));
 
