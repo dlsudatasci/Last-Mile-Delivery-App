@@ -13,9 +13,24 @@ import { router, Stack } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
 import * as Updates from 'expo-updates';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Linking, Platform, Text, useColorScheme } from 'react-native';
+import { Alert, Linking, Platform, Text, useColorScheme, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Button, Dialog, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
+
+// Suppress noisy warnings/errors that are expected on flaky mobile networks or
+// come from third-party native modules we don't control:
+// - NativeEventEmitter warnings are emitted by native modules (Firebase, Location).
+// - Mapbox logs one "Map load failed" error per failed tile when offline; a single
+//   dropped connection can produce thousands of these. They are cosmetic — the map
+//   recovers automatically once connectivity returns.
+// - Firestore [firestore/unavailable] is handled gracefully with a cache fallback.
+LogBox.ignoreLogs([
+    'new NativeEventEmitter',
+    '`removeEventListener`',
+    'Mapbox [error] RNMBXMapView',
+    'Map load failed',
+    'firestore/unavailable',
+]);
 
 configureMapboxAccessToken(Mapbox);
 

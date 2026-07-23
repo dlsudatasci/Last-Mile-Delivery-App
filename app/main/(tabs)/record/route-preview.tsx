@@ -2,6 +2,7 @@ import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { useRideStore } from '@/lib/store/useRideStore';
 import { formatDistance, formatEta, getRoute, LngLat, RouteCongestionLevel, RouteResult } from '@/lib/utils/directions';
 import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
+import { isOnline, useIsOnline } from '@/lib/utils/network';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
@@ -16,6 +17,8 @@ configureMapboxAccessToken(Mapbox);
 const TRAFFIC_RED = '#DC2626';
 const TRAFFIC_DARK_RED = '#991B1B';
 const TRAFFIC_ORANGE = '#F59E0B';
+// Generated/upcoming route = blue (no travelled portion exists yet during preview).
+const ROUTE_BLUE = '#2563EB';
 const TRAFFIC_TILESET_URL = 'mapbox://mapbox.mapbox-traffic-v1';
 const TRAFFIC_SOURCE_LAYER = 'traffic';
 
@@ -32,6 +35,7 @@ export default function RoutePreview() {
     const [route, setRoute] = useState<RouteResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const online = useIsOnline();
     const setActiveRoute = useRideStore(state => state.setActiveRoute);
 
     useEffect(() => {
@@ -60,15 +64,30 @@ export default function RoutePreview() {
                 }
                 setTo(dest);
 
-                const r = await getRoute(origin, dest);
-                if (!active) return;
-                if (!r) {
-                    setError("Couldn't generate a route to that destination.");
+                if (!(await isOnline())) {
+                    if (active) setError('You appear to be offline. Connect to the internet to generate a route.');
                     return;
                 }
+
+                let r = await getRoute(origin, dest);
+                if (!active) return;
+                if (!r) {
+                    r = await getRoute(origin, dest);
+                    if (!r) {
+                        setError("Couldn't generate a route. Check your internet connection and try again.");
+                        return;
+                    }
+                }
                 setRoute(r);
-            } catch {
-                if (active) setError('Something went wrong generating the route.');
+            } catch (error) {
+                if (active) {
+                    const errorMessage = error instanceof Error ? error.message : 'Something went wrong generating the route.';
+                    if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+                        setError('Network error. Please check your internet connection.');
+                    } else {
+                        setError('Something went wrong generating the route.');
+                    }
+                }
             } finally {
                 if (active) setLoading(false);
             }
@@ -110,7 +129,6 @@ export default function RoutePreview() {
             sw: [Math.min(...lons), Math.min(...lats)] as LngLat,
         };
     }, [route]);
-    const previewOrigin = route?.coordinates[0] ?? from;
 
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
@@ -119,6 +137,13 @@ export default function RoutePreview() {
                 <Text style={styles.headerTitle}>Route Preview</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>
+
+            {!online && (
+                <View style={styles.offlineBanner}>
+                    <Icon source="wifi-off" size={sizes.medium} color={theme.colors.onErrorContainer} />
+                    <Text style={styles.offlineBannerText}>You&apos;re offline — map and routing need a connection.</Text>
+                </View>
+            )}
 
             <View style={styles.mapWrap}>
                 <Mapbox.MapView style={StyleSheet.absoluteFill} styleURL={mapStyle} logoEnabled={false} attributionEnabled={false}>
@@ -151,7 +176,7 @@ export default function RoutePreview() {
                         <Mapbox.ShapeSource id="routeSource" shape={lineShape}>
                             <Mapbox.LineLayer
                                 id="routeLine"
-                                style={{ lineColor: theme.colors.primary, lineWidth: 6, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: ROUTE_BLUE, lineWidth: 8, lineOpacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
                             />
                         </Mapbox.ShapeSource>
                     )}
@@ -160,26 +185,19 @@ export default function RoutePreview() {
                             <Mapbox.LineLayer
                                 id="moderateTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'moderate']}
-                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
                             />
                             <Mapbox.LineLayer
                                 id="heavyTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'heavy']}
-                                style={{ lineColor: TRAFFIC_RED, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_RED, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
                             />
                             <Mapbox.LineLayer
                                 id="severeTrafficRouteLine"
                                 filter={['==', ['get', 'congestion'], 'severe']}
-                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 10, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                                style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 5.5, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
                             />
                         </Mapbox.ShapeSource>
-                    )}
-                    {previewOrigin && (
-                        <Mapbox.PointAnnotation id="preview-origin" coordinate={previewOrigin}>
-                            <View style={styles.riderMarker}>
-                                <View style={styles.riderMarkerCore} />
-                            </View>
-                        </Mapbox.PointAnnotation>
                     )}
                     {to && (
                         <Mapbox.PointAnnotation id="dest" coordinate={to}>
@@ -255,6 +273,16 @@ const getStyles = (theme: MD3Theme) =>
     StyleSheet.create({
         safe: { flex: 1, backgroundColor: theme.colors.background },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: sizes.small },
+        offlineBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: sizes.tiny,
+            backgroundColor: theme.colors.errorContainer,
+            paddingVertical: sizes.tiny,
+            paddingHorizontal: sizes.small,
+        },
+        offlineBannerText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onErrorContainer },
         headerTitle: { flex: 1, textAlign: 'center', fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.regular, color: theme.colors.onBackground },
         mapWrap: { flex: 1, overflow: 'hidden' },
         mapOverlay: {
@@ -284,22 +312,6 @@ const getStyles = (theme: MD3Theme) =>
         button: { borderRadius: sizes.small },
         buttonContent: { height: sizes.size56 },
         buttonLabel: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small },
-        riderMarker: {
-            width: 24,
-            height: 24,
-            borderRadius: 12,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#ffffff',
-            borderWidth: 2,
-            borderColor: '#075985',
-        },
-        riderMarkerCore: {
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            backgroundColor: '#22D3EE',
-        },
         destinationMarker: {
             width: sizes.size48,
             height: sizes.size48,

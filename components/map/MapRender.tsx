@@ -1,5 +1,6 @@
 import { useRideStore } from '@/lib/store/useRideStore';
 import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
+import { getRouteProgress } from '@/lib/utils/routeProgress';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import { useMemo, useState } from 'react';
@@ -12,6 +13,9 @@ configureMapboxAccessToken(Mapbox);
 const TRAFFIC_RED = '#DC2626';
 const TRAFFIC_DARK_RED = '#991B1B';
 const TRAFFIC_ORANGE = '#F59E0B';
+// Upcoming/generated route = blue, already-travelled route = green.
+const ROUTE_BLUE = '#2563EB';
+const ROUTE_GREEN = '#16A34A';
 const TRAFFIC_TILESET_URL = 'mapbox://mapbox.mapbox-traffic-v1';
 const TRAFFIC_SOURCE_LAYER = 'traffic';
 
@@ -33,18 +37,31 @@ export default function MapRender() {
     };
 
     const styles = getStyles(theme);
-    const activeRouteShape = useMemo(
+    const displayedLocation = displayPoints.length > 0 ? displayPoints[displayPoints.length - 1] : null;
+
+    // Split the active route at the rider's snapped position so the portion ahead renders
+    // blue and the portion behind renders green. When the rider can't be snapped (off route
+    // or no points yet) we fall back to drawing the whole route blue.
+    const riderProgress = useMemo(() => {
+        if (!displayedLocation || activeRouteCoordinates.length < 2) return null;
+        return getRouteProgress(
+            [displayedLocation.coordinate.longitude, displayedLocation.coordinate.latitude],
+            activeRouteCoordinates
+        );
+    }, [displayedLocation, activeRouteCoordinates]);
+
+    const upcomingCoordinates = riderProgress ? riderProgress.upcomingCoordinates : activeRouteCoordinates;
+    const upcomingRouteShape = useMemo(
         () =>
-            activeRouteCoordinates.length > 1
+            upcomingCoordinates.length > 1
                 ? {
                       type: 'Feature' as const,
                       properties: {},
-                      geometry: { type: 'LineString' as const, coordinates: activeRouteCoordinates },
+                      geometry: { type: 'LineString' as const, coordinates: upcomingCoordinates },
                   }
                 : null,
-        [activeRouteCoordinates]
+        [upcomingCoordinates]
     );
-    const displayedLocation = displayPoints.length > 0 ? displayPoints[displayPoints.length - 1] : null;
     const displayedLocationCoordinate = displayedLocation
         ? ([displayedLocation.coordinate.longitude, displayedLocation.coordinate.latitude] as [number, number])
         : null;
@@ -72,9 +89,6 @@ export default function MapRender() {
                 zoomEnabled
                 rotateEnabled
                 compassEnabled
-                onPress={data => {
-                    console.log('data', data);
-                }}
             >
                 <Mapbox.VectorSource id="recordingMapboxTrafficTiles" url={TRAFFIC_TILESET_URL}>
                     <Mapbox.LineLayer
@@ -96,39 +110,44 @@ export default function MapRender() {
                         style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 3.5, lineOpacity: 0.65, lineCap: 'round', lineJoin: 'round' }}
                     />
                 </Mapbox.VectorSource>
-                {displayPoints.length > 0 && (
-                    <Polygon
-                        points={displayPoints}
-                        style={{ lineColor: '#0EA5E9', lineWidth: 4, lineOpacity: 0.85, lineCap: 'round', lineJoin: 'round' }}
-                        showEndpointMarkers={false}
-                    />
-                )}
-                {activeRouteShape && (
-                    <Mapbox.ShapeSource id="recordingActiveRouteSource" shape={activeRouteShape}>
+                {/* Upcoming route ahead of the rider — blue, drawn a little wider so it stays
+                    visible as a casing around the traffic overlay. */}
+                {upcomingRouteShape && (
+                    <Mapbox.ShapeSource id="recordingUpcomingRouteSource" shape={upcomingRouteShape}>
                         <Mapbox.LineLayer
-                            id="recordingActiveRouteLine"
-                            style={{ lineColor: theme.colors.primary, lineWidth: 6, lineOpacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+                            id="recordingUpcomingRouteLine"
+                            style={{ lineColor: ROUTE_BLUE, lineWidth: 8, lineOpacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
                         />
                     </Mapbox.ShapeSource>
                 )}
+                {/* Traffic congestion on the upcoming route — sits on top of the blue casing but
+                    is narrower, so the blue remains visible around it. */}
                 {congestionShape && (
                     <Mapbox.ShapeSource id="recordingTrafficRouteSource" shape={congestionShape}>
                         <Mapbox.LineLayer
                             id="recordingModerateTrafficRouteLine"
                             filter={['==', ['get', 'congestion'], 'moderate']}
-                            style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                            style={{ lineColor: TRAFFIC_ORANGE, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
                         />
                         <Mapbox.LineLayer
                             id="recordingHeavyTrafficRouteLine"
                             filter={['==', ['get', 'congestion'], 'heavy']}
-                            style={{ lineColor: TRAFFIC_RED, lineWidth: 9, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
+                            style={{ lineColor: TRAFFIC_RED, lineWidth: 5, lineOpacity: 0.98, lineCap: 'round', lineJoin: 'round' }}
                         />
                         <Mapbox.LineLayer
                             id="recordingSevereTrafficRouteLine"
                             filter={['==', ['get', 'congestion'], 'severe']}
-                            style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 10, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                            style={{ lineColor: TRAFFIC_DARK_RED, lineWidth: 5.5, lineOpacity: 1, lineCap: 'round', lineJoin: 'round' }}
                         />
                     </Mapbox.ShapeSource>
+                )}
+                {/* Already-travelled path — green, drawn on top so it clearly marks progress. */}
+                {displayPoints.length > 0 && (
+                    <Polygon
+                        points={displayPoints}
+                        style={{ lineColor: ROUTE_GREEN, lineWidth: 6, lineOpacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
+                        showEndpointMarkers={false}
+                    />
                 )}
                 {cameraCenter ? (
                     <Mapbox.Camera

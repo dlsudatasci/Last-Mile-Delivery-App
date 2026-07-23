@@ -1,9 +1,11 @@
 import StudyOverviewModal from '@/components/onboarding/StudyOverviewModal';
 import ActiveStudyCard from '@/components/studies/ActiveStudyCard';
 import { enrollInStudy, getStudyParticipation } from '@/lib/firebase-crud/study';
+import { isTransientFirestoreError } from '@/lib/firebase-crud/rides';
 import { useRidesStore } from '@/lib/store/useRidesStore';
 import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { formatRideRouteTitle } from '@/lib/trip-record-display';
+import { useIsOnline } from '@/lib/utils/network';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useUser } from '@/stores/useUser';
 import { useFocusEffect } from '@react-navigation/native';
@@ -46,6 +48,7 @@ export default function Home() {
 
     const { user, setUser } = useUser();
     const { rides, totalRideCount, isRefreshing, fetchRides } = useRidesStore();
+    const online = useIsOnline();
 
     const [showStudyModal, setShowStudyModal] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
@@ -66,7 +69,11 @@ export default function Home() {
                             if (user.isEnrolled !== true) setUser({ ...user, isEnrolled: true });
                         }
                     } catch (error) {
-                        console.error('Failed to check participation:', error);
+                        if (isTransientFirestoreError(error)) {
+                            console.warn('Failed to check participation (offline/transient):', error);
+                        } else {
+                            console.error('Failed to check participation:', error);
+                        }
                     }
                 }
             };
@@ -86,7 +93,11 @@ export default function Home() {
             setUser({ ...user, isEnrolled: true });
             setShowStudyModal(false);
         } catch (error) {
-            console.error('Failed to enroll:', error);
+            if (isTransientFirestoreError(error)) {
+                console.warn('Failed to enroll (offline/transient):', error);
+            } else {
+                console.error('Failed to enroll:', error);
+            }
         } finally {
             setIsJoining(false);
         }
@@ -120,6 +131,13 @@ export default function Home() {
                 <Text style={styles.greeting}>
                     {greetingForNow()}, {firstName}!
                 </Text>
+
+                {!online && (
+                    <View style={styles.offlineBanner}>
+                        <Icon source="wifi-off" size={sizes.medium} color={theme.colors.onErrorContainer} />
+                        <Text style={styles.offlineBannerText}>You&apos;re offline. Showing your last saved trips.</Text>
+                    </View>
+                )}
 
                 {/* Overview */}
                 <Text style={styles.sectionLabel}>{user?.isEnrolled ? 'OVERVIEW' : 'AVAILABLE STUDY'}</Text>
@@ -262,6 +280,17 @@ const getStyles = (theme: MD3Theme) =>
             fontSize: fontSizes.regular,
             color: theme.colors.onBackground,
         },
+        offlineBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: sizes.tiny,
+            backgroundColor: theme.colors.errorContainer,
+            borderRadius: sizes.small,
+            paddingVertical: sizes.small,
+            paddingHorizontal: sizes.medium,
+            marginTop: sizes.medium,
+        },
+        offlineBannerText: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onErrorContainer },
         recentTripCard: {
             backgroundColor: theme.colors.surface,
             borderRadius: sizes.medium,

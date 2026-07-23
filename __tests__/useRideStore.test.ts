@@ -31,6 +31,7 @@ jest.mock("../lib/utils/firebaseConfig", () => ({
 
 jest.mock("../lib/firebase-crud/rides", () => ({
     saveRide: jest.fn().mockResolvedValue("ride123"),
+    isTransientFirestoreError: jest.fn(() => false),
 }));
 
 jest.mock("expo-location", () => ({

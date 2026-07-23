@@ -4,6 +4,7 @@ import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
 import { calculateRemainingDistanceM, getAsyncFlag, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
 import { calculateSpeedAdjustedEtaSec, getDistanceToRouteM, getRoute, LngLat } from '@/lib/utils/directions';
+import { clampFraction, DEFAULT_ROUTE_PROGRESS_SNAP_M, estimateRemainingEtaSec, getRouteProgress } from '@/lib/utils/routeProgress';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { buildTripRouteTitle } from '@/lib/utils/tripTitle';
 import * as ImagePicker from 'expo-image-picker';
@@ -79,8 +80,6 @@ export default function Record() {
     const etaTotalSec = activeRouteDurationSec || Number(etaSec ?? 0);
     const initialRouteDistanceM = Number(routeDistanceM ?? 0);
     const currentRouteDistanceM = activeRouteDistanceM || initialRouteDistanceM;
-    const etaElapsedSinceUpdateSec = activeRouteUpdatedAt ? Math.max(0, Math.floor((Date.now() - activeRouteUpdatedAt) / 1000)) : duration;
-    const etaRemainingSec = etaTotalSec > 0 ? Math.max(0, etaTotalSec - etaElapsedSinceUpdateSec) : 0;
     const destinationCoordinates: LngLat | null = useMemo(
         () =>
             activeRouteDestination ??
@@ -101,13 +100,40 @@ export default function Record() {
     const currentPoint = points.length > 0 ? points[points.length - 1] : null;
     const nextInstruction = getNextNavigationInstruction(currentPoint, activeRouteSteps);
     const [previousRemainingDistanceM, setPreviousRemainingDistanceM] = useState<number | undefined>(undefined);
+
+    // Snap the rider onto the active route to derive progress-based metrics. When the
+    // rider is off-route (snap fails) this is null and we fall back to the last reliable
+    // value / raw GPS accumulation so the numbers don't jump around.
+    const routeProgress = useMemo(() => {
+        if (!currentPoint || activeRouteCoordinates.length < 2) return null;
+        return getRouteProgress(
+            [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude],
+            activeRouteCoordinates,
+            DEFAULT_ROUTE_PROGRESS_SNAP_M
+        );
+    }, [currentPoint, activeRouteCoordinates]);
+
+    // Remaining distance measured along the route; smoothed against the previous value so a
+    // temporary snapping failure doesn't cause a wild jump (see calculateRemainingDistanceM).
     const remainingDistanceM = calculateRemainingDistanceM({
         currentLocation: currentPoint,
         destination: destinationPoint,
-        routeDistanceM: currentRouteDistanceM > 0 ? currentRouteDistanceM : undefined,
-        traveledDistanceM: totalDistance,
+        routeDistanceM: routeProgress
+            ? routeProgress.totalRouteDistanceM
+            : currentRouteDistanceM > 0
+              ? currentRouteDistanceM
+              : undefined,
+        traveledDistanceM: routeProgress ? routeProgress.traveledDistanceM : totalDistance,
         previousRemainingM: previousRemainingDistanceM,
     });
+
+    // ETA = traffic-aware route duration x fraction of the route still ahead. The duration is
+    // refreshed from the rider's current position by the traffic/reroute effects below, so this
+    // decreases naturally as the rider advances instead of resetting on a wall-clock countdown.
+    const fractionRemaining = routeProgress
+        ? clampFraction(routeProgress.totalRouteDistanceM > 0 ? remainingDistanceM / routeProgress.totalRouteDistanceM : 1)
+        : clampFraction(currentRouteDistanceM > 0 ? remainingDistanceM / currentRouteDistanceM : 1);
+    const etaRemainingSec = estimateRemainingEtaSec(etaTotalSec, fractionRemaining);
     const speedAdjustedEtaRemainingSec = calculateSpeedAdjustedEtaSec({
         trafficRemainingSec: etaRemainingSec,
         remainingDistanceM,

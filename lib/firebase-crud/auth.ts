@@ -188,7 +188,11 @@ export async function getUserProfile(uid: string) {
             };
         }
     } catch (error) {
-        console.error('Error getting user profile:', error);
+        // Offline / transient Firestore failures are expected on flaky networks and
+        // are handled by callers (local-profile fallback in resolveAuthenticatedSession,
+        // and a guarded catch in edit-profile). Log as a warning instead of a red error
+        // so an expected offline state doesn't look like a crash.
+        console.warn('Getting user profile failed (will fall back if possible):', error);
         throw error;
     }
 }

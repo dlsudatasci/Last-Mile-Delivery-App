@@ -1,6 +1,7 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { signInWithPhone } from '@/lib/firebase-crud/auth';
+import { isTransientFirestoreError } from '@/lib/firebase-crud/rides';
 import { firestore } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
@@ -66,7 +67,7 @@ export default function RiderCode() {
                 return;
             }
 
-            // Code is already claimed. Attempt to log in the user.
+            // Code is already claimed. Route to enter-phone for login verification.
             const claimedBy = data?.claimedBy;
             const phone = data?.phone;
 
@@ -76,49 +77,14 @@ export default function RiderCode() {
                 return;
             }
 
-            // Perform silent login using the phone number FIRST if available
-            let user;
-            if (phone) {
-                user = await signInWithPhone(phone);
-            } else {
-                showError('Account phone number not linked to this code.');
-                setIsLoading(false);
-                return;
-            }
-
-            // NOW that we are signed in (request.auth.uid === user.uid),
-            // fetching the user's profile from Firestore will succeed!
-            let userData = null;
-            try {
-                const userRef = doc(firestore, 'users', user.uid);
-                const userSnap = await getDoc(userRef);
-                if (userSnap.exists()) {
-                    userData = userSnap.data();
-                }
-            } catch (err) {
-                console.warn('Could not fetch user profile post-auth:', err);
-            }
-
-            // Populate local store so the app knows who we are
-            setUser({
-                id: user.uid,
-                username: userData?.fullName || userData?.username || 'Rider',
-                fullName: userData?.fullName || userData?.username || 'Rider',
-                avatarUrl: userData?.avatarUrl || null,
-                email: user.email,
-                phone: userData?.phone || phone,
-                gender: userData?.gender,
-                ageRange: userData?.ageRange,
-                city: userData?.city,
-                yearsExperience: userData?.yearsExperience,
-                createdAt: new Date(userData?.createdAt || Date.now()),
-            });
-
-            reset();
-            router.replace('/main/(tabs)/home');
-
+            setRiderCode(riderCode);
+            router.push({ pathname: '/enter-phone', params: { loginOnly: 'true' } } as any);
         } catch (error) {
-            showError(error instanceof Error ? error.message : 'Could not continue. Please try again.');
+            if (isTransientFirestoreError(error)) {
+                showError('You appear to be offline. Please connect to the internet to verify your code.');
+            } else {
+                showError(error instanceof Error ? error.message : 'Could not continue. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }

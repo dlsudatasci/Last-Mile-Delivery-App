@@ -21,8 +21,8 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 
 ---
 
-## 2. Entity-Relationship Diagram (ERD)
-
+## 2. Entity-Relationship Diagram (ERD) 
+Last changed: 22/07/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
@@ -36,7 +36,7 @@ erDiagram
         enum gender  "Male, Female, Prefer not to Say"  
         enum ageRange  "---"  
         enum city  "---"  
-        int yearsExperience  ""  
+        enum yearsExperience  ""  
         string deliveryPlatform  "Grab, Foodpanda, Lalamove"    
         boolean acceptedPolicies  ""  
         number createdAt  "Unix Timestamp ms" 
@@ -96,8 +96,7 @@ erDiagram
     }
 
     deviations {
-        string deviationId PK "Auto-generated UUID (also stored as field)"
-        string routeId FK "Points to generatedRoutes document ID"
+        string deviationId PK "Points to generatedRoutes document ID"
         string rideId FK "Points to rides document ID"
         string userId FK "Points to users document ID"
         int index
@@ -240,23 +239,23 @@ erDiagram
 * **Document ID:** Firebase Auth UID. The document ID acts as the primary key; a separate `id` field is **not** stored in the Firestore document itself.
 * **Purpose:** Stores profile details and onboarding survey information of the rider.
 
+Last changed: 22/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `username` | String | Yes | Rider display name (same as `fullName` on onboarding) |
-| `fullName` | String | Yes | Full rider name from onboarding form |
+| `userId` | String | Yes | Firebase Auth UID |
+| `riderCode` | String | Yes | Unique rider code assigned to the participant for the study |
+| `preferredName` | String | Yes | Rider's preferred display name shown within the application |
 | `email` | String | Yes | Firebase Auth email address |
-| `phone` | String | Yes | Philippine mobile number, format: `09xxxxxxxxx` |
-| `gender` | String | Yes | Gender identity selected during onboarding |
-| `ageRange` | String | Yes | Age range category (e.g., "18-24", "25-34") |
-| `city` | String | Yes | Municipality/City where the rider delivers |
-| `yearsExperience` | String | Yes | Experience range (e.g., "<1 year", "1-2 years") |
-| `deliveryPlatform` | String | Yes | Delivery platform used (e.g., Grab, Foodpanda, Lalamove) |
-| `vehicleType` | String | Yes | Vehicle type used for deliveries (e.g., Motorcycle, Bicycle, Car) |
-| `acceptedPolicies` | Boolean | Yes | Must be `true`; agreed to Terms & Privacy |
-| `avatarUrl` | String | No | Firebase Storage download URL for profile photo |
-| `createdAt` | String | Yes | ISO 8601 string timestamp of account creation |
-| `updatedAt` | String | Yes | ISO 8601 string timestamp of last profile update |
-
+| `phoneNum` | Varchar | Yes | Philippine mobile number, format: `09xxxxxxxxx` |
+| `gender` | Enum | Yes | Gender identity selected during onboarding |
+| `ageRange` | Enum | Yes | Age range category (e.g., "18-24", "25-34") |
+| `city` | Enum |  Yes | Municipality/City where the rider primarily performs deliveries |
+| `yearsExperience` | Enum | Yes | Experience range (e.g., "<1 year", "1-2 years") |
+| `deliveryPlatform` | String | Yes | Primary delivery platform used (e.g., Grab, Foodpanda, Lalamove) |
+| `acceptedPolicies` | Boolean | Yes | Must be `true`; agreed to Terms of Service & Privacy Policy|
+| `createdAt` | Number | Yes | Unix timestamp (ms) when the user account was created |
+| `updatedAt` | Number | Yes | Unix timestamp (ms) when the profile was last updated |
+| `profilePicture` | String | No | Firebase Storage download URL for profile photo |
 ---
 
 ### 3.2. Collection: `rides`
@@ -264,30 +263,45 @@ erDiagram
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores summary stats of a completed delivery trip.
 
+Last changed: 22/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `id` | String | Yes | Same as the document ID |
+| `rideId` | String | Yes | Same as the document ID |
 | `userId` | String | Yes | Foreign key — the Firebase Auth UID of the rider |
 | `rideName` | String | Yes | Name given to the trip |
+| `startPoint` | String | Yes | Starting location of the trip |
+| `endPoint` | String | Yes | Destination entered by the rider before starting the trip |
 | `startTime` | Number | Yes | Unix timestamp (ms) when the ride started |
 | `endTime` | Number | Yes | Unix timestamp (ms) when the ride ended |
-| `duration` | Number | Yes | Total ride time in seconds |
+| `duration` | Int | Yes | Total ride time in seconds |
 | `distance` | Number | Yes | Total distance traveled in meters |
 | `averageSpeed` | Number | Yes | Average speed in m/s |
 | `maxSpeed` | Number | Yes | Peak speed in m/s |
 | `elevationGain` | Number | Yes | Total elevation gain in meters |
-| `createdAt` | Number | Yes | Unix timestamp (ms) of when the DB record was saved |
-
+| `deviationCount` | Int | Yes | Total number of deviations detected during the ride |
+| `reviewStatus` | String | Yes | Current review status of user |
+| `createdAt` | Number | Yes | Unix timestamp (ms) of when the ride record was created |
 ---
 
 ### 3.3. Subcollection: `map` → Document: `points` (Under `rides`)
 * **Path:** `/rides/{rideId}/map/points`
 * **Document ID:** Static, always `"points"`.
 * **Purpose:** Stores the full GPS breadcrumb trail separately from the summary document to stay within Firestore's 1 MB document size limit.
-
+  
+Last changed: 22/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
+| `pointsId` | String | Yes | Static document ID |
+| `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
 | `items` | Array (Object) | Yes | Ordered list of `RidePoint` coordinate objects |
+
+RidePoint Object
+| Field Name | Data Type | Required | Description / Constraints |
+| :--- | :--- | :--- | :--- |
+| `coordinate.latitude` | Number | Yes | Latitude coordinate of the recorded GPS point |
+| `coordinate.longitude` | Number | Yes | Longitude coordinate of the recorded GPS point |
+| `timestamp` | Number | Yes | Unix timestamp (ms) when the GPS point was recorded |
+| `elevation` | Number | Yes | Elevation (meters) at the recorded GPS point |
 
 #### `RidePoint` Object Shape
 ```json
@@ -308,14 +322,18 @@ erDiagram
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores each generated route during a trip. A new route is generated every time a rider deviates from the previous one — multiple generated routes are expected per trip (e.g., initial route → deviation → route 2 → deviation → route 3, and so on).
 
+Last changed: 22/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `id` | String | Yes | Same as the document ID |
-| `rideId` | String | Yes | Parent ride document ID |
-| `routePoints` | Array (Object) | Yes | Ordered list of GPS coordinate objects forming the generated route |
-| `sequence` | Number | Yes | Route generation order index (1 = initial, 2 = after first deviation, etc.) |
-| `generatedAt` | Number | Yes | Unix timestamp (ms) when this route was generated |
-
+| `routeId` | String | Yes | Same as the document ID |
+| `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
+| `type` | Enum | Yes | Type of generated route (Initial Route or Regenerated Route) |
+| `routePoints` | Array | Yes | Ordered list of RoutePoint objects representing the generated navigation route |
+| `sequence` | Number| Yes | Route generation order index (1 = initial route, 2 = first regenerated route, etc.) |
+| `generatedAt` | Number | Yes | Unix timestamp (ms) when the route was generated |
+| `eta` | Int | Yes | Estimated travel time of the generated route, in minutes |
+| `remainingDistanceOriginal` | Int | Yes | Remaining distance along the original route from the deviation point (meters) |
+| `remainingDistanceNew` | Int | Yes | Remaining distance along the regenerated route from the deviation point (meters) |
 ---
 
 ### 3.5. Sub-subcollection: `deviations` (Under `generatedRoutes`)
@@ -323,17 +341,77 @@ erDiagram
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores each deviation marker the rider tagged during or after the trip, linked to the specific generated route that was active when the deviation occurred.
 
+Last changed: 22/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `id` | String | Yes | Same as the document ID |
-| `generatedRouteId` | String | Yes | Parent generated route document ID |
-| `userId` | String | Yes | Firebase Auth UID of the rider who created it |
-| `type` | String | Yes | `'point'` (single location) or `'segment'` (range) |
-| `points` | Array (Object) | Yes | GPS coordinates of the deviation spot/segment |
-| `additionalTags` | Array (String) | No | Checklist reasons rider selected (e.g., `["Traffic"]`) |
-| `timestamp` | Number | No | Ride time offset in ms for point deviations |
-| `createdAt` | Number | Yes | Unix timestamp (ms) of record creation |
+| `deviationId` | String | Yes | Same as the document ID |
+| `routeId` | String | Yes | Parent generated route document ID (foreign key referencing generatedRoutes.routeId) |
+| `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
+| `userId` | String | Yes | Foreign key referencing users.userId (Firebase Auth UID of the rider) |
+| `index` | Int | Yes | |
+| `originalRoute` | String | Yes | |
+| `dateTime` | Number | Yes | Unix timestamp (ms) when the deviation occurred |
+| `gpsLocation` | String | Yes | |
+| `originalRouteEdge` | String | Yes | |
+| `deviatedEdge` | String | Yes | |
+| `streetName` | String | Yes | Name of the road where the deviation occurred |
+| `generatedInstruction` | String | Yes | |
+| `deviationInstruction` | String | Yes | |
+| `type` | String | Yes | Type of deviation (point or segment) |
+| `points` | Array | Yes | GPS coordinates representing the deviation location or segment |
+| `timestamp` | Number | Yes | Ride time offset (ms) for point deviations |
+| `start_timestamp` | Number | Yes | Start time offset (ms) for segment deviations |
+| `end_timestamp` | Number | Yes | End time offset (ms) for segment deviations |
+| `createdAt` | Number | Yes | Unix timestamp (ms) when the deviation record was created |
+| `mapMatchedEdge` | String | Yes | Identifier of the road network edge after map matching (e.g., 98547_93724) |
 
+
+### 3.X. Sub-subcollection: `deviationResponses` (Under `deviations`)
+* **Path:** `/rides/{rideId}/generatedRoutes/{routeId}/deviations/{deviationId}/deviationResponses/{responseId}`
+* **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
+* **Purpose:** Stores the rider's questionnaire responses describing the reason and circumstances for a recorded route deviation.
+
+Last changed: 22/07/2026
+| Field Name | Data Type | Required | Description / Constraints |
+| :--- | :--- | :--- | :--- |
+| `responseId` | String | Yes | Same as the document ID |
+| `deviationId` | String | Yes | Foreign key referencing deviations.deviationId |
+| `rideId` | String | Yes | Foreign key referencing rides.rideId |
+| `primaryReason` | Enum | Yes | Primary reason selected by the rider for deviating from the generated route |
+| `primaryReasonOther` | String | No | User-specified reason when Other is selected as the primary reason |
+| `trafficSeverity` | Enum | No | Reported traffic severity; applicable when the deviation is traffic-related |
+| `rushHourCause` | String | No | Optional explanation of why the rider believes rush hour contributed to the deviation |
+| `rushHour` | Enum | No | Whether the rider believes the traffic was caused by rush hour (Yes, No, Unsure) |
+| `chooseDuringNonRush` | String | No | Optional explanation of whether the rider would choose the same route during non-rush-hour conditions |
+| `wouldUseNonRushHour` | Enum | No | Whether the rider would use the same route during non-rush-hour conditions (Yes, No, Unsure) |
+| `blockageReason` | String | No | Optional explanation of the road blockage or hazard encountered |
+| `blockageType` | Enum | No | Type of road blockage or hazard (Flood, Accident, Road Closure, Illegal Parking, Others) |
+| `personalStopReason` | Array | No | One or more reasons for making a personal stop |
+| `personalStopType` | Enum | No | Primary type of personal stop (Break, Meal, Restroom, Refuel, Took a Call, Accident/Repair, Others) |
+| `stopDuration` | Enum | No | Approximate duration of the personal stop |
+| `deviateAgain` | Enum | Yes | Likelihood of deviating again under similar circumstances (Always, Often, Sometimes, Rarely, Never) |
+| `avoidRoadFrequency` | String | No | Optional explanation of the rider's road avoidance behavior |
+| `usuallyAvoidRoad` | Enum | Yes | Frequency with which the rider usually avoids the road |
+| `language` | String | Yes | Language version of the questionnaire completed by the rider (e.g., English or Tagalog) |
+| `otherDeviateReason` | String | No | Additional explanation for the deviation not captured by the predefined options |
+| `submittedAt` | Number| Yes | Unix timestamp (ms) when the questionnaire was submitted |
+| `createdAt` | Number| Yes | Unix timestamp (ms) when the response record was created |
+---
+
+### 3.X. Sub-subcollection: `postTripQuestionnaire_response` (Under `rides`)
+* **Path:** `/rides/{rideId}//postTripQuestionnaire_response/{rideId}`
+* **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
+* **Purpose:** Stores the rider's responses to the post-trip questionnaire completed after finishing a ride.
+
+Last changed: 22/07/2026
+| Field Name | Data Type | Required | Description / Constraints |
+| :--- | :--- | :--- | :--- |
+| `rideId` | String | Yes | Primary key and foreign key referencing rides.rideId |
+| `arrival` | String | Yes | Rider's reported arrival status or trip outcome |
+| `etaRating` | Number | Yes | Rider's rating of the estimated arrival time (ETA) |
+| `stressRating` | Number | Yes | Rider's self-reported stress level during the trip |
+| `language` | String | Yes | Language version of the questionnaire completed by the rider (e.g., English or Tagalog) |
+| `submittedAt` | Number | Yes | Unix timestamp (ms) when the questionnaire was submitted |
 ---
 
 ### 3.6. Collection: `studyParticipants`

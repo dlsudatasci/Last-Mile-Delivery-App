@@ -1,9 +1,11 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
-import { isValidPhilippineMobileNumber } from '@/lib/firebase-crud/auth';
+import { isValidPhilippineMobileNumber, resolveAuthenticatedSession, signInWithPhone } from '@/lib/firebase-crud/auth';
+import { isTransientFirestoreError } from '@/lib/firebase-crud/rides';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
-import { router } from 'expo-router';
+import { useUser } from '@/stores/useUser';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { Button, Icon, Text, TextInput } from 'react-native-paper';
@@ -22,8 +24,11 @@ const toLocalPhone = (raw: string) => {
 
 export default function EnterPhone() {
     const setOnboardingPhone = useOnboarding(state => state.setPhone);
+    const setUser = useUser(state => state.setUser);
+    const { loginOnly } = useLocalSearchParams<{ loginOnly: string }>();
 
     const [phone, setPhone] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarType, setSnackbarType] = useState<SnackbarType>('error');
@@ -43,14 +48,40 @@ export default function EnterPhone() {
     };
 
     const handleContinue = async () => {
+        if (isLoading) return;
         const localPhone = toLocalPhone(phone);
         if (!isValidPhilippineMobileNumber(localPhone)) {
             showError('Enter a valid Philippine mobile number (e.g. 912 345 6789).');
             return;
         }
 
-        setOnboardingPhone(localPhone);
-        router.push('/create-profile');
+        setIsLoading(true);
+        try {
+            // Attempt to sign in silently
+            const user = await signInWithPhone(localPhone);
+            const { profile } = await resolveAuthenticatedSession(user);
+            if (profile) {
+                setUser(profile);
+            }
+            router.replace('/main/(tabs)/home');
+        } catch (error: any) {
+            if (error.message === 'account-not-found') {
+                if (loginOnly === 'true') {
+                    showError('This code is already registered to a different phone number.');
+                } else {
+                    setOnboardingPhone(localPhone);
+                    router.push('/create-profile');
+                }
+            } else {
+                if (isTransientFirestoreError(error)) {
+                    showError('You appear to be offline. Please connect to the internet to verify your phone.');
+                } else {
+                    showError(error.message || 'An error occurred.');
+                }
+            }
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -96,6 +127,8 @@ export default function EnterPhone() {
                         contentStyle={styles.buttonContent}
                         labelStyle={styles.buttonLabel}
                         onPress={handleContinue}
+                        loading={isLoading}
+                        disabled={isLoading}
                     >
                         Continue
                     </Button>
