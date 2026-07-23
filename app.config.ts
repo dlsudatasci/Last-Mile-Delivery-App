@@ -9,7 +9,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         ...config,
         name: 'Devia',
         slug: 'devia',
-        owner: 'andre.swe',
+        owner: 'nvrzsa',
         version: '1.0.1',
         orientation: 'portrait',
         icon: './assets/images/devia2.png',
@@ -121,14 +121,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
                 origin: false,
             },
             eas: {
-                projectId: 'de42ccc7-d87b-48b3-9c36-4135c9a8d736',
+                projectId: 'f84c876d-67a2-439d-ab33-80f49873ace0',
             },
         },
         runtimeVersion: {
             policy: 'appVersion',
         },
         updates: {
-            url: 'https://u.expo.dev/de42ccc7-d87b-48b3-9c36-4135c9a8d736',
+            url: 'https://u.expo.dev/f84c876d-67a2-439d-ab33-80f49873ace0',
         },
     };
     return expoConfig;
