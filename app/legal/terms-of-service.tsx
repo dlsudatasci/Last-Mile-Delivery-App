@@ -62,45 +62,37 @@ const TermsOfServicePage = () => {
                     </Text>
                     <View style={styles.dataUseList}>
                         <Text style={styles.dataUseItem}>
-                            • You will be informed of the application's purpose, data collection process, and terms and
-                            conditions. Consent will be established once you agree to these terms.
+                            1. Participants will be informed of the application’s purpose, data collection process, and terms and conditions. Consent will be established once participants agree to these terms.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • You will select or be assigned a target number of delivery submissions to complete within
-                            a specified period.
+                            2. Participants will select or be assigned a target number of delivery submissions to complete within a specified period.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • You will use the mobile crowdsourcing application during your normal delivery operations to
-                            record relevant delivery data.
+                            3. Participants will use the mobile crowdsourcing application during their normal delivery operations to record relevant delivery data.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • Before starting each delivery, you will manually initiate data collection through the
-                            application.
+                            4. Before starting each delivery, participants will manually initiate data collection through the application.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • The application will record the platform-suggested route, including the estimated time of
-                            arrival (ETA), as provided by the delivery service.
+                            5. The application will record the platform-suggested route, including the estimated time of arrival (ETA), as provided by the delivery service.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • Real-time delivery data will be collected, including GPS data, timestamps, and geospatial
-                            information.
+                            6. Real-time delivery data will be collected, including GPS data, timestamps, and geospatial information.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • The application will detect and log any deviations from the suggested route. After
-                            completing each delivery, you may be asked brief questions regarding your routing decisions.
+                            7. The application will detect and log any deviations from the suggested route. After completing each delivery, participants may be asked brief questions regarding their routing decisions.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • The application will include a checklist that allows you to determine whether your
-                            submission meets the required criteria or if additional information is needed. Final
-                            validation of all submissions will be conducted by the researchers, and only verified entries
-                            will be counted toward quota fulfillment.
+                            8. The application will include a checklist that allows participants to determine whether their submission meets the required criteria or if additional information is needed. Final validation of all submissions will be conducted by the researchers, and only verified entries will be counted toward quota fulfillment.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • You will manually end data collection after each delivery.
+                            9. Participants will manually end data collection after each delivery.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • Additional follow-up questions may be administered to gather further insights into your
-                            decision-making processes.
+                            10. Participants may request compensation through the application upon completing the required quota or upon withdrawal from the study. All requests will be verified before compensation is released through online payment channels.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            11. Additional follow-up questions may be administered to gather further insights into participants’ decision-making processes.
                         </Text>
                     </View>
                 </Section>
@@ -265,7 +257,7 @@ const TermsOfServicePage = () => {
                     <Text>
                         If you have any questions at any time about this study, or if you experience any non-normative
                         sensations because of participation, or to exercise your data privacy rights, you may contact
-                        the researcher at [bien_aaron_miranda@dlsu.edu.ph].
+                        the researcher via the proper channels.
                     </Text>
                     <Text style={styles.marginTop}>
                         If you have any questions regarding your rights as a research participant, or if problems arise
