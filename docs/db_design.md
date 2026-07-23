@@ -89,9 +89,10 @@ erDiagram
         array routePoints "Generated route GPS coordinate array"
         number sequence "Route generation order index"
         number generatedAt "Unix Timestamp ms"
-        int eta "in minutes"
-        int remainingDistanceOriginal "in meters"
-        int remainingDistanceNew "in meters" 
+        number remainingTravelTimeOriginal "in seconds"
+        number remainingTravelTimeNew "in seconds"
+        number remainingDistanceOriginal "in meters"
+        number remainingDistanceNew "in meters"
     }
 
     deviations {

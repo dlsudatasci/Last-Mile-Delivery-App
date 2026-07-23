@@ -1,4 +1,4 @@
-import { RidePoint } from '@/lib/store/useRideStore';
+import { GeneratedRoute, RidePoint } from '@/lib/store/useRideStore';
 import { firestore } from '@/lib/utils/firebaseConfig';
 import { getAuth } from '@react-native-firebase/auth';
 import {
@@ -47,6 +47,7 @@ export interface RideData {
 
 export interface NewRideData extends Omit<RideData, 'id' | 'createdAt' | 'annotations'> {
     annotations: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>[];
+    generatedRoutes?: GeneratedRoute[];
 }
 
 export interface FetchRideData extends RideData {
@@ -174,7 +175,7 @@ export const saveRide = async (rideData: NewRideData) => {
 
         const batch = writeBatch(firestore);
         // Save main ride data without points
-        const { points, annotations = [], isGPXUpload, fromWeb, ...rideDataWithoutPoints } = rideData;
+        const { points, annotations = [], generatedRoutes = [], isGPXUpload, fromWeb, ...rideDataWithoutPoints } = rideData;
 
         if (!points || points.length === 0) {
             throw new Error('No ride points provided');
@@ -230,6 +231,16 @@ export const saveRide = async (rideData: NewRideData) => {
             createdAt: Date.now(),
             isGPXUpload: gpxUpload,
             fromWeb: webSource,
+        });
+
+        // Save generated routes to top-level generatedRoutes collection
+        const generatedRoutesCollectionRef = collection(firestore, 'generatedRoutes');
+        generatedRoutes.forEach(route => {
+            const routeDocRef = doc(generatedRoutesCollectionRef, route.routeId);
+            batch.set(routeDocRef, {
+                ...route,
+                rideId: rideDocRef.id,
+            });
         });
 
         // Save points in a single document under map/points
