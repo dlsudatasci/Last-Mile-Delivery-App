@@ -191,6 +191,21 @@ export const useRideStore = create<RideState>((set, get) => ({
             // First, reset the ride state
             get().resetRide();
 
+            // Seed the initial generated route so the first suggested route is always captured
+            const initialRouteId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+            const initialGeneratedRoute: GeneratedRoute = {
+                routeId: initialRouteId,
+                rideId: '', // Will be populated in saveRide
+                type: 'Initial Route',
+                routePoints: activeRouteCoordinates,
+                sequence: 1,
+                generatedAt: Date.now(),
+                remainingTravelTimeOriginal: null,
+                remainingTravelTimeNew: activeRouteDurationSec,
+                remainingDistanceOriginal: null,
+                remainingDistanceNew: activeRouteDistanceM,
+            };
+
             // Then set the recording state
             set({
                 isRecording: true,
@@ -209,8 +224,8 @@ export const useRideStore = create<RideState>((set, get) => ({
                 suggestedRouteDurationSec,
                 suggestedRouteDistanceM,
                 activeRouteUpdatedAt,
-                generatedRoutes: [],
-                activeGeneratedRouteId: null,
+                generatedRoutes: activeRouteCoordinates.length >= 2 ? [initialGeneratedRoute] : [],
+                activeGeneratedRouteId: activeRouteCoordinates.length >= 2 ? initialRouteId : null,
             });
 
             // Finally, update AsyncStorage flags
@@ -279,6 +294,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 activeRouteDistanceM,
                 suggestedRouteDurationSec,
                 suggestedRouteDistanceM,
+                generatedRoutes,
             } = get();
             let pointsForSave = points;
             if (pointsForSave.length === 0) {
@@ -299,6 +315,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 suggestedRouteDurationSec: suggestedRouteDurationSec || activeRouteDurationSec || undefined,
                 rideName: tripName?.trim() || 'Metro Manila Trip',
                 annotations,
+                generatedRoutes,
                 isPublic: false,
                 isGPXUpload: false,
                 fromWeb: false,
