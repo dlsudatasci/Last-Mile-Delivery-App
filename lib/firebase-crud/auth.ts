@@ -71,11 +71,14 @@ export async function signInWithPhone(phone: string) {
 
 export interface OnboardingProfileData {
     fullName: string;
+    preferredName: string;
     gender: string;
     ageRange: string;
     city: string;
     yearsExperience: string;
+    deliveryPlatform: string;
     phone: string;
+    riderCode: string;
     acceptedPolicies: boolean;
 }
 
@@ -90,10 +93,13 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
             // keep `username` populated so existing home/profile screens work
             username: data.fullName,
             fullName: data.fullName,
+            preferredName: data.preferredName,
+            riderCode: data.riderCode,
             gender: data.gender,
             ageRange: data.ageRange,
             city: data.city,
             yearsExperience: data.yearsExperience,
+            deliveryPlatform: data.deliveryPlatform,
             phone: data.phone,
             acceptedPolicies: data.acceptedPolicies,
             updatedAt: new Date().toISOString(),
@@ -182,7 +188,11 @@ export async function getUserProfile(uid: string) {
             };
         }
     } catch (error) {
-        console.error('Error getting user profile:', error);
+        // Offline / transient Firestore failures are expected on flaky networks and
+        // are handled by callers (local-profile fallback in resolveAuthenticatedSession,
+        // and a guarded catch in edit-profile). Log as a warning instead of a red error
+        // so an expected offline state doesn't look like a crash.
+        console.warn('Getting user profile failed (will fall back if possible):', error);
         throw error;
     }
 }

@@ -1,12 +1,18 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
+import { DEVIA_ROUTE_STUDY, getStudyProgress } from '@/lib/studies';
+import { useRidesStore } from '@/lib/store/useRidesStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, MD3Theme, ProgressBar, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, MD3Theme, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function StudyDetails() {
     const theme = useTheme();
     const styles = getStyles(theme);
+    const { rides, totalRideCount, fetchRides } = useRidesStore();
 
     const params = useLocalSearchParams<{
         name?: string;
@@ -17,17 +23,18 @@ export default function StudyDetails() {
         dates?: string;
     }>();
 
-    const name = params.name ?? 'Study';
-    const joined = params.joined === '1';
-    const tripsDone = Number(params.tripsDone ?? 0);
-    const tripsRequired = Number(params.tripsRequired ?? 10) || 10;
-    const reward = Number(params.reward ?? 250);
-    const dates = params.dates || 'June 13, 2025 – June 30, 2025';
-    const progress = tripsDone / tripsRequired;
+    useFocusEffect(
+        useCallback(() => {
+            fetchRides(true);
+        }, [fetchRides])
+    );
 
-    // Mock breakdown for the joined view.
-    const validated = Math.max(0, tripsDone - 2);
-    const pending = Math.min(2, tripsDone);
+    const name = params.name ?? DEVIA_ROUTE_STUDY.name;
+    const tripsDone = Math.max(Number(params.tripsDone ?? 0), totalRideCount, rides.length);
+    const tripsRequired = Number(params.tripsRequired ?? DEVIA_ROUTE_STUDY.tripsRequired) || DEVIA_ROUTE_STUDY.tripsRequired;
+    const reward = Number(params.reward ?? DEVIA_ROUTE_STUDY.reward);
+    const dates = params.dates || DEVIA_ROUTE_STUDY.dates;
+    const { creditedTrips, overLimitTrips, progress } = getStudyProgress(tripsDone, tripsRequired);
 
     const whatYoullDo = [
         'Record your delivery trips',
@@ -39,7 +46,7 @@ export default function StudyDetails() {
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
             <View style={styles.header}>
-                <IconButton icon="chevron-left" size={sizes.size32} onPress={() => router.back()} />
+                <HeaderBackButton onPress={() => router.back()} />
                 <Text style={styles.headerTitle} numberOfLines={1}>
                     {name}
                 </Text>
@@ -50,10 +57,8 @@ export default function StudyDetails() {
                 {/* Banner */}
                 <View style={styles.banner}>
                     <Icon source="motorbike" size={sizes.size64} color={theme.colors.primary} />
-                    <View style={[styles.badge, joined ? styles.badgeJoined : styles.badgeNotJoined]}>
-                        <Text style={[styles.badgeText, joined ? styles.badgeTextJoined : styles.badgeTextNotJoined]}>
-                            {joined ? 'Joined' : 'Not Joined'}
-                        </Text>
+                    <View style={[styles.badge, styles.badgeJoined]}>
+                        <Text style={[styles.badgeText, styles.badgeTextJoined]}>Joined</Text>
                     </View>
                 </View>
 
@@ -67,51 +72,46 @@ export default function StudyDetails() {
                     <Text style={[styles.factValue, styles.reward]}>₱{reward}</Text>
                 </View>
 
-                {/* Progress (joined) */}
-                {joined && (
-                    <>
-                        <Text style={styles.progressLabel}>Progress</Text>
-                        <View style={styles.progressRow}>
-                            <Text style={styles.progressValue}>
-                                {tripsDone} / {tripsRequired} Trips
-                            </Text>
-                            <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
-                        </View>
-                        <ProgressBar progress={progress} color={theme.colors.primary} style={styles.progressBar} />
+                <Text style={styles.progressLabel}>Progress</Text>
+                <View style={styles.progressRow}>
+                    <Text style={styles.progressValue}>
+                        {creditedTrips} / {tripsRequired} credited trips
+                    </Text>
+                    <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
+                </View>
+                <ProgressBar progress={progress} color={theme.colors.primary} style={styles.progressBar} />
 
-                        <View style={styles.statsRow}>
-                            <View style={styles.statCard}>
-                                <Text style={styles.statValue}>{tripsDone}</Text>
-                                <Text style={styles.statLabel}>Trips Recorded</Text>
-                            </View>
-                            <View style={styles.statCard}>
-                                <Text style={[styles.statValue, { color: '#16A34A' }]}>{validated}</Text>
-                                <Text style={styles.statLabel}>Validated</Text>
-                            </View>
-                            <View style={styles.statCard}>
-                                <Text style={[styles.statValue, { color: '#CA8A04' }]}>{pending}</Text>
-                                <Text style={styles.statLabel}>Pending</Text>
-                            </View>
-                        </View>
+                <View style={styles.statsRow}>
+                    <View style={styles.statCard}>
+                        <Text style={styles.statValue}>{tripsDone}</Text>
+                        <Text style={styles.statLabel}>Trips Recorded</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                        <Text style={[styles.statValue, { color: '#16A34A' }]}>{creditedTrips}</Text>
+                        <Text style={styles.statLabel}>Credited</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                        <Text style={[styles.statValue, { color: '#CA8A04' }]}>{overLimitTrips}</Text>
+                        <Text style={styles.statLabel}>Over Limit</Text>
+                    </View>
+                </View>
 
-                        <View style={styles.rewardNote}>
-                            <Icon source="gift-outline" size={sizes.medium} color={theme.colors.primary} />
-                            <Text style={styles.rewardNoteText}>₱{reward} after {tripsRequired} validated trips</Text>
-                        </View>
+                <View style={styles.rewardNote}>
+                    <Icon source="gift-outline" size={sizes.medium} color={theme.colors.primary} />
+                    <Text style={styles.rewardNoteText}>Up to ₱{reward} for {tripsRequired} credited trips</Text>
+                </View>
 
-                        <Button
-                            mode="contained"
-                            buttonColor={theme.colors.primary}
-                            textColor="#ffffff"
-                            style={styles.primaryButton}
-                            contentStyle={styles.primaryButtonContent}
-                            labelStyle={styles.primaryButtonLabel}
-                            onPress={() => router.push('/main/(tabs)/map')}
-                        >
-                            View My Trips
-                        </Button>
-                    </>
-                )}
+                <Button
+                    mode="contained"
+                    buttonColor={theme.colors.primary}
+                    textColor="#ffffff"
+                    style={styles.primaryButton}
+                    contentStyle={styles.primaryButtonContent}
+                    labelStyle={styles.primaryButtonLabel}
+                    onPress={() => router.push('/main/(tabs)/map')}
+                >
+                    View My Trips
+                </Button>
 
                 {/* Sections (always visible for easy reading) */}
                 <View style={styles.section}>
@@ -143,24 +143,11 @@ export default function StudyDetails() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Compensation</Text>
                     <Text style={styles.bodyText}>
-                        Earn ₱{reward} after completing {tripsRequired} validated trips. Your data is confidential and
-                        used for research purposes only.
+                        Up to {tripsRequired} trips per rider can be credited. Maximum study compensation is ₱{reward}
+                        per user. Your data is confidential and used for research purposes only.
                     </Text>
                 </View>
 
-                {!joined && (
-                    <Button
-                        mode="contained"
-                        buttonColor={theme.colors.primary}
-                        textColor="#ffffff"
-                        style={styles.primaryButton}
-                        contentStyle={styles.primaryButtonContent}
-                        labelStyle={styles.primaryButtonLabel}
-                        onPress={() => router.push('/study-consent')}
-                    >
-                        Join Study
-                    </Button>
-                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -195,10 +182,8 @@ const getStyles = (theme: MD3Theme) =>
             borderRadius: sizes.size32,
         },
         badgeJoined: { backgroundColor: '#DCFCE7' },
-        badgeNotJoined: { backgroundColor: theme.colors.surface },
         badgeText: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.tiny },
         badgeTextJoined: { color: '#16A34A' },
-        badgeTextNotJoined: { color: theme.colors.onSurfaceVariant },
         factRow: {
             flexDirection: 'row',
             alignItems: 'center',

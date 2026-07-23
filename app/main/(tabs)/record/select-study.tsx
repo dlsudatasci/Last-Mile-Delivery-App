@@ -1,8 +1,12 @@
-import { MOCK_ACTIVE_STUDIES, MOCK_AVAILABLE_STUDIES } from '@/lib/mock/studies';
+import HeaderBackButton from '@/components/common/HeaderBackButton';
+import { getJoinedDeviaRouteStudy } from '@/lib/studies';
+import { useRidesStore } from '@/lib/store/useRidesStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
+import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, MD3Theme, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { Icon, MD3Theme, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TEAL = '#0E6E73';
@@ -10,6 +14,14 @@ const TEAL = '#0E6E73';
 export default function SelectStudy() {
     const theme = useTheme();
     const styles = getStyles(theme);
+    const { rides, totalRideCount, fetchRides } = useRidesStore();
+    const study = getJoinedDeviaRouteStudy(Math.max(totalRideCount, rides.length));
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchRides(true);
+        }, [fetchRides])
+    );
 
     const chooseStudy = (name: string) => {
         router.push({ pathname: '/main/(tabs)/record/study-information', params: { study: name } });
@@ -18,39 +30,24 @@ export default function SelectStudy() {
     return (
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <View style={styles.header}>
-                <IconButton icon="chevron-left" size={sizes.size32} onPress={() => router.back()} />
+                <HeaderBackButton onPress={() => router.back()} />
                 <Text style={styles.headerTitle}>Select Study</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <Text style={styles.sectionLabel}>JOINED STUDIES</Text>
-                {MOCK_ACTIVE_STUDIES.map(study => (
-                    <TouchableRipple key={study.id} style={styles.card} borderless onPress={() => chooseStudy(study.name)}>
-                        <View style={styles.row}>
-                            <View style={styles.flex}>
-                                <Text style={styles.studyName}>{study.name}</Text>
-                                <Text style={styles.studyMeta}>
-                                    {study.tripsDone} / {study.tripsRequired} Trips
-                                </Text>
-                            </View>
-                            <Icon source="chevron-right" size={sizes.size28} color="#94A3B8" />
+                <TouchableRipple style={styles.card} borderless onPress={() => chooseStudy(study.name)}>
+                    <View style={styles.row}>
+                        <View style={styles.flex}>
+                            <Text style={styles.studyName}>{study.name}</Text>
+                            <Text style={styles.studyMeta}>
+                                {study.creditedTrips} / {study.tripsRequired} credited trips · {study.tripsRecorded} recorded
+                            </Text>
                         </View>
-                    </TouchableRipple>
-                ))}
-
-                <Text style={styles.sectionLabel}>AVAILABLE STUDIES</Text>
-                {MOCK_AVAILABLE_STUDIES.map(study => (
-                    <TouchableRipple key={study.id} style={styles.card} borderless onPress={() => chooseStudy(study.name)}>
-                        <View style={styles.row}>
-                            <View style={styles.flex}>
-                                <Text style={styles.studyName}>{study.name}</Text>
-                                <Text style={styles.notJoined}>Not Joined</Text>
-                            </View>
-                            <Icon source="chevron-right" size={sizes.size28} color="#94A3B8" />
-                        </View>
-                    </TouchableRipple>
-                ))}
+                        <Icon source="chevron-right" size={sizes.size28} color="#94A3B8" />
+                    </View>
+                </TouchableRipple>
 
                 <TouchableRipple borderless onPress={() => router.push('/main/(tabs)/community')} style={styles.viewAll}>
                     <Text style={styles.viewAllText}>View All Studies</Text>
@@ -92,7 +89,6 @@ const getStyles = (theme: MD3Theme) =>
         row: { flexDirection: 'row', alignItems: 'center' },
         studyName: { fontFamily: 'LGEIHeadline-Bold', fontSize: fontSizes.small, color: theme.colors.onSurface },
         studyMeta: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: theme.colors.onSurfaceVariant, marginTop: 2 },
-        notJoined: { fontFamily: 'LGEIText-Regular', fontSize: fontSizes.tiny, color: '#94A3B8', marginTop: 2 },
         viewAll: { alignSelf: 'center', marginTop: sizes.medium, padding: sizes.small },
         viewAllText: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small, color: TEAL },
     });
