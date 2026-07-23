@@ -1,4 +1,4 @@
-<img width="492" height="505" alt="image" src="https://github.com/user-attachments/assets/11c720ee-c5e6-4fbf-bdcc-11eaa1f92a10" /># Database Design & Schema Architecture
+# Database Design & Schema Architecture
 
 **Project Name:** Devia  
 **Database Type:** Google Cloud Firestore (NoSQL Document Store)  
