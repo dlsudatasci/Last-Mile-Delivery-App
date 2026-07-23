@@ -92,7 +92,7 @@ export default function RiderCode() {
             try {
                 const userRef = doc(firestore, 'users', user.uid);
                 const userSnap = await getDoc(userRef);
-                if (userSnap.exists) {
+                if (userSnap.exists()) {
                     userData = userSnap.data();
                 }
             } catch (err) {

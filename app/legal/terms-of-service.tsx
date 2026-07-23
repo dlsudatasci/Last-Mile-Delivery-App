@@ -99,11 +99,6 @@ const TermsOfServicePage = () => {
                             • You will manually end data collection after each delivery.
                         </Text>
                         <Text style={styles.dataUseItem}>
-                            • You may request compensation through the application upon completing the required quota or
-                            upon withdrawal from the study. All requests will be verified before compensation is released
-                            through online payment channels.
-                        </Text>
-                        <Text style={styles.dataUseItem}>
                             • Additional follow-up questions may be administered to gather further insights into your
                             decision-making processes.
                         </Text>
