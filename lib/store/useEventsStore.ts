@@ -16,7 +16,6 @@ interface EventsState {
     };
     fetchEvents: (refresh?: boolean) => Promise<void>;
     fetchMoreEvents: () => Promise<void>;
-    setMockEvents: (mockEvents: FetchEventData[]) => void;
     selectEvent: (eventId: string) => Promise<FetchEventData | undefined>;
     clearEvents: () => void;
 }
@@ -135,10 +134,6 @@ export const useEventsStore = create<EventsState>((set, get) => ({
         } finally {
             set({ isLoading: false });
         }
-    },
-
-    setMockEvents: (mockEvents: FetchEventData[]) => {
-        set({ events: mockEvents });
     },
 
     clearEvents: () => {

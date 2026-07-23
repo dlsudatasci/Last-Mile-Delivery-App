@@ -2,13 +2,15 @@ import OpenCameraView from '@/components/camera/CameraView';
 import SpinningWheel from '@/components/common/SpinningWheel';
 import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
-import { getAsyncFlag, useRideStore } from '@/lib/store/useRideStore';
+import { calculateRemainingDistanceM, getAsyncFlag, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
+import { calculateSpeedAdjustedEtaSec, getDistanceToRouteM, getRoute, LngLat } from '@/lib/utils/directions';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { buildTripRouteTitle } from '@/lib/utils/tripTitle';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import {
     Button,
     Icon,
@@ -24,7 +26,6 @@ import {
 export default function Record() {
     const theme = useTheme();
 
-    const navigation = useNavigation();
     const [reportModalVisible, setReportModalVisible] = useState(false);
     const [annotation, setAnnotation] = useState<PredefinedAnnotation | null>(null);
     const [reportDescription, setReportDescription] = useState('');
@@ -44,34 +45,184 @@ export default function Record() {
         currentSpeed,
         duration,
         points,
+        activeRouteSteps,
+        activeRouteCoordinates,
+        activeRouteDestination,
+        activeRouteDurationSec,
+        activeRouteDistanceM,
+        activeRouteUpdatedAt,
+        routeUpdateStatus,
+        deviationEvents,
         startRide,
-        pauseRide,
-        resumeRide,
         finishRide,
         increaseDuration,
+        syncDurationFromClock,
         resetRide,
         addAnnotation,
         setRecording,
+        setActiveRoute,
+        setRouteUpdateStatus,
+        addDeviationEvent,
     } = useRideStore();
 
     // const [duration, setDuration] = useState(0);
-    const [appState, setAppState] = useState(AppState.currentState);
-    const [hasBackgroundPermission, setHasBackgroundPermission] = useState<boolean | null>(null);
+    const [backgroundPermissionWarningShown, setBackgroundPermissionWarningShown] = useState(false);
 
     // ETA generated on the Route Preview screen; counts down as the trip runs.
-    const { etaSec } = useLocalSearchParams<{ etaSec?: string; destination?: string }>();
-    const etaTotalSec = Number(etaSec ?? 0);
-    const etaRemainingSec = etaTotalSec > 0 ? Math.max(0, etaTotalSec - duration) : 0;
+    const { etaSec, routeDistanceM, destLng, destLat, destination } = useLocalSearchParams<{
+        etaSec?: string;
+        destination?: string;
+        routeDistanceM?: string;
+        destLng?: string;
+        destLat?: string;
+    }>();
+    const etaTotalSec = activeRouteDurationSec || Number(etaSec ?? 0);
+    const initialRouteDistanceM = Number(routeDistanceM ?? 0);
+    const currentRouteDistanceM = activeRouteDistanceM || initialRouteDistanceM;
+    const etaElapsedSinceUpdateSec = activeRouteUpdatedAt ? Math.max(0, Math.floor((Date.now() - activeRouteUpdatedAt) / 1000)) : duration;
+    const etaRemainingSec = etaTotalSec > 0 ? Math.max(0, etaTotalSec - etaElapsedSinceUpdateSec) : 0;
+    const destinationCoordinates: LngLat | null = useMemo(
+        () =>
+            activeRouteDestination ??
+            (destLng && destLat && Number.isFinite(Number(destLng)) && Number.isFinite(Number(destLat))
+                ? [Number(destLng), Number(destLat)]
+                : null),
+        [activeRouteDestination, destLat, destLng]
+    );
+    const destinationPoint: RidePoint | null = destinationCoordinates
+            ? {
+                  coordinate: {
+                      longitude: destinationCoordinates[0],
+                      latitude: destinationCoordinates[1],
+                  },
+                  timestamp: Date.now(),
+              }
+            : null;
+    const currentPoint = points.length > 0 ? points[points.length - 1] : null;
+    const nextInstruction = getNextNavigationInstruction(currentPoint, activeRouteSteps);
+    const [previousRemainingDistanceM, setPreviousRemainingDistanceM] = useState<number | undefined>(undefined);
+    const remainingDistanceM = calculateRemainingDistanceM({
+        currentLocation: currentPoint,
+        destination: destinationPoint,
+        routeDistanceM: currentRouteDistanceM > 0 ? currentRouteDistanceM : undefined,
+        traveledDistanceM: totalDistance,
+        previousRemainingM: previousRemainingDistanceM,
+    });
+    const speedAdjustedEtaRemainingSec = calculateSpeedAdjustedEtaSec({
+        trafficRemainingSec: etaRemainingSec,
+        remainingDistanceM,
+        currentSpeedMps: currentSpeed,
+    });
     const autoStartedRef = useRef(false);
+    const offRouteCountRef = useRef(0);
+    const lastRerouteAtRef = useRef(0);
+    const lastTrafficRefreshAtRef = useRef(0);
+    const isRouteRequestActiveRef = useRef(false);
 
     // Timer effect for duration
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (isRecording && !isPaused && startTime) {
+            syncDurationFromClock();
             interval = setInterval(() => increaseDuration(), 1000);
         }
         return () => clearInterval(interval);
-    }, [isRecording, isPaused, startTime]);
+    }, [increaseDuration, isPaused, isRecording, startTime, syncDurationFromClock]);
+
+    useEffect(() => {
+        setPreviousRemainingDistanceM(remainingDistanceM);
+    }, [remainingDistanceM]);
+
+    useEffect(() => {
+        if (!isRecording || isPaused || !currentPoint || !destinationCoordinates || activeRouteCoordinates.length < 2 || isRouteRequestActiveRef.current) {
+            return;
+        }
+
+        const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
+        const distanceFromRouteM = getDistanceToRouteM(currentLngLat, activeRouteCoordinates);
+        const now = Date.now();
+
+        if (distanceFromRouteM < 90) {
+            offRouteCountRef.current = 0;
+            return;
+        }
+
+        offRouteCountRef.current += 1;
+        if (offRouteCountRef.current < 2 || now - lastRerouteAtRef.current < 45000) {
+            return;
+        }
+
+        lastRerouteAtRef.current = now;
+        offRouteCountRef.current = 0;
+        isRouteRequestActiveRef.current = true;
+        const previousInstruction = nextInstruction?.text;
+        const previousEtaSec = etaRemainingSec;
+        setRouteUpdateStatus('rerouting');
+
+        getRoute(currentLngLat, destinationCoordinates)
+            .then(route => {
+                if (!route) return;
+                setActiveRoute(route, destinationCoordinates);
+                setPreviousRemainingDistanceM(route.distanceM);
+                addDeviationEvent({
+                    timestamp: now,
+                    location: currentLngLat,
+                    offRouteDistanceM: distanceFromRouteM,
+                    previousInstruction,
+                    newInstruction: route.steps[0]?.instruction,
+                    previousEtaSec,
+                    newEtaSec: route.durationSec,
+                });
+            })
+            .catch(error => {
+                console.warn('Failed to reroute after deviation:', error);
+            })
+            .finally(() => {
+                isRouteRequestActiveRef.current = false;
+                setRouteUpdateStatus('idle');
+            });
+    }, [
+        activeRouteCoordinates,
+        addDeviationEvent,
+        currentPoint,
+        destinationCoordinates,
+        etaRemainingSec,
+        isPaused,
+        isRecording,
+        nextInstruction?.text,
+        setActiveRoute,
+        setRouteUpdateStatus,
+    ]);
+
+    useEffect(() => {
+        if (!isRecording || isPaused || !currentPoint || !destinationCoordinates || isRouteRequestActiveRef.current) {
+            return;
+        }
+
+        const now = Date.now();
+        const refreshEveryMs = 3 * 60 * 1000;
+        const lastRefresh = lastTrafficRefreshAtRef.current || activeRouteUpdatedAt || 0;
+        if (now - lastRefresh < refreshEveryMs) return;
+
+        lastTrafficRefreshAtRef.current = now;
+        isRouteRequestActiveRef.current = true;
+        setRouteUpdateStatus('traffic');
+
+        const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
+        getRoute(currentLngLat, destinationCoordinates)
+            .then(route => {
+                if (!route) return;
+                setActiveRoute(route, destinationCoordinates);
+                setPreviousRemainingDistanceM(route.distanceM);
+            })
+            .catch(error => {
+                console.warn('Failed to refresh live traffic route:', error);
+            })
+            .finally(() => {
+                isRouteRequestActiveRef.current = false;
+                setRouteUpdateStatus('idle');
+            });
+    }, [activeRouteUpdatedAt, currentPoint, destinationCoordinates, isPaused, isRecording, setActiveRoute, setRouteUpdateStatus]);
 
     // Check background location permission on mount
     useEffect(() => {
@@ -85,12 +236,17 @@ export default function Record() {
             const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
             if (backgroundStatus !== 'granted') {
                 console.error('Background location permission not granted');
+                if (!backgroundPermissionWarningShown) {
+                    setBackgroundPermissionWarningShown(true);
+                    Alert.alert(
+                        'Background Location Recommended',
+                        'Devia can keep recording while the app is in the background when background location is enabled.'
+                    );
+                }
                 return;
             }
-
-            setHasBackgroundPermission(backgroundStatus === 'granted');
         })();
-    }, []);
+    }, [backgroundPermissionWarningShown]);
 
     // State recovery effect - sync AsyncStorage with Zustand state
     useEffect(() => {
@@ -104,14 +260,19 @@ export default function Record() {
                     console.log('State mismatch detected, syncing...');
                     setRecording(asyncIsRecording);
 
-                    // If AsyncStorage says we're recording but Zustand says we're not,
-                    // we need to check if location updates are actually running
                     if (asyncIsRecording && !isRecording) {
                         const isLocationRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
-                        if (!isLocationRunning) {
-                            // Location updates aren't running, so reset the state
-                            console.log('Location updates not running, resetting state');
-                            await resetRide();
+                        if (!isLocationRunning && !asyncIsPaused) {
+                            console.log('Location updates not running, attempting to resume tracking');
+                            await Location.startLocationUpdatesAsync('location-recording', {
+                                accuracy: Location.Accuracy.BestForNavigation,
+                                timeInterval: 2000,
+                                distanceInterval: 2,
+                                foregroundService: {
+                                    notificationTitle: 'Recording Delivery',
+                                    notificationBody: 'Devia is recording your delivery trip',
+                                },
+                            });
                         }
                     }
                 }
@@ -120,24 +281,6 @@ export default function Record() {
             }
         })();
     }, []);
-
-    // Listen for app state changes
-    useEffect(() => {
-        const subscription = AppState.addEventListener('change', async nextAppState => {
-            if (appState.match(/active/) && nextAppState.match(/inactive|background/) && isRecording && !isPaused) {
-                // Check permission again in case it changed
-                const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-                if (backgroundStatus !== 'granted') {
-                    const result = await pauseRide();
-                    if (!result) {
-                        console.error('Failed to pause ride');
-                    }
-                }
-            }
-            setAppState(nextAppState);
-        });
-        return () => subscription.remove();
-    }, [appState, isRecording, isPaused, pauseRide]);
 
     const formatDuration = (seconds: number) => {
         const hrs = Math.floor(seconds / 3600);
@@ -201,20 +344,6 @@ export default function Record() {
         }
     }, []);
 
-    const handlePause = async () => {
-        const result = await pauseRide();
-        if (!result) {
-            console.error('Failed to pause ride');
-        }
-    };
-
-    const handleResume = async () => {
-        const result = await resumeRide();
-        if (!result) {
-            console.error('Failed to resume ride');
-        }
-    };
-
     const finishRideProcess = async () => {
         const messages = [
             'Preparing trip data...',
@@ -228,13 +357,36 @@ export default function Record() {
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
-        // Start saving the ride using mock
-        const result = await finishRide();
+        const latestRidePoints = useRideStore.getState().points;
+        let originPoint = latestRidePoints[0] ?? currentPoint;
+        if (!originPoint) {
+            try {
+                const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                originPoint = {
+                    coordinate: {
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                    },
+                    timestamp: location.timestamp,
+                };
+            } catch (locationError) {
+                console.warn('Unable to resolve current location for trip title', locationError);
+            }
+        }
+
+        const tripName = buildTripRouteTitle({
+            origin: originPoint?.coordinate,
+            destination: destinationPoint?.coordinate,
+            destinationLabel: destination,
+        });
+        const result = await finishRide(tripName);
 
         if (result.success) {
             setProgressText('Trip saved successfully!');
-            router.push(
-                `/main/(tabs)/record/trip-end?rideId=${encodeURIComponent(result.rideId as string)}`
+            router.replace(
+                `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
+                    result.rideId as string
+                )}&deviationCount=${deviationEvents.length}`
             );
             setIsSaving(false);
         } else {
@@ -407,6 +559,18 @@ export default function Record() {
                         </Text>
                     </View>
                 )}
+                {isRecording && nextInstruction && (
+                    <Surface style={styles.guidanceBanner}>
+                        <Icon source={routeUpdateStatus === 'idle' ? 'navigation-variant' : 'routes'} size={sizes.medium} color={theme.colors.onPrimaryContainer} />
+                        <Text style={styles.guidanceText} numberOfLines={1}>
+                            {routeUpdateStatus === 'rerouting'
+                                ? 'Adjusting route from your current location...'
+                                : routeUpdateStatus === 'traffic'
+                                  ? 'Updating traffic and ETA...'
+                                  : nextInstruction.text}
+                        </Text>
+                    </Surface>
+                )}
                 {/* Map View */}
                 <MapRender />
 
@@ -421,7 +585,7 @@ export default function Record() {
                         <View style={{ width: 1, backgroundColor: theme.colors.outlineVariant, height: '70%' }} />
                         <View style={styles.statItem}>
                             <Text style={styles.statLabel}>ETA</Text>
-                            <Text style={styles.statNumber}>{formatEta(etaRemainingSec)}</Text>
+                            <Text style={styles.statNumber}>{formatEta(speedAdjustedEtaRemainingSec)}</Text>
                             <Text style={styles.statUnit}>remaining</Text>
                         </View>
                     </View>
@@ -432,7 +596,7 @@ export default function Record() {
                         </Text>
                         <Text style={styles.subStat}>
                             <Text style={styles.subStatLabel}>Distance </Text>
-                            {(totalDistance / 1000).toFixed(2)} km
+                            {(remainingDistanceM / 1000).toFixed(2)} km
                         </Text>
                     </View>
                 </Surface>
@@ -622,6 +786,26 @@ const getStyles = (theme: MD3Theme) =>
             borderRadius: sizes.medium,
             backgroundColor: theme.colors.surface,
         },
+        guidanceBanner: {
+            position: 'absolute',
+            top: sizes.small,
+            left: sizes.medium,
+            right: sizes.medium,
+            zIndex: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: sizes.small,
+            paddingHorizontal: sizes.medium,
+            paddingVertical: sizes.small,
+            borderRadius: sizes.medium,
+            backgroundColor: theme.colors.primaryContainer,
+        },
+        guidanceText: {
+            flex: 1,
+            fontSize: fontSizes.tinyPlus,
+            fontFamily: 'LGEIText-SemiBold',
+            color: theme.colors.onPrimaryContainer,
+        },
         statsRow: {
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -672,11 +856,6 @@ const getStyles = (theme: MD3Theme) =>
             borderRadius: sizes.medium,
             backgroundColor: theme.colors.surface,
         },
-        activeControls: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            gap: sizes.medium,
-        },
         button: {
             borderRadius: sizes.medium,
             height: sizes.size56,
@@ -689,17 +868,6 @@ const getStyles = (theme: MD3Theme) =>
         },
         stopButton: {
             backgroundColor: theme.colors.error,
-        },
-        pauseButton: {
-            flex: 2,
-            backgroundColor: theme.colors.onSurfaceVariant,
-        },
-        resumeButton: {
-            flex: 2,
-            backgroundColor: theme.colors.onSurfaceVariant,
-        },
-        finishButton: {
-            flex: 2,
         },
         mapFAB: {
             backgroundColor: theme.colors.surface,

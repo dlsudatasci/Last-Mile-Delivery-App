@@ -28,98 +28,125 @@ Although Firestore is NoSQL, the logical relationships between data models can b
 ```mermaid
 erDiagram
     users {
-        string userId PK "Firebase Auth UID (document ID)"
-        string username
-        string fullName
-        string email
-        string phone
-        string gender
-        string ageRange
-        string city
-        string yearsExperience
-        string deliveryPlatform "e.g. Grab Foodpanda Lalamove"
-        string vehicleType "e.g. Motorcycle Bicycle Car"
-        boolean acceptedPolicies
-        string avatarUrl "Optional, Firebase Storage URL"
-        string createdAt "ISO 8601 Timestamp"
-        string updatedAt "ISO 8601 Timestamp"
+        string userId PK "Firebase Auth UID"  
+        string riderCode
+        string preferredName  ""    
+        string email UK ""  
+        varchar phoneNum UK "varchar(10)"  
+        enum gender  "Male, Female, Prefer not to Say"  
+        enum ageRange  "---"  
+        enum city  "---"  
+        int yearsExperience  ""  
+        string deliveryPlatform  "Grab, Foodpanda, Lalamove"    
+        boolean acceptedPolicies  ""  
+        number createdAt  "Unix Timestamp ms" 
+        number updatedAt  "Unix Timestamp ms" 
+        string profilePicture  "Optional, Firebase Storage URL" 
     }
 
     rides {
-        string id PK "Auto-generated UUID (also stored as field)"
+        string rideId PK "Auto-generated UUID (also stored as field)"
         string userId FK "Points to users document ID"
         string rideName
+        string startPoint ""
+        string endPoint ""
         number startTime "Unix Timestamp ms"
         number endTime "Unix Timestamp ms"
-        number duration "Seconds"
+        int duration "Seconds"
         number distance "Meters"
         number averageSpeed "m/s"
         number maxSpeed "m/s"
         number elevationGain "Meters"
+        int deviationCount
+        string reviewStatus
         number createdAt "Unix Timestamp ms"
     }
 
     map_points {
-        string id PK "Fixed document ID: 'points'"
+        string pointsId PK "Fixed document ID: 'points'"
+        string rideId FK "Points to rides document ID"
         array items "Array of RidePoint coordinate objects"
+        number latitude
+        number longitude
+        number timestamp
+        number elevation
+    }
+    
+    postTripQuestionnaire_response {
+        string rideId PK "Auto-generated UUID"
+        string rideId_FK FK "Points to rides document ID"
+        string arrival
+        number etaRating
+        number stressRating
+        string language
+        number submittedAt
     }
 
     generatedRoutes {
-        string id PK "Auto-generated UUID (stored as field)"
+        string routeId PK "Auto-generated UUID (stored as field)"
         string rideId FK "Points to rides document ID"
+        enum type "Initial Route, Regenerated Route"
         array routePoints "Generated route GPS coordinate array"
         number sequence "Route generation order index"
         number generatedAt "Unix Timestamp ms"
+        int eta "in minutes"
+        int remainingDistanceOriginal "in meters"
+        int remainingDistanceNew "in meters" 
     }
 
     deviations {
-        string id PK "Auto-generated UUID (also stored as field)"
-        string generatedRouteId FK "Points to generatedRoutes document ID"
+        string deviationId PK "Auto-generated UUID (also stored as field)"
+        string routeId FK "Points to generatedRoutes document ID"
+        string rideId FK "Points to rides document ID"
         string userId FK "Points to users document ID"
+        int index
+        string originalRoute
+        number dateTime "Unix Timestamp ms"
+        string gpsLocation
+        string originalRouteEdge
+        string deviatedEdge
+        string streetName
+        string generatedInstruction
+        string deviationInstruction
         string type "'point' or 'segment'"
         array points "GPS coordinates of the deviation"
-        array additionalTags "Optional checklist reasons"
-        string source "Optional e.g. auto-generated-from-video"
-        number timestamp "Optional Unix ms"
-        number start_timestamp "Optional Unix ms"
-        number end_timestamp "Optional Unix ms"
+        number timestamp "Unix ms"
         number createdAt "Unix Timestamp ms"
+        string mapMatchedEdge "98547_93724"
     }
 
-    events {
-        string id PK "Auto-generated UUID (document ID)"
-        string eventName
-        string eventDescription
-        number eventDate "Unix Timestamp ms"
-        array eventMedia "Optional Storage URL list"
-        string eventLocation
-        string eventOrganizer
-        string eventOrganizerEmail
-        string eventOrganizerPhone
+    studies {
+        string studyId PK "Auto-generated UUID (document ID)"
+        string studyName
+        string studyDescription
+        number studyDate "Unix Timestamp ms"
+        array studyMedia "Optional Storage URL list"
+        string studyLocation
+        string studyOrganizer
+        string studyOrganizerEmail
+        string studyOrganizerPhone
         number createdAt "Unix Timestamp ms"
     }
 
     studyParticipants {
-        string participantId PK "Auto-generated UUID (document ID)"
-        string userId FK "Points to users document ID"
+        string userId PK "Firebase Auth UID (document ID)"
         string eventId FK "Points to events document ID"
-        string status "'joined' or 'removed'"
-        boolean acceptedTerms
-        boolean acceptedPrivacy
-        boolean acceptedDataUsage "Optional"
+        boolean acceptedTerms  ""  
+        boolean acceptedPrivacy  ""  
+        boolean acceptedDataUsage ""
+        enum status  "(In Progress, Finished, Removed)"  
         number joinedAt "Unix Timestamp ms"
         number updatedAt "Unix Timestamp ms"
     }
 
     compensationClaims {
         string claimId PK "Auto-generated UUID (document ID)"
-        string participantId FK "Points to studyParticipants document ID"
-        string userId FK "Points to users document ID"
-        string paymentMethod "'gcash' or 'maya' or 'gotyme'"
+        string userId FK "Points to users / studyParticipants document ID"
+        enum paymentMethod "'gcash' or 'maya' or 'gotyme'"
         string accountName
         string accountNumber
         string phoneNumber
-        string status "'pending_validation' or 'ready_to_claim' or 'paid' or 'rejected'"
+        enum status "'pending_validation' or 'ready_to_claim' or 'paid' or 'rejected'"
         string referenceNumber "Format: DEVIA-YYYYMMDD-XXXXXX"
         number recordedSubmissions
         number amount "PHP - always 250"
@@ -128,22 +155,79 @@ erDiagram
     }
 
     tickets {
-        string ticketId PK "Auto-generated UUID (document ID)"
-        string userId FK "Points to users document ID"
-        string subject
-        string description
-        string status "'pending'"
+        String ticketId PK "Auto-generated UUID"
+        String userId FK
+        String subject
+        String description
+        enum status "pending, resolved"
         number createdAt "Unix Timestamp ms"
+    }
+
+    deviationResponses {
+        string responseId PK "UUID"
+        string deviationId FK "Points to deviations document ID"
+        string rideId FK "Points to rides document ID"
+        enum primaryReason ""
+        string primaryReasonOther
+        enum trafficSeverity "1-5 Very Light, Light, Moderate, Heavy, Severe"
+        string rushHourCause
+        enum rushHour "yes, no, unsure"
+        string chooseDuringNonRush
+        enum wouldUseNonRushHour "yes, no, unsure"
+        string blockageReason
+        enum blockageType "Flood, Accident, Road Closure, Illegal Parking, Others"
+        array personalStopReason
+        enum personalStopType "Break, Meal, Restroom, Refuel, Took a Call, Acciden/Repair, Others"
+        enum stopDuration "optional enum"
+        enum deviateAgain "Always, Often, Sometimes, Rarely, Never"
+        string avoidRoadFrequency
+        enum usuallyAvoidRoad "Always, Often, Sometimes, Rarely, Never, I don't usually pass here"
+        string language
+        string otherDeviateReason "optional"
+        number submittedAt "Unix Timestamp ms"
+        number createdAt "Unix Timestamp ms"
+    }
+
+    local_accounts {
+        string phone PK "Text"
+        string rider_code "Text"
+        string full_name "Text"
+        string gender "Text"
+        string age_range "Text"
+        string city "Text"
+        string years_experience "Text"
+        number accepted_policies "Integer"
+        string created_at "Text"
+    }
+
+    rider_code_registrations {
+        string code PK "Text"
+        string phone FK "Points to local_accounts.phone"
+        string registered_at "Text"
+    }
+
+    recent_destinations {
+        string user_id PK "Text"
+        string name PK "Text"
+        number longitude PK "Real"
+        number latitude PK "Real"
+        string full_address "Text"
+        string updated_at "Text"
     }
 
     users ||--o{ rides : "records"
     users ||--o{ studyParticipants : "enrolls as"
     users ||--o{ tickets : "creates"
-    events ||--o{ studyParticipants : "rider joins via"
+    studies ||--o{ studyParticipants : "rider joins via"
     studyParticipants ||--o| compensationClaims : "submits after completing study"
     rides ||--|| map_points : "stores GPS in"
     rides ||--o{ generatedRoutes : "generates routes during trip"
     generatedRoutes ||--o{ deviations : "contains deviation markers"
+    deviations ||--o| deviationResponses : "collects user feedback via"
+    rides ||--o| postTripQuestionnaire_response : "submits questionnaire"
+    rides ||--o{ deviations : "directly detects deviations"
+    local_accounts ||--o| rider_code_registrations : "registers rider code"
+    local_accounts ||--o{ recent_destinations : "saves destinations"
 ```
 
 ---
@@ -246,23 +330,19 @@ erDiagram
 | `type` | String | Yes | `'point'` (single location) or `'segment'` (range) |
 | `points` | Array (Object) | Yes | GPS coordinates of the deviation spot/segment |
 | `additionalTags` | Array (String) | No | Checklist reasons rider selected (e.g., `["Traffic"]`) |
-| `source` | String | No | `"auto-generated-from-video"` when created by AI |
-| `timestamp` | Number | No | Video/ride time offset in ms for point deviations |
-| `start_timestamp` | Number | No | Start of deviation range in ms for segment deviations |
-| `end_timestamp` | Number | No | End of deviation range in ms for segment deviations |
+| `timestamp` | Number | No | Ride time offset in ms for point deviations |
 | `createdAt` | Number | Yes | Unix timestamp (ms) of record creation |
 
 ---
 
 ### 3.6. Collection: `studyParticipants`
-* **Path:** `/studyParticipants/{participantId}`
-* **Document ID:** Auto-generated UUID. Allows a rider to enroll in multiple study events over time without overwriting previous records.
+* **Path:** `/studyParticipants/{userId}`
+* **Document ID:** Firebase Auth UID. A rider can only enroll in 1 study (document ID matches user ID).
 * **Purpose:** Tracks which riders have consented to and enrolled in the research study through a specific event.
 
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `participantId` | String | Yes | Auto-generated UUID, mirrors the document ID |
-| `userId` | String | Yes | Foreign key — Firebase Auth UID of the enrolled rider |
+| `userId` | String | Yes | Firebase Auth UID (also serves as document ID) |
 | `eventId` | String | Yes | Foreign key — the `events` document ID of the event the rider joined through |
 | `status` | String | Yes | `'joined'` or `'removed'` |
 | `acceptedTerms` | Boolean | Yes | Must be `true` |
@@ -281,8 +361,7 @@ erDiagram
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `claimId` | String | Yes | Auto-generated UUID, mirrors the document ID |
-| `participantId` | String | Yes | Foreign key — the `studyParticipants` document ID this claim belongs to |
-| `userId` | String | Yes | Foreign key — Firebase Auth UID of the claimant (denormalized for querying) |
+| `userId` | String | Yes | Foreign key — Firebase Auth UID of the claimant |
 | `paymentMethod` | String | Yes | `'gcash'`, `'maya'`, or `'gotyme'` |
 | `accountName` | String | Yes | Registered name of e-wallet account |
 | `accountNumber` | String | Yes | E-wallet account number |
@@ -378,4 +457,4 @@ Rules are defined in [firestore.rules](../firestore.rules) and follow the princi
 | `events/{eventId}` | Any authenticated user | **Nobody** (`allow write: if false`) |
 | `app_version/{docId}` | **Everyone** (public, unauthenticated) | **Nobody** |
 
-> **Key note:** Because `studyParticipants` and `compensationClaims` now use surrogate document IDs, Firestore security rules must check `resource.data.userId == auth.uid` rather than relying on document ID equality.
+> **Key note:** Because `compensationClaims` uses surrogate document IDs, Firestore security rules must check `resource.data.userId == auth.uid` for it, whereas `studyParticipants` checks document ID equality (`studyParticipants/$(request.auth.uid)`).

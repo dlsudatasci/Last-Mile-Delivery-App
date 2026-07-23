@@ -329,10 +329,13 @@ describe("signInWithPhone()", () => {
 describe("saveOnboardingProfile()", () => {
     const profile = {
         fullName: "Juan Dela Cruz",
+        preferredName: "Juan Dela Cruz",
         gender: "Male",
         ageRange: "25-34",
         city: "Pasig",
         yearsExperience: "3 years",
+        deliveryPlatform: "Grab",
+        riderCode: "123456",
         phone: "09171234567",
         acceptedPolicies: true,
     };

@@ -79,6 +79,10 @@ const PrivacyPolicyPage = () => {
                             approved compensation claims.
                         </Text>
                     </View>
+                    <Text style={styles.marginTop}>
+                        The data collected will be used solely for academic purposes related to this study and will be
+                        deleted after the study is completed.
+                    </Text>
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
 
@@ -97,6 +101,52 @@ const PrivacyPolicyPage = () => {
                         <Text style={styles.bold}>• Compensation Processing: </Text>
                         Payment claim details are shared only with authorized Devia research or finance personnel who
                         validate submissions and process approved payments.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        <Text style={styles.bold}>• Beyond-Scope Use: </Text>
+                        Participants will be informed and asked for additional consent if their data is to be used beyond
+                        the scope of this study.
+                    </Text>
+                </Section>
+                <Divider style={{ marginHorizontal: sizes.large }} />
+                <Section title="Confidentiality">
+                    <Text>
+                        This study involves minimal risk. The following measures are taken to protect your information:
+                    </Text>
+                    <View style={styles.dataUseList}>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Privacy: </Text>
+                            Your identity will not be disclosed. Your data will be combined with that of other
+                            participants so that no individual can be identified.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Codes and Identifiers: </Text>
+                            Participants will be assigned a code or identifier, which will be used in place of names in
+                            all records and analyses.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Data Security: </Text>
+                            All collected data will be stored securely and will only be accessible to the research team.
+                            Digital data will be stored in password-protected systems with appropriate security measures.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Awareness: </Text>
+                            You will be informed about the type of data being collected, and you may stop participating
+                            at any time.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Limited Retention: </Text>
+                            Data containing identifiable information will be retained only for a limited period and will
+                            be permanently deleted after the study is completed.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• No Personal Information in Publications: </Text>
+                            No personal information will be included in any reports or publications unless explicit
+                            consent is provided.
+                        </Text>
+                    </View>
+                    <Text style={styles.marginTop}>
+                        You may choose not to answer any question and may withdraw from the study at any time.
                     </Text>
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
@@ -129,6 +179,18 @@ const PrivacyPolicyPage = () => {
                             information associated with your data.
                         </Text>
                     </View>
+                </Section>
+                <Divider style={{ marginHorizontal: sizes.large }} />
+                <Section title="Contact Us">
+                    <Text>
+                        If you have any questions about this Privacy Policy, or to exercise your data privacy rights,
+                        you may contact the researcher at [bien_aaron_miranda@dlsu.edu.ph].
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        If you have any questions regarding your rights as a research participant, or if problems arise
+                        which you do not feel you can discuss with the Principal Investigator, please contact the Chair
+                        of the DLSU Research Ethics Review Committee at chairrerc@dlsu.edu.ph (632) 524-4611 local 513.
+                    </Text>
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
                 <Section title="Conclusion">
