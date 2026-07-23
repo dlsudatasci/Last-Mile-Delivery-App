@@ -243,8 +243,12 @@ export const saveRide = async (rideData: NewRideData) => {
         const generatedRoutesCollectionRef = collection(firestore, 'generatedRoutes');
         generatedRoutes.forEach(route => {
             const routeDocRef = doc(generatedRoutesCollectionRef, route.routeId);
+            // Firestore does not support nested arrays. routePoints is LngLat[]
+            // ([number, number][]), so convert each tuple to a plain object.
+            const flatRoutePoints = route.routePoints.map(([lng, lat]) => ({ lng, lat }));
             batch.set(routeDocRef, {
                 ...route,
+                routePoints: flatRoutePoints,
                 rideId: rideDocRef.id,
             });
         });
