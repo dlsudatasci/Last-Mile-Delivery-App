@@ -22,7 +22,7 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 ---
 
 ## 2. Entity-Relationship Diagram (ERD) 
-Last changed: 22/07/2026
+Last changed: 24/07/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
@@ -62,8 +62,8 @@ erDiagram
     }
 
     map_points {
-        string pointsId PK "Fixed document ID: 'points'"
-        string rideId FK "Points to rides document ID"
+        string rideId PK "Points to rides document ID"
+        int pointIndex PK "Composite primary key along with rideId"
         array items "Array of RidePoint coordinate objects"
         number latitude
         number longitude
@@ -271,10 +271,10 @@ Last changed: 23/07/2026
 * **Document ID:** Static, always `"points"`.
 * **Purpose:** Stores the full GPS breadcrumb trail separately from the summary document to stay within Firestore's 1 MB document size limit.
   
-Last changed: 22/07/2026
+Last changed: 24/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `pointsId` | String | Yes | Static document ID |
+| `pointIndex` | Int | Yes | Composite primary key along with rideId |
 | `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
 | `items` | Array (Object) | Yes | Ordered list of `RidePoint` coordinate objects |
 
@@ -324,11 +324,10 @@ Last changed: 22/07/2026
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores each deviation marker the rider tagged during or after the trip, linked to the specific generated route that was active when the deviation occurred.
 
-Last changed: 22/07/2026
+Last changed: 24/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `deviationId` | String | Yes | Same as the document ID |
-| `routeId` | String | Yes | Parent generated route document ID (foreign key referencing generatedRoutes.routeId) |
 | `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
 | `userId` | String | Yes | Foreign key referencing users.userId (Firebase Auth UID of the rider) |
 | `index` | Int | Yes | Sequential order of the deviation within the ride (1 = first deviation, 2 = second, etc. |
@@ -343,8 +342,6 @@ Last changed: 22/07/2026
 | `type` | String | Yes | Type of deviation (point or segment) |
 | `points` | Array | Yes | GPS coordinates representing the deviation location or segment |
 | `timestamp` | Number | Yes | Ride time offset (ms) for point deviations |
-| `start_timestamp` | Number | Yes | Start time offset (ms) for segment deviations |
-| `end_timestamp` | Number | Yes | End time offset (ms) for segment deviations |
 | `createdAt` | Number | Yes | Unix timestamp (ms) when the deviation record was created |
 | `mapMatchedEdge` | String | Yes | Identifier of the road network edge after map matching (e.g., 98547_93724) |
 
