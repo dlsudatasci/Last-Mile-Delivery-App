@@ -28,19 +28,9 @@ export default function GetStarted() {
                     style={styles.button}
                     contentStyle={styles.buttonContent}
                     labelStyle={styles.buttonLabel}
-                    onPress={() => router.push('/enter-phone')}
+                    onPress={() => router.push('/rider-code')}
                 >
                     Get Started
-                </Button>
-
-                <Button
-                    mode="text"
-                    textColor={TEAL}
-                    labelStyle={styles.loginLink}
-                    style={styles.loginRow}
-                    onPress={() => router.push({ pathname: '/enter-phone', params: { mode: 'login' } })}
-                >
-                    Already have an account?
                 </Button>
             </View>
         </SafeAreaView>
@@ -82,21 +72,5 @@ const styles = StyleSheet.create({
     buttonLabel: {
         fontFamily: 'LGEIText-SemiBold',
         fontSize: fontSizes.small,
-    },
-    loginRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: sizes.medium,
-        flexWrap: 'wrap',
-    },
-    loginText: {
-        fontFamily: 'LGEIText-Regular',
-        fontSize: fontSizes.tiny,
-        color: '#475569',
-    },
-    loginLink: {
-        fontFamily: 'LGEIText-SemiBold',
-        fontSize: fontSizes.tiny,
     },
 });

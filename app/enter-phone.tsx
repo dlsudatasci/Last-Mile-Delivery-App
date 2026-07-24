@@ -1,13 +1,14 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
-import { isValidPhilippineMobileNumber, signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
-import { getLocalAccount, localAccountExists } from '@/lib/local-db/accounts';
+import { isValidPhilippineMobileNumber, resolveAuthenticatedSession, signInWithPhone } from '@/lib/firebase-crud/auth';
+import { isTransientFirestoreError } from '@/lib/firebase-crud/rides';
+import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text, TextInput } from 'react-native-paper';
+import { Button, Icon, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TEAL = '#0E6E73';
@@ -22,11 +23,9 @@ const toLocalPhone = (raw: string) => {
 };
 
 export default function EnterPhone() {
-    const { mode } = useLocalSearchParams<{ mode?: string }>();
-    const isLogin = mode === 'login';
-
     const setOnboardingPhone = useOnboarding(state => state.setPhone);
     const setUser = useUser(state => state.setUser);
+    const { loginOnly } = useLocalSearchParams<{ loginOnly: string }>();
 
     const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -56,42 +55,30 @@ export default function EnterPhone() {
             return;
         }
 
-        // Sign-up: account is NOT created here — collect the phone and continue to
-        // consent, then create the account on the "Create Account" step.
-        if (!isLogin) {
-            setOnboardingPhone(localPhone);
-            router.push('/study-enrollment');
-            return;
-        }
-
-        // Login: the number must already be registered (checked in the local DB).
         setIsLoading(true);
         try {
-            const exists = await localAccountExists(localPhone);
-            if (!exists) {
-                showError('No account found with this number. Tap “Get Started” to create one.');
-                return;
-            }
-            const { user } = await signUpOrSignInWithPhone(localPhone);
-            const local = await getLocalAccount(localPhone);
-            if (local) {
-                setUser({
-                    id: user.uid,
-                    username: local.fullName,
-                    fullName: local.fullName,
-                    avatarUrl: null,
-                    email: user.email,
-                    phone: local.phone,
-                    gender: local.gender,
-                    ageRange: local.ageRange,
-                    city: local.city,
-                    yearsExperience: local.yearsExperience,
-                    createdAt: new Date(local.createdAt),
-                });
+            // Attempt to sign in silently
+            const user = await signInWithPhone(localPhone);
+            const { profile } = await resolveAuthenticatedSession(user);
+            if (profile) {
+                setUser(profile);
             }
             router.replace('/main/(tabs)/home');
-        } catch (error) {
-            showError(error instanceof Error ? error.message : 'Could not sign in. Please try again.');
+        } catch (error: any) {
+            if (error.message === 'account-not-found') {
+                if (loginOnly === 'true') {
+                    showError('This code is already registered to a different phone number.');
+                } else {
+                    setOnboardingPhone(localPhone);
+                    router.push('/create-profile');
+                }
+            } else {
+                if (isTransientFirestoreError(error)) {
+                    showError('You appear to be offline. Please connect to the internet to verify your phone.');
+                } else {
+                    showError(error.message || 'An error occurred.');
+                }
+            }
         } finally {
             setIsLoading(false);
         }
@@ -104,12 +91,11 @@ export default function EnterPhone() {
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
                 <View style={styles.content}>
-                    <IconButton icon="chevron-left" size={sizes.size32} onPress={handleBack} style={styles.backButton} />
+                    <HeaderBackButton onPress={handleBack} style={styles.backButton} />
                     <Text style={styles.title}>Enter your{'\n'}phone number</Text>
                     <Text style={styles.subtitle}>
-                        {isLogin
-                            ? "We'll check if you already have an account."
-                            : "We'll use this to create your account."}
+                        This number will be linked to your rider account and used for compensation verification through
+                        GCash, Maya, or Maribank.
                     </Text>
 
                     <View style={styles.phoneRow}>

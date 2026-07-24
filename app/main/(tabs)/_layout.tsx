@@ -1,14 +1,15 @@
-import TripsPeriodMenu from '@/components/trips/TripsPeriodMenu';
+import { useRideStore } from '@/lib/store/useRideStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { router, Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, Text, TouchableOpacity, ViewStyle } from 'react-native';
+import { Alert, Platform, Text, TouchableOpacity, ViewStyle } from 'react-native';
 import { Icon, IconButton, useTheme } from 'react-native-paper';
 
 export default function TabLayout() {
     const theme = useTheme();
+    const isRecording = useRideStore(state => state.isRecording);
 
     const headerStyle: ViewStyle = {
         backgroundColor: theme.colors.surface,
@@ -44,10 +45,19 @@ export default function TabLayout() {
         headerTitleAlign: 'left',
     };
 
+    const guardedTabListeners = {
+        tabPress: (event: { preventDefault: () => void }) => {
+            if (!isRecording) return;
+            event.preventDefault();
+            Alert.alert('Trip in progress', 'Please stop the current trip before opening another page.');
+        },
+    };
+
     return (
         <Tabs screenOptions={commonScreenOptions}>
             <Tabs.Screen
                 name="home"
+                listeners={guardedTabListeners}
                 options={{
                     title: 'Home',
                     tabBarIcon: ({ color }: { color: string }) => (
@@ -58,6 +68,7 @@ export default function TabLayout() {
             />
             <Tabs.Screen
                 name="community"
+                listeners={guardedTabListeners}
                 options={{
                     title: 'Studies',
                     tabBarLabel: ({ color }: { focused: boolean; color: string }) => (
@@ -109,6 +120,7 @@ export default function TabLayout() {
             />
             <Tabs.Screen
                 name="map"
+                listeners={guardedTabListeners}
                 options={({ route }) => ({
                     title: 'Trips',
                     tabBarIcon: ({ color }: { color: string }) => (
@@ -119,11 +131,11 @@ export default function TabLayout() {
                     headerShown: (getFocusedRouteNameFromRoute(route) ?? 'index') === 'index',
                     headerTitle: 'Trips',
                     headerTitleAlign: 'left',
-                    headerRight: () => <TripsPeriodMenu />,
                 })}
             />
             <Tabs.Screen
                 name="profile"
+                listeners={guardedTabListeners}
                 options={{
                     title: 'Profile',
                     tabBarIcon: ({ color }: { color: string }) => (

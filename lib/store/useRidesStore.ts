@@ -6,6 +6,7 @@ import {
     getRideAnnotations,
     getRidePoints,
     getRides,
+    getTotalRideCount,
 } from '@/lib/firebase-crud/rides';
 import { auth } from '@/lib/utils/firebaseConfig';
 import { create } from 'zustand';
@@ -15,6 +16,7 @@ interface RidesState {
     rides: FetchRideData[];
     selectedRide: FetchRideData | null;
     selectedRidePoints: RidePoint[] | null;
+    totalRideCount: number;
     isLoading: boolean;
     isRefreshing: boolean;
     isFetchingMore: boolean;
@@ -40,6 +42,7 @@ export const useRidesStore = create<RidesState>((set, get) => ({
     rides: [],
     selectedRide: null,
     selectedRidePoints: null,
+    totalRideCount: 0,
     isLoading: false,
     isRefreshing: false,
     isFetchingMore: false,
@@ -63,13 +66,17 @@ export const useRidesStore = create<RidesState>((set, get) => ({
                 set({ isLoading: true, error: null });
             }
 
-            const response = await getRides(userId, {
-                limit: PAGE_SIZE,
-                startAfter: refresh ? null : undefined,
-            });
+            const [response, totalRideCount] = await Promise.all([
+                getRides(userId, {
+                    limit: PAGE_SIZE,
+                    startAfter: refresh ? null : undefined,
+                }),
+                getTotalRideCount(userId),
+            ]);
 
             set({
                 rides: refresh ? response.items : [...get().rides, ...response.items],
+                totalRideCount,
                 pagination: {
                     lastDocId: response.lastDocId,
                     hasMore: response.hasMore,
@@ -133,7 +140,7 @@ export const useRidesStore = create<RidesState>((set, get) => ({
                 if (res) {
                     ride = res;
                 } else {
-                    throw new Error('Ride not found');
+                    throw new Error('Trip not found');
                 }
             }
 
@@ -170,7 +177,7 @@ export const useRidesStore = create<RidesState>((set, get) => ({
     },
 
     clearRides: () => {
-        set({ rides: [], selectedRide: null, selectedRidePoints: null });
+        set({ rides: [], selectedRide: null, selectedRidePoints: null, totalRideCount: 0 });
     },
 
     addAnnotation: async (annotation: Annotation) => {
@@ -183,7 +190,7 @@ export const useRidesStore = create<RidesState>((set, get) => ({
         try {
             const ride = await get().selectRide(annotation.rideId);
             if (!ride) {
-                throw new Error('Ride not found');
+                throw new Error('Trip not found');
             }
 
             const updatedRide = { ...ride, annotations: [...ride.annotations, annotation] };
@@ -227,6 +234,7 @@ export const useRidesStore = create<RidesState>((set, get) => ({
             await deleteRide(ride);
             set({
                 rides: get().rides.filter(r => r.id !== ride.id),
+                totalRideCount: Math.max(0, get().totalRideCount - 1),
             });
         } catch (error) {
             set({ error: error instanceof Error ? error.message : 'Failed to remove ride' });

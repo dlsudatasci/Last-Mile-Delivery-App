@@ -1,8 +1,8 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { router, Stack } from 'expo-router';
-import { Icon, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { TouchableOpacity } from 'react-native';
 
 export default function Layout() {
     const theme = useTheme();
@@ -29,11 +29,7 @@ export default function Layout() {
         <Stack
             screenOptions={{
                 ...commonScreenOptions,
-                headerLeft: () => (
-                    <TouchableOpacity onPress={() => router.dismiss()}>
-                        <Icon source={'chevron-left'} size={sizes.size32} />
-                    </TouchableOpacity>
-                ),
+                headerLeft: () => <HeaderBackButton onPress={() => router.dismiss()} />,
             }}
         >
             <Stack.Screen
