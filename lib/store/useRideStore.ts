@@ -551,7 +551,11 @@ export function getNextDisplayPoints({
         );
 
         if (!snapped) {
-            return displayPoints;
+            const lastDisplayPoint = displayPoints[displayPoints.length - 1];
+            if (lastDisplayPoint && haversineDistance(lastDisplayPoint, rawPoint) < MIN_DISPLAY_POINT_DISTANCE_M) {
+                return displayPoints;
+            }
+            return [...displayPoints, rawPoint];
         }
 
         const snappedPoint: RidePoint = {

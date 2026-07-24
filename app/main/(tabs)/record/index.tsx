@@ -232,14 +232,35 @@ export default function Record() {
 
         lastTrafficRefreshAtRef.current = now;
         isRouteRequestActiveRef.current = true;
-        setRouteUpdateStatus('traffic');
 
         const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
+        const distanceFromRouteM = activeRouteCoordinates.length >= 2
+            ? getDistanceToRouteM(currentLngLat, activeRouteCoordinates)
+            : 0;
+        const isOffRoute = distanceFromRouteM >= 90;
+        const previousInstruction = nextInstruction?.text;
+        const previousEtaSec = etaRemainingSec;
+
+        setRouteUpdateStatus(isOffRoute ? 'rerouting' : 'traffic');
+
         getRoute(currentLngLat, destinationCoordinates)
             .then(route => {
                 if (!route) return;
-                setActiveRoute(route, destinationCoordinates, 'Traffic Update');
+                setActiveRoute(route, destinationCoordinates, isOffRoute ? 'Regenerated Route' : 'Traffic Update');
                 setPreviousRemainingDistanceM(route.distanceM);
+                if (isOffRoute) {
+                    offRouteCountRef.current = 0;
+                    lastRerouteAtRef.current = now;
+                    addDeviationEvent({
+                        timestamp: now,
+                        location: currentLngLat,
+                        offRouteDistanceM: distanceFromRouteM,
+                        previousInstruction,
+                        newInstruction: route.steps[0]?.instruction,
+                        previousEtaSec,
+                        newEtaSec: route.durationSec,
+                    });
+                }
             })
             .catch(error => {
                 console.warn('Failed to refresh live traffic route:', error);
@@ -248,7 +269,19 @@ export default function Record() {
                 isRouteRequestActiveRef.current = false;
                 setRouteUpdateStatus('idle');
             });
-    }, [activeRouteUpdatedAt, currentPoint, destinationCoordinates, isPaused, isRecording, setActiveRoute, setRouteUpdateStatus]);
+    }, [
+        activeRouteCoordinates,
+        activeRouteUpdatedAt,
+        addDeviationEvent,
+        currentPoint,
+        destinationCoordinates,
+        etaRemainingSec,
+        isPaused,
+        isRecording,
+        nextInstruction?.text,
+        setActiveRoute,
+        setRouteUpdateStatus,
+    ]);
 
     // Check background location permission on mount
     useEffect(() => {
