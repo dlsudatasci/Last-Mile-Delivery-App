@@ -28,12 +28,11 @@ export default function MapRender() {
     const { displayPoints, activeRouteCoordinates, activeRouteCongestionSegments, activeRouteDestination } = useRideStore();
 
     const [zoomLevel, setZoomLevel] = useState(16);
+    const [isFollowingUser, setIsFollowingUser] = useState(true);
+
     const recenterMap = () => {
-        if (zoomLevel >= 16) {
-            setZoomLevel(zoomLevel - 1);
-        } else {
-            setZoomLevel(zoomLevel + 1);
-        }
+        setIsFollowingUser(true);
+        setZoomLevel(16);
     };
 
     const styles = getStyles(theme);
@@ -89,6 +88,11 @@ export default function MapRender() {
                 zoomEnabled
                 rotateEnabled
                 compassEnabled
+                onRegionIsChanging={(e) => {
+                    if (e.properties.isUserInteraction) {
+                        setIsFollowingUser(false);
+                    }
+                }}
             >
                 <Mapbox.VectorSource id="recordingMapboxTrafficTiles" url={TRAFFIC_TILESET_URL}>
                     <Mapbox.LineLayer
@@ -149,22 +153,18 @@ export default function MapRender() {
                         showEndpointMarkers={false}
                     />
                 )}
-                {cameraCenter ? (
-                    <Mapbox.Camera
-                        animationDuration={0}
-                        animationMode="none"
-                        followUserLocation={false}
-                        centerCoordinate={cameraCenter}
-                        followZoomLevel={zoomLevel}
-                        zoomLevel={zoomLevel}
-                    />
-                ) : (
-                    <Mapbox.Camera animationDuration={0} animationMode="none" followUserLocation followZoomLevel={zoomLevel} />
-                )}
+                <Mapbox.Camera
+                    animationDuration={isFollowingUser ? 500 : 0}
+                    animationMode={isFollowingUser ? 'flyTo' : 'none'}
+                    followUserLocation={!cameraCenter}
+                    centerCoordinate={isFollowingUser ? cameraCenter : undefined}
+                    heading={isFollowingUser ? (displayedLocation?.heading || 0) : undefined}
+                    zoomLevel={zoomLevel}
+                />
                 {displayedLocationCoordinate && (
                     <Mapbox.PointAnnotation id="snapped-rider-location" coordinate={displayedLocationCoordinate}>
-                        <View style={styles.riderMarker}>
-                            <View style={styles.riderMarkerCore} />
+                        <View style={[styles.riderMarker, { transform: [{ rotate: isFollowingUser ? '0deg' : `${displayedLocation?.heading || 0}deg` }] }]}>
+                            <Icon source="navigation" size={24} color={theme.colors.primary} />
                         </View>
                     </Mapbox.PointAnnotation>
                 )}
@@ -182,7 +182,7 @@ export default function MapRender() {
                     position: 'absolute',
                     margin: 8,
                     right: 5,
-                    bottom: 5,
+                    bottom: 180,
                     gap: 5,
                 }}
             >
@@ -241,20 +241,19 @@ const getStyles = (theme: MD3Theme) =>
             backgroundColor: theme.colors.surface,
         },
         riderMarker: {
-            width: 24,
-            height: 24,
-            borderRadius: 12,
+            width: sizes.size32,
+            height: sizes.size32,
+            borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#ffffff',
+            backgroundColor: theme.colors.surface,
             borderWidth: 2,
-            borderColor: '#075985',
-        },
-        riderMarkerCore: {
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            backgroundColor: '#22D3EE',
+            borderColor: theme.colors.primary,
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
         },
         destinationMarker: {
             width: sizes.size48,

@@ -22,7 +22,6 @@ export const submitTripReview = async (rideId: string) => {
             const postTripRef = doc(firestore, 'postTripQuestionnaire_response', rideId);
             batch.set(postTripRef, {
                 rideId: rideId,
-                rideId_FK: rideId, // Based on ERD
                 arrival: review.postTrip.arrival,
                 etaRating: review.postTrip.etaRating,
                 stressRating: review.postTrip.stressRating,

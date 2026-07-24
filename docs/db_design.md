@@ -73,7 +73,6 @@ erDiagram
     
     postTripQuestionnaire_response {
         string rideId PK "Auto-generated UUID"
-        string rideId_FK FK "Points to rides document ID"
         string arrival
         number etaRating
         number stressRating
@@ -387,7 +386,6 @@ Last changed: 24/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `rideId` | String | Yes | Auto-generated UUID |
-| `rideId_FK` | String | Yes | Points to rides document ID |
 | `arrival` | String | Yes | Rider's perceived arrival status (Early, On Time, Late) |
 | `etaRating` | Number | Yes | Rider's rating of the estimated arrival time (ETA) |
 | `stressRating` | Number | Yes | Rider's self-reported stress level during the trip |

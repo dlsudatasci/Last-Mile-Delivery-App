@@ -22,6 +22,23 @@ interface ChangeRouteListItem {
     streetName?: string;
 }
 
+const changeRoutesText = {
+    title: { en: 'Change Routes', tl: 'Mga Pagbabago ng Ruta' },
+    sectionLabel: { en: 'DETECTED CHANGE ROUTES', tl: 'MGA NATUKOY NA PAGBABAGO NG RUTA' },
+    description: {
+        en: (count: number) =>
+            `We detected ${count} ${count === 1 ? 'route change' : 'route changes'} from the suggested route. Let's review them one by one.`,
+        tl: (count: number) =>
+            `May nakita kaming ${count} beses na nag-iba ka ng ruta mula sa suggested route. Review natin isa-isa.`,
+    },
+    routeTitle: { en: 'Change Route', tl: 'Pagbabago ng Ruta' },
+    street: { en: 'Street', tl: 'Kalsada' },
+    suggested: { en: 'Suggested', tl: 'Iminungkahing ruta' },
+    actual: { en: 'Actual', tl: 'Aktuwal na ruta' },
+    detailsNotAvailable: { en: 'Details not available yet', tl: 'Wala pang available na detalye' },
+    review: { en: 'Review Change Routes', tl: 'Suriin ang Mga Pagbabago ng Ruta' },
+};
+
 function buildChangeRoutes(count: number, events: RideDeviationEvent[]): ChangeRouteListItem[] {
     return Array.from({ length: count }, (_, index) => {
         const event = events[index];
@@ -64,7 +81,7 @@ export default function ChangeRoutes() {
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <Stack.Screen
                 options={{
-                    title: 'Change Routes',
+                    title: changeRoutesText.title[language],
                     headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
                 }}
             />
@@ -79,24 +96,22 @@ export default function ChangeRoutes() {
                     style={styles.languageToggle}
                 />
 
-                <Text style={styles.sectionLabel}>DETECTED CHANGE ROUTES</Text>
+                <Text style={styles.sectionLabel}>{changeRoutesText.sectionLabel[language]}</Text>
                 <Text style={styles.count}>{totalChangeRoutes}</Text>
-                <Text style={styles.description}>
-                    May nakita kaming {totalChangeRoutes} beses na nag-iba ka ng ruta mula sa suggested route. Review natin isa-isa.
-                </Text>
+                <Text style={styles.description}>{changeRoutesText.description[language](totalChangeRoutes)}</Text>
 
                 {changeRoutes.map(item => (
                     <Surface key={item.id} style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                         <View style={styles.cardText}>
-                            <Text style={styles.cardTitle}>Change Route {item.index + 1}</Text>
+                            <Text style={styles.cardTitle}>{changeRoutesText.routeTitle[language]} {item.index + 1}</Text>
                             {!!item.time && <Text style={styles.cardMeta}>{item.time}</Text>}
-                            {!!item.streetName && <Text style={styles.cardMeta}>Street: {item.streetName}</Text>}
+                            {!!item.streetName && <Text style={styles.cardMeta}>{changeRoutesText.street[language]}: {item.streetName}</Text>}
                             {!!item.generatedInstruction && (
-                                <Text style={styles.cardMeta}>Suggested: {formatRouteInstructionSummary(item.generatedInstruction, item.streetName)}</Text>
+                                <Text style={styles.cardMeta}>{changeRoutesText.suggested[language]}: {formatRouteInstructionSummary(item.generatedInstruction, item.streetName)}</Text>
                             )}
-                            {!!item.deviationInstruction && <Text style={styles.cardMeta}>Actual: {formatRouteInstructionSummary(item.deviationInstruction, item.streetName)}</Text>}
+                            {!!item.deviationInstruction && <Text style={styles.cardMeta}>{changeRoutesText.actual[language]}: {formatRouteInstructionSummary(item.deviationInstruction, item.streetName)}</Text>}
                             {!item.generatedInstruction && !item.deviationInstruction && (
-                                <Text style={styles.cardMeta}>Details not available yet</Text>
+                                <Text style={styles.cardMeta}>{changeRoutesText.detailsNotAvailable[language]}</Text>
                             )}
                         </View>
                         <View style={styles.iconBox}>
@@ -114,7 +129,7 @@ export default function ChangeRoutes() {
                     contentStyle={styles.buttonContent}
                     labelStyle={styles.buttonLabel}
                 >
-                    Review Change Routes
+                    {changeRoutesText.review[language]}
                 </Button>
             </View>
         </View>

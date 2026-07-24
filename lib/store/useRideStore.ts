@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { LocationObject } from 'expo-location';
 import { create } from 'zustand';
+import bearing from '@turf/bearing';
 import { Annotation } from '../firebase-crud/annotations';
 import { isTransientFirestoreError, NewRideData, saveRide } from '../firebase-crud/rides';
 import { LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
@@ -32,6 +33,7 @@ export interface RidePoint {
     };
     timestamp: number;
     elevation?: number;
+    heading?: number;
 }
 
 export interface RideReport {
@@ -141,6 +143,7 @@ const locationToRidePoint = (location: LocationObject): RidePoint => ({
     },
     timestamp: location.timestamp,
     elevation: location.coords.altitude || 0,
+    heading: location.coords.heading || 0,
 });
 
 export const useRideStore = create<RideState>((set, get) => ({
@@ -368,6 +371,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         let newTotalElevationGain = totalElevationGain;
         let newMaxSpeed = maxSpeed;
         let newCurrentSpeed = sanitizeLocationSpeed(location.coords.speed, location.coords.accuracy) ?? 0;
+        let newHeading = location.coords.heading || 0;
 
         if (points.length > 0) {
             const lastPoint = points[points.length - 1];
@@ -388,7 +392,17 @@ export const useRideStore = create<RideState>((set, get) => ({
                 const elevationGain = calculateElevationGain(currentElevation, newPoint.elevation);
                 newTotalElevationGain = totalElevationGain + elevationGain;
             }
+
+            if (newHeading === 0 && movementDistance > 2) {
+                const calculatedBearing = bearing(
+                    [lastPoint.coordinate.longitude, lastPoint.coordinate.latitude],
+                    [newPoint.coordinate.longitude, newPoint.coordinate.latitude]
+                );
+                newHeading = calculatedBearing >= 0 ? calculatedBearing : 360 + calculatedBearing;
+            }
         }
+        
+        newPoint.heading = newHeading;
 
         const newPoints = [...points, newPoint];
 
