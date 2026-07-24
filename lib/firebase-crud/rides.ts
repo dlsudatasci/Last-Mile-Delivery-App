@@ -1,4 +1,5 @@
 import { GeneratedRoute, RidePoint } from '@/lib/store/useRideStore';
+import { LngLat } from '@/lib/utils/directions';
 import { firestore } from '@/lib/utils/firebaseConfig';
 import { getAuth } from '@react-native-firebase/auth';
 import {
@@ -58,7 +59,19 @@ export interface FetchRideData extends RideData {
 
 export interface OfflineRideData extends RideData {
     offlineId: string;
-    createdAt: number;
+}
+
+export interface FetchedGeneratedRoute {
+    routeId: string;
+    rideId: string;
+    type: 'Initial Route' | 'Regenerated Route' | 'Traffic Update';
+    routePoints: LngLat[];
+    sequence: number;
+    generatedAt: number;
+    remainingTravelTimeOriginal: number | null;
+    remainingTravelTimeNew: number;
+    remainingDistanceOriginal: number | null;
+    remainingDistanceNew: number;
 }
 
 interface PaginationOptions {
@@ -171,6 +184,50 @@ export const getRideAnnotations = async (userId: string, rideId: string): Promis
     }
 };
 
+export const getGeneratedRoutesByRideId = async (rideId: string): Promise<FetchedGeneratedRoute[]> => {
+    try {
+        return await retryWithBackoff(async () => {
+            const routesCollectionRef = collection(firestore, 'generatedRoutes');
+            const q = query(
+                routesCollectionRef,
+                where('rideId', '==', rideId),
+                orderBy('sequence', 'asc')
+            );
+            const snapshot = await getDocs(q);
+            const routes: FetchedGeneratedRoute[] = [];
+
+            for (const docSnap of snapshot.docs) {
+                const data = docSnap.data();
+                // Convert stored { lng, lat } objects back to [lng, lat] tuples
+                const routePoints: LngLat[] = (data.routePoints ?? []).map(
+                    (pt: { lng: number; lat: number }) => [pt.lng, pt.lat] as LngLat
+                );
+                routes.push({
+                    routeId: data.routeId ?? docSnap.id,
+                    rideId: data.rideId,
+                    type: data.type ?? 'Initial Route',
+                    routePoints,
+                    sequence: data.sequence ?? 0,
+                    generatedAt: data.generatedAt ?? 0,
+                    remainingTravelTimeOriginal: data.remainingTravelTimeOriginal ?? null,
+                    remainingTravelTimeNew: data.remainingTravelTimeNew ?? 0,
+                    remainingDistanceOriginal: data.remainingDistanceOriginal ?? null,
+                    remainingDistanceNew: data.remainingDistanceNew ?? 0,
+                });
+            }
+
+            return routes;
+        });
+    } catch (error) {
+        if (isTransientFirestoreError(error)) {
+            console.warn('Fetching generated routes: offline or unavailable.');
+        } else {
+            console.error('Error fetching generated routes:', error);
+        }
+        throw error;
+    }
+};
+
 export const saveRide = async (rideData: NewRideData) => {
     try {
         const userId = getAuth().currentUser?.uid;
@@ -243,8 +300,7 @@ export const saveRide = async (rideData: NewRideData) => {
         const generatedRoutesCollectionRef = collection(firestore, 'generatedRoutes');
         generatedRoutes.forEach(route => {
             const routeDocRef = doc(generatedRoutesCollectionRef, route.routeId);
-            // Firestore does not support nested arrays. routePoints is LngLat[]
-            // ([number, number][]), so convert each tuple to a plain object.
+
             const flatRoutePoints = route.routePoints.map(([lng, lat]) => ({ lng, lat }));
             batch.set(routeDocRef, {
                 ...route,

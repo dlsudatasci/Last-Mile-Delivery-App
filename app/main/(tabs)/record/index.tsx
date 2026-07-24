@@ -188,7 +188,7 @@ export default function Record() {
         getRoute(currentLngLat, destinationCoordinates)
             .then(route => {
                 if (!route) return;
-                setActiveRoute(route, destinationCoordinates);
+                setActiveRoute(route, destinationCoordinates, 'Regenerated Route');
                 setPreviousRemainingDistanceM(route.distanceM);
                 addDeviationEvent({
                     timestamp: now,
@@ -238,7 +238,7 @@ export default function Record() {
         getRoute(currentLngLat, destinationCoordinates)
             .then(route => {
                 if (!route) return;
-                setActiveRoute(route, destinationCoordinates);
+                setActiveRoute(route, destinationCoordinates, 'Traffic Update');
                 setPreviousRemainingDistanceM(route.distanceM);
             })
             .catch(error => {

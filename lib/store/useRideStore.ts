@@ -58,7 +58,7 @@ export interface NavigationInstruction {
 export interface GeneratedRoute {
     routeId: string;
     rideId: string; // Will be set when saving the ride
-    type: 'Initial Route' | 'Regenerated Route';
+    type: 'Initial Route' | 'Regenerated Route' | 'Traffic Update';
     routePoints: LngLat[];
     sequence: number;
     generatedAt: number;
@@ -122,7 +122,7 @@ interface RideState {
     addAnnotation: (annotation: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>) => void;
     setRecording: (isRecording: boolean) => void;
     setActiveRouteSteps: (steps: RouteStep[]) => void;
-    setActiveRoute: (route: RouteResult, destination?: LngLat | null) => void;
+    setActiveRoute: (route: RouteResult, destination?: LngLat | null, updateType?: 'Regenerated Route' | 'Traffic Update') => void;
     setRouteUpdateStatus: (status: RideState['routeUpdateStatus']) => void;
     addDeviationEvent: (event: RideDeviationEvent) => void;
 }
@@ -462,7 +462,7 @@ export const useRideStore = create<RideState>((set, get) => ({
     setActiveRouteSteps: (steps: RouteStep[]) => {
         set({ activeRouteSteps: steps });
     },
-    setActiveRoute: (route: RouteResult, destination = get().activeRouteDestination) => {
+    setActiveRoute: (route: RouteResult, destination = get().activeRouteDestination, updateType?: 'Regenerated Route' | 'Traffic Update') => {
         const state = get();
         const shouldRefreshSuggestedRoute =
             !state.isRecording || state.suggestedRouteDistanceM <= 0 || state.suggestedRouteDurationSec <= 0;
@@ -478,7 +478,7 @@ export const useRideStore = create<RideState>((set, get) => ({
             const newGeneratedRoute: GeneratedRoute = {
                 routeId,
                 rideId: '', // Will be populated in saveRide
-                type: sequence === 1 ? 'Initial Route' : 'Regenerated Route',
+                type: sequence === 1 ? 'Initial Route' : (updateType || 'Regenerated Route'),
                 routePoints: route.coordinates,
                 sequence,
                 generatedAt: Date.now(),

@@ -1,7 +1,7 @@
 import { firestore } from '@/lib/utils/firebaseConfig';
 import { getAuth } from '@react-native-firebase/auth';
-import { collection, doc, writeBatch } from '@react-native-firebase/firestore';
-import { useTripReviews } from '@/lib/store/useTripReviews';
+import { collection, doc, getDoc, getDocs, query, where, writeBatch } from '@react-native-firebase/firestore';
+import { DeviationAnswers, DeviationMetadata, PostTripAnswers, TripReview, useTripReviews } from '@/lib/store/useTripReviews';
 
 export const submitTripReview = async (rideId: string) => {
     try {
@@ -98,5 +98,108 @@ export const submitTripReview = async (rideId: string) => {
     } catch (error) {
         console.error('Error submitting trip review to Firebase:', error);
         throw error;
+    }
+};
+
+export const fetchTripReview = async (rideId: string): Promise<TripReview | null> => {
+    try {
+        const review: TripReview = {
+            status: 'pending',
+            answers: {},
+        };
+
+        // 1. Fetch Post-Trip Questionnaire Response
+        const postTripRef = doc(firestore, 'postTripQuestionnaire_response', rideId);
+        const postTripSnap = await getDoc(postTripRef);
+        if (postTripSnap.exists()) {
+            const data = postTripSnap.data();
+            if (data) {
+                review.postTrip = {
+                    arrival: data.arrival,
+                    etaRating: data.etaRating,
+                    stressRating: data.stressRating,
+                    language: data.language ?? 'en',
+                } as PostTripAnswers;
+                review.status = 'reviewed';
+            }
+        }
+
+        // 2. Fetch Deviations Metadata
+        const deviationsQuery = query(collection(firestore, 'deviations'), where('rideId', '==', rideId));
+        const deviationsSnap = await getDocs(deviationsQuery);
+        
+        deviationsSnap.forEach((docSnap: any) => {
+            const data = docSnap.data();
+            const deviationId = data.deviationId;
+            let gpsLocation = null;
+            if (data.gpsLocation) {
+                const [lat, lng] = data.gpsLocation.split(',');
+                if (lat && lng) {
+                    gpsLocation = { latitude: parseFloat(lat), longitude: parseFloat(lng) };
+                }
+            }
+
+            review.answers[deviationId] = {
+                whyRoute: '',
+                affect: '',
+                confidence: '',
+                metadata: {
+                    deviationId: data.deviationId,
+                    routeId: data.routeId,
+                    rideId: data.rideId,
+                    userId: data.userId,
+                    dateTime: data.dateTime,
+                    isFaster: data.isFaster,
+                    gpsLocation,
+                    originalRouteEdge: data.originalRouteEdge,
+                    deviatedEdge: data.deviatedEdge,
+                    streetName: data.streetName,
+                    generatedInstruction: data.generatedInstruction,
+                    deviationInstruction: data.deviationInstruction,
+                    timestamp: data.timestamp,
+                    createdAt: data.createdAt,
+                } as DeviationMetadata,
+            };
+        });
+
+        // 3. Fetch Deviation Questionnaire Responses
+        const responsesQuery = query(collection(firestore, 'deviationResponses'), where('rideId', '==', rideId));
+        const responsesSnap = await getDocs(responsesQuery);
+        
+        responsesSnap.forEach((docSnap: any) => {
+            const data = docSnap.data();
+            const deviationId = data.deviationId;
+            if (review.answers[deviationId]) {
+                review.answers[deviationId].whyRoute = data.primaryReasonOther || data.primaryReason || '';
+                review.answers[deviationId].affect = data.deviateAgain || '';
+                review.answers[deviationId].confidence = data.usuallyAvoidRoad || '';
+                review.answers[deviationId].language = data.language ?? 'en';
+                review.answers[deviationId].questionnaire = {
+                    primaryReason: data.primaryReason,
+                    primaryReasonOther: data.primaryReasonOther,
+                    trafficSeverity: data.trafficSeverity,
+                    rushHourCause: data.rushHourCause,
+                    chooseDuringNonRush: data.chooseDuringNonRush,
+                    blockageReason: data.blockageReason,
+                    blockageReasonOther: data.blockageReasonOther,
+                    personalStopReason: data.personalStopReason ?? [],
+                    personalStopOther: data.personalStopOther,
+                    stopDuration: data.stopDuration,
+                    deviateAgainFrequency: data.deviateAgain, // The DB saves it as deviateAgain
+                    avoidRoadFrequency: data.avoidRoadFrequency,
+                };
+                review.status = 'reviewed';
+            }
+        });
+
+        // If nothing was found, return null
+        if (review.status === 'pending' && Object.keys(review.answers).length === 0) {
+            return null;
+        }
+
+        return review;
+    } catch (error) {
+        console.warn('Failed to fetch remote trip review:', error);
+        return null;
     }
 };

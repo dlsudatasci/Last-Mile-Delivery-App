@@ -23,6 +23,14 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "distance", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "generatedRoutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "rideId", "order": "ASCENDING" },
+        { "fieldPath": "sequence", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
