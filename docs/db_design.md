@@ -155,19 +155,16 @@ erDiagram
         string primaryReasonOther
         enum trafficSeverity "1-5 Very Light, Light, Moderate, Heavy, Severe"
         string rushHourCause
-        enum rushHour "yes, no, unsure"
         string chooseDuringNonRush
-        enum wouldUseNonRushHour "yes, no, unsure"
         string blockageReason
-        enum blockageType "Flood, Accident, Road Closure, Illegal Parking, Others"
+        string blockageReasonOther
         array personalStopReason
-        enum personalStopType "Break, Meal, Restroom, Refuel, Took a Call, Acciden/Repair, Others"
+        string personalStopOther
         enum stopDuration "optional enum"
         enum deviateAgain "Always, Often, Sometimes, Rarely, Never"
         string avoidRoadFrequency
         enum usuallyAvoidRoad "Always, Often, Sometimes, Rarely, Never, I don't usually pass here"
         string language
-        string otherDeviateReason "optional"
         number submittedAt "Unix Timestamp ms"
         number createdAt "Unix Timestamp ms"
     }
@@ -351,7 +348,7 @@ Last changed: 24/07/2026
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores the rider's questionnaire responses describing the reason and circumstances for a recorded route deviation.
 
-Last changed: 22/07/2026
+Last changed: 24/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `responseId` | String | Yes | Same as the document ID |
@@ -361,19 +358,16 @@ Last changed: 22/07/2026
 | `primaryReasonOther` | String | No | User-specified primary reason when "Other" is selected in primaryReason |
 | `trafficSeverity` | Enum | No | Reported traffic severity; applicable when the deviation is traffic-related |
 | `rushHourCause` | String | No | Optional explanation of why the rider believes rush hour contributed to the deviation |
-| `rushHour` | Enum | No | Whether the rider believes the traffic was caused by rush hour (Yes, No, Unsure) |
 | `chooseDuringNonRush` | String | No | Optional explanation of whether the rider would choose the same route during non-rush-hour conditions |
-| `wouldUseNonRushHour` | Enum | No | Whether the rider would use the same route during non-rush-hour conditions (Yes, No, Unsure) |
 | `blockageReason` | String | No | Optional explanation of the road blockage or hazard encountered |
-| `blockageType` | Enum | No | Type of road blockage or hazard (Flood, Accident, Road Closure, Illegal Parking, Others) |
+| `blockageReasonOther` | String | No | User-specified blockage reason when "Other" is selected in blockageReason |
 | `personalStopReason` | Array | No | One or more reasons for making a personal stop |
-| `personalStopType` | Enum | No | Primary type of personal stop (Break, Meal, Restroom, Refuel, Took a Call, Accident/Repair, Others) |
+| `personalStopOther` | String | No | User-specified personalStop reason when "Other" is selected in personalStop |
 | `stopDuration` | Enum | No | Approximate duration of the personal stop |
 | `deviateAgain` | Enum | Yes | Likelihood of deviating again under similar circumstances (Always, Often, Sometimes, Rarely, Never) |
 | `avoidRoadFrequency` | String | No | Optional explanation of the rider's road avoidance behavior |
 | `usuallyAvoidRoad` | Enum | Yes | Frequency with which the rider usually avoids the road |
 | `language` | String | Yes | Language version of the questionnaire completed by the rider (e.g., English or Tagalog) |
-| `otherDeviateReason` | String | No | Additional comments or secondary reasons from the rider explaining the deviation |
 | `submittedAt` | Number| Yes | Unix timestamp (ms) when the questionnaire was submitted |
 | `createdAt` | Number| Yes | Unix timestamp (ms) when the response record was created |
 ---
