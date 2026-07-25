@@ -43,6 +43,7 @@ jest.mock("expo-location", () => ({
     stopLocationUpdatesAsync: jest.fn(),
     startLocationUpdatesAsync: jest.fn(),
     getCurrentPositionAsync: jest.fn(),
+    getForegroundPermissionsAsync: jest.fn(),
 }));
 
 jest.mock(
@@ -78,7 +79,7 @@ describe("useRideStore", () => {
             activeRouteSteps: [],
             activeRouteCoordinates: [],
             activeRouteCongestionSegments: [],
-            activeRouteDestination: null,
+            activeRouteDestination: [121, 14],
             activeRouteDurationSec: 0,
             activeRouteDistanceM: 0,
             suggestedRouteDurationSec: 0,
@@ -86,6 +87,9 @@ describe("useRideStore", () => {
             activeRouteUpdatedAt: null,
             routeUpdateStatus: "idle",
             deviationEvents: [],
+            generatedRoutes: [],
+            activeGeneratedRouteId: null,
+            isEndingRide: false,
 
             annotations: [],
         });
@@ -94,6 +98,16 @@ describe("useRideStore", () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
         (Location.stopLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
         (Location.startLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
+        (Location.getForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: "granted" });
+        (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({
+            coords: {
+                latitude: 14,
+                longitude: 121,
+                altitude: 5,
+                accuracy: 10,
+            },
+            timestamp: Date.now(),
+        });
     });
 
     // #1 increaseDuration
@@ -475,7 +489,7 @@ describe("useRideStore", () => {
         expect(snapped).toBeNull();
     });
 
-    test("addPoint keeps raw GPS but only moves display trace when near the active route", () => {
+    test("addPoint keeps the visible rider position moving when GPS is off-route", () => {
         useRideStore.setState({
             activeRouteCoordinates: [
                 [121.0, 14.0],
@@ -506,11 +520,12 @@ describe("useRideStore", () => {
 
         const state = useRideStore.getState();
         expect(state.points).toHaveLength(2);
-        expect(state.displayPoints).toHaveLength(1);
+        expect(state.displayPoints).toHaveLength(2);
         expect(state.displayPoints[0].coordinate.latitude).toBeCloseTo(14.0, 4);
+        expect(state.displayPoints[1].coordinate.latitude).toBeCloseTo(14.01, 4);
     });
 
-    test("display trace remains still when a raw GPS point is far off-route", () => {
+    test("display trace appends raw GPS when the rider is far off-route", () => {
         const existingDisplayPoint = {
             coordinate: { latitude: 14.0, longitude: 121.001 },
             timestamp: 1,
@@ -528,7 +543,13 @@ describe("useRideStore", () => {
             ],
         });
 
-        expect(nextDisplayPoints).toEqual([existingDisplayPoint]);
+        expect(nextDisplayPoints).toEqual([
+            existingDisplayPoint,
+            {
+                coordinate: { latitude: 14.01, longitude: 121.002 },
+                timestamp: 2,
+            },
+        ]);
     });
 
     // #8 haverineDistance
@@ -945,17 +966,45 @@ describe("useRideStore", () => {
         );
     });
 
+    test("finishRide stays successful when location cleanup fails after saving", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(true);
+        (Location.stopLocationUpdatesAsync as jest.Mock).mockRejectedValue(
+            new Error("Native cleanup failed")
+        );
+        (saveRide as jest.Mock).mockResolvedValue("ride-123");
+
+        useRideStore.setState({
+            isRecording: true,
+            points: [
+                {
+                    coordinate: {
+                        latitude: 14,
+                        longitude: 121,
+                    },
+                    timestamp: Date.now(),
+                },
+            ],
+        });
+
+        const result = await useRideStore.getState().finishRide();
+
+        expect(result).toMatchObject({ success: true, rideId: "ride-123" });
+        expect(saveRide).toHaveBeenCalledTimes(1);
+        expect(useRideStore.getState().isRecording).toBe(false);
+    });
+
     // #24
     test("finishRide records current location when there are no ride points", async () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
 
         (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({
             coords: {
-                latitude: 10,
-                longitude: 20,
+                latitude: 14,
+                longitude: 121,
                 altitude: 5,
+                accuracy: 10,
             },
-            timestamp: 12345,
+            timestamp: Date.now(),
         });
 
         (saveRide as jest.Mock).mockResolvedValue("ride-123");
@@ -969,6 +1018,101 @@ describe("useRideStore", () => {
         expect(Location.getCurrentPositionAsync).toHaveBeenCalled();
 
         expect(saveRide).toHaveBeenCalled();
+    });
+
+    test("finishRide rejects completion more than 100 meters from the destination", async () => {
+        useRideStore.setState({
+            activeRouteDestination: [121.01, 14.01],
+            points: [
+                {
+                    coordinate: {
+                        latitude: 14,
+                        longitude: 121,
+                    },
+                    timestamp: Date.now(),
+                },
+            ],
+        });
+
+        const result = await useRideStore.getState().finishRide();
+
+        expect(result.success).toBe(false);
+        expect(result.reason).toBe("outside-destination-radius");
+        expect(saveRide).not.toHaveBeenCalled();
+        expect(Location.stopLocationUpdatesAsync).not.toHaveBeenCalled();
+    });
+
+    test("finishRide allows completion exactly 100 meters from the destination", async () => {
+        const destinationLat = 14 + (100 / 6371000) * (180 / Math.PI);
+        useRideStore.setState({
+            activeRouteDestination: [121, destinationLat],
+            points: [
+                {
+                    coordinate: {
+                        latitude: 14,
+                        longitude: 121,
+                    },
+                    timestamp: Date.now(),
+                },
+            ],
+        });
+
+        const result = await useRideStore.getState().finishRide();
+
+        expect(result.success).toBe(true);
+        expect(saveRide).toHaveBeenCalledTimes(1);
+    });
+
+    test("finishRide rejects stale current location", async () => {
+        (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({
+            coords: {
+                latitude: 14,
+                longitude: 121,
+                altitude: 5,
+                accuracy: 10,
+            },
+            timestamp: Date.now() - 3 * 60 * 1000,
+        });
+
+        const result = await useRideStore.getState().finishRide();
+
+        expect(result.success).toBe(false);
+        expect(result.reason).toBe("stale-current-location");
+        expect(saveRide).not.toHaveBeenCalled();
+    });
+
+    test("finishRide rejects missing destination coordinates", async () => {
+        useRideStore.setState({ activeRouteDestination: null });
+
+        const result = await useRideStore.getState().finishRide();
+
+        expect(result.success).toBe(false);
+        expect(result.reason).toBe("missing-destination");
+        expect(saveRide).not.toHaveBeenCalled();
+    });
+
+    test("discardRide stops tracking and clears active ride without saving", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(true);
+        useRideStore.setState({
+            isRecording: true,
+            points: [
+                {
+                    coordinate: {
+                        latitude: 14,
+                        longitude: 121,
+                    },
+                    timestamp: Date.now(),
+                },
+            ],
+        });
+
+        const result = await useRideStore.getState().discardRide();
+
+        expect(result.success).toBe(true);
+        expect(Location.stopLocationUpdatesAsync).toHaveBeenCalledWith("location-recording");
+        expect(saveRide).not.toHaveBeenCalled();
+        expect(useRideStore.getState().isRecording).toBe(false);
+        expect(useRideStore.getState().points).toHaveLength(0);
     });
 
     // #25

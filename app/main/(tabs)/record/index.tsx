@@ -2,7 +2,14 @@ import OpenCameraView from '@/components/camera/CameraView';
 import SpinningWheel from '@/components/common/SpinningWheel';
 import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
-import { calculateRemainingDistanceM, getAsyncFlag, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
+import {
+    calculateRemainingDistanceM,
+    FinishRideFailureReason,
+    getAsyncFlag,
+    getNextNavigationInstruction,
+    RidePoint,
+    useRideStore,
+} from '@/lib/store/useRideStore';
 import { calculateSpeedAdjustedEtaSec, getDistanceToRouteM, getRoute, LngLat } from '@/lib/utils/directions';
 import { clampFraction, DEFAULT_ROUTE_PROGRESS_SNAP_M, estimateRemainingEtaSec, getRouteProgress } from '@/lib/utils/routeProgress';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
@@ -35,6 +42,7 @@ export default function Record() {
 
     // variables for saving ride
     const [isSaving, setIsSaving] = useState(false);
+    const [isDiscarding, setIsDiscarding] = useState(false);
     const [progressText, setProgressText] = useState('Preparing trip data...');
     const [error, setError] = useState(false);
 
@@ -58,12 +66,13 @@ export default function Record() {
         finishRide,
         increaseDuration,
         syncDurationFromClock,
-        resetRide,
         addAnnotation,
         setRecording,
         setActiveRoute,
         setRouteUpdateStatus,
         addDeviationEvent,
+        discardRide,
+        isEndingRide,
     } = useRideStore();
 
     // const [duration, setDuration] = useState(0);
@@ -394,6 +403,77 @@ export default function Record() {
         }
     };
 
+    const showCompletionError = (reason?: FinishRideFailureReason) => {
+        const messageByReason: Partial<Record<FinishRideFailureReason, string>> = {
+            'location-permission-denied':
+                'Devia needs location permission to confirm you reached the destination. Please enable location access and try again.',
+            'location-unavailable':
+                'Devia could not retrieve a reliable current location. Please check your GPS signal and try again.',
+            'invalid-current-location':
+                'Devia received unreliable GPS data. Please wait for a better location fix and try again.',
+            'stale-current-location':
+                'Your latest GPS location is too old to complete this trip. Please wait for your location to update and try again.',
+            'missing-destination':
+                'This trip is missing destination coordinates, so it cannot be completed safely.',
+            'save-failed':
+                'The trip could not be saved. Please check your connection and try again.',
+        };
+
+        Alert.alert('Unable to complete trip', messageByReason[reason || 'location-unavailable'] || messageByReason['location-unavailable'], [
+            { text: 'OK' },
+        ]);
+    };
+
+    const confirmDiscardTrip = () => {
+        if (isSaving || isDiscarding || isEndingRide) return;
+
+        Alert.alert(
+            'Discard this trip?',
+            "This trip will not be marked as completed. Any recorded route data should be handled according to the application's existing discarded-trip logic.",
+            [
+                { text: 'Continue Trip', style: 'cancel' },
+                {
+                    text: 'Discard Trip',
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (isSaving || isDiscarding || useRideStore.getState().isEndingRide) return;
+                        setIsDiscarding(true);
+                        const result = await discardRide();
+                        setIsDiscarding(false);
+
+                        if (result.success) {
+                            router.replace('/main/(tabs)/record');
+                            return;
+                        }
+
+                        Alert.alert(
+                            'Unable to discard trip',
+                            'The trip could not be discarded. Please try again.',
+                            [{ text: 'OK' }]
+                        );
+                    },
+                },
+            ],
+            { cancelable: true }
+        );
+    };
+
+    const showOutsideDestinationWarning = () => {
+        Alert.alert(
+            "You haven't reached your destination yet.",
+            'You must be within 100 meters of your destination to complete this trip.',
+            [
+                { text: 'Continue Trip', style: 'cancel' },
+                {
+                    text: 'Discard Trip',
+                    style: 'destructive',
+                    onPress: confirmDiscardTrip,
+                },
+            ],
+            { cancelable: true }
+        );
+    };
+
     // The trip was already confirmed on Route Preview ("Start Trip"), so begin
     // recording automatically on entry — no need for a second Start button.
     useEffect(() => {
@@ -404,18 +484,6 @@ export default function Record() {
     }, []);
 
     const finishRideProcess = async () => {
-        const messages = [
-            'Preparing trip data...',
-            'Processing GPS points...',
-            'Uploading to cloud...',
-            'Finalizing trip...',
-        ];
-
-        for (let i = 0; i < messages.length; i++) {
-            setProgressText(messages[i]);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-
         const latestRidePoints = useRideStore.getState().points;
         let originPoint = latestRidePoints[0] ?? currentPoint;
         if (!originPoint) {
@@ -438,6 +506,7 @@ export default function Record() {
             destination: destinationPoint?.coordinate,
             destinationLabel: destination,
         });
+        setProgressText('Confirming destination...');
         const result = await finishRide(tripName);
 
         if (result.success) {
@@ -448,16 +517,21 @@ export default function Record() {
                 )}&deviationCount=${deviationEvents.length}`
             );
             setIsSaving(false);
+        } else if (result.reason === 'outside-destination-radius') {
+            setIsSaving(false);
+            showOutsideDestinationWarning();
         } else {
+            setIsSaving(false);
             setError(true);
             setProgressText('Something went wrong! Please try again.');
+            showCompletionError(result.reason);
         }
     };
 
     const handleFinish = async () => {
-        try {
-            setIsSaving(true);
+        if (isSaving || isDiscarding || isEndingRide) return;
 
+        try {
             // Check if there are coordinates and distance before finishing
             // if (totalDistance === 0) {
             //     Alert.alert(
@@ -477,11 +551,13 @@ export default function Record() {
                         {
                             text: 'Cancel',
                             style: 'cancel',
-                            onPress: () => setIsSaving(false),
                         },
                         {
                             text: 'Finish anyway',
-                            onPress: finishRideProcess,
+                            onPress: async () => {
+                                setIsSaving(true);
+                                await finishRideProcess();
+                            },
                         },
                     ],
                     { cancelable: true }
@@ -489,9 +565,12 @@ export default function Record() {
                 return;
             }
 
+            setIsSaving(true);
             await finishRideProcess();
         } catch (error) {
             console.error('Error finishing ride:', error);
+            setIsSaving(false);
+            showCompletionError('location-unavailable');
         }
     };
 
@@ -562,11 +641,9 @@ export default function Record() {
                             icon="restart"
                             iconColor={theme.colors.onSurface}
                             onPress={() => {
-                                Alert.alert('Reset Trip', 'Are you sure you want to reset this trip recording?', [
-                                    { text: 'Cancel', style: 'cancel' },
-                                    { text: 'Reset', onPress: () => resetRide() },
-                                ]);
+                                confirmDiscardTrip();
                             }}
+                            disabled={isSaving || isDiscarding || isEndingRide}
                         />
                     ),
                 }}
@@ -679,6 +756,7 @@ export default function Record() {
                             style={[styles.button, styles.stopButton]}
                             labelStyle={styles.buttonLabel}
                             contentStyle={{ flexDirection: 'row-reverse', height: sizes.size56 }}
+                            disabled={isSaving || isDiscarding || isEndingRide}
                         >
                             Stop
                         </Button>

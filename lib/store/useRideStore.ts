@@ -113,14 +113,16 @@ interface RideState {
     generatedRoutes: GeneratedRoute[];
     activeGeneratedRouteId: string | null;
     annotations: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>[];
+    isEndingRide: boolean;
 
     // Actions
     startRide: () => Promise<boolean>;
-    finishRide: (tripName?: string) => Promise<{ success: boolean; rideId?: string; error?: any }>;
+    finishRide: (tripName?: string) => Promise<{ success: boolean; rideId?: string; error?: any; reason?: FinishRideFailureReason; distanceToDestinationM?: number }>;
+    discardRide: () => Promise<{ success: boolean; error?: any }>;
     increaseDuration: () => void;
     syncDurationFromClock: () => void;
     addPoint: (location: LocationObject) => void;
-    resetRide: () => void;
+    resetRide: () => Promise<void>;
     addAnnotation: (annotation: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>) => void;
     setRecording: (isRecording: boolean) => void;
     setActiveRouteSteps: (steps: RouteStep[]) => void;
@@ -128,6 +130,22 @@ interface RideState {
     setRouteUpdateStatus: (status: RideState['routeUpdateStatus']) => void;
     addDeviationEvent: (event: RideDeviationEvent) => void;
 }
+
+export type FinishRideFailureReason =
+    | 'already-processing'
+    | 'location-permission-denied'
+    | 'location-unavailable'
+    | 'invalid-current-location'
+    | 'stale-current-location'
+    | 'missing-destination'
+    | 'outside-destination-radius'
+    | 'save-failed';
+
+const LOCATION_RECORDING_TASK = 'location-recording';
+export const DESTINATION_COMPLETION_RADIUS_M = 100;
+const DESTINATION_COMPLETION_RADIUS_EPSILON_M = 0.01;
+const MAX_COMPLETION_LOCATION_AGE_MS = 2 * 60 * 1000;
+const MAX_COMPLETION_LOCATION_ACCURACY_M = 100;
 
 const calculateElevationGain = (currentElevation: number, newElevation: number): number => {
     if (newElevation > currentElevation) {
@@ -145,6 +163,73 @@ const locationToRidePoint = (location: LocationObject): RidePoint => ({
     elevation: location.coords.altitude || 0,
     heading: location.coords.heading || 0,
 });
+
+const isValidCoordinate = (latitude?: number, longitude?: number) =>
+    typeof latitude === 'number' &&
+    typeof longitude === 'number' &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+
+const ridePointFromLngLat = (location: LngLat): RidePoint | null => {
+    const [longitude, latitude] = location;
+    if (!isValidCoordinate(latitude, longitude)) return null;
+    return {
+        coordinate: { latitude, longitude },
+        timestamp: Date.now(),
+    };
+};
+
+const validateCompletionLocation = async (
+    destination: LngLat | null
+): Promise<{ success: true; location: LocationObject; distanceToDestinationM: number } | { success: false; reason: FinishRideFailureReason; error?: any; distanceToDestinationM?: number }> => {
+    const destinationPoint = destination ? ridePointFromLngLat(destination) : null;
+    if (!destinationPoint) {
+        return { success: false, reason: 'missing-destination' };
+    }
+
+    try {
+        const permission = await Location.getForegroundPermissionsAsync();
+        if (permission.status !== 'granted') {
+            return { success: false, reason: 'location-permission-denied' };
+        }
+
+        const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
+        if (!location) {
+            return { success: false, reason: 'location-unavailable' };
+        }
+
+        const { latitude, longitude, accuracy } = location.coords;
+        if (!isValidCoordinate(latitude, longitude)) {
+            return { success: false, reason: 'invalid-current-location' };
+        }
+
+        if (!Number.isFinite(location.timestamp) || Date.now() - location.timestamp > MAX_COMPLETION_LOCATION_AGE_MS) {
+            return { success: false, reason: 'stale-current-location' };
+        }
+
+        if (typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > MAX_COMPLETION_LOCATION_ACCURACY_M) {
+            return { success: false, reason: 'invalid-current-location' };
+        }
+
+        const currentPoint = locationToRidePoint(location);
+        const distanceToDestinationM = haversineDistance(currentPoint, destinationPoint);
+        if (!Number.isFinite(distanceToDestinationM)) {
+            return { success: false, reason: 'invalid-current-location' };
+        }
+
+        if (distanceToDestinationM > DESTINATION_COMPLETION_RADIUS_M + DESTINATION_COMPLETION_RADIUS_EPSILON_M) {
+            return { success: false, reason: 'outside-destination-radius', distanceToDestinationM };
+        }
+
+        return { success: true, location, distanceToDestinationM };
+    } catch (error) {
+        return { success: false, reason: 'location-unavailable', error };
+    }
+};
 
 export const useRideStore = create<RideState>((set, get) => ({
     // Initial state
@@ -176,6 +261,7 @@ export const useRideStore = create<RideState>((set, get) => ({
     generatedRoutes: [],
     activeGeneratedRouteId: null,
     annotations: [],
+    isEndingRide: false,
 
     // Actions
     startRide: async (): Promise<boolean> => {
@@ -192,7 +278,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 activeRouteUpdatedAt,
             } = get();
             // First, reset the ride state
-            get().resetRide();
+            await get().resetRide();
 
             // Seed the initial generated route so the first suggested route is always captured
             const initialRouteId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -257,33 +343,17 @@ export const useRideStore = create<RideState>((set, get) => ({
             return true;
         } catch (error) {
             console.error('Failed to start location updates:', error);
-            // If location updates fail to start, reset everything
-            set({
-                isRecording: false,
-                isPaused: false,
-            });
-            await setAsyncFlag('isRecording', false);
-            await setAsyncFlag('isPaused', false);
+            await get().resetRide();
             return false;
         }
     },
 
     finishRide: async (tripName?: string) => {
+        if (get().isEndingRide) {
+            return { success: false, reason: 'already-processing' };
+        }
+        set({ isEndingRide: true });
         try {
-            const stillRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
-            if (stillRunning) {
-                await Location.stopLocationUpdatesAsync('location-recording');
-            }
-
-            set({
-                // isRecording: false,
-                isPaused: true,
-                pausedAt: Date.now(),
-                currentSpeed: 0,
-            });
-
-            await setAsyncFlag('isPaused', true);
-
             const {
                 points,
                 totalDistance,
@@ -298,11 +368,16 @@ export const useRideStore = create<RideState>((set, get) => ({
                 suggestedRouteDurationSec,
                 suggestedRouteDistanceM,
                 generatedRoutes,
+                activeRouteDestination,
             } = get();
+            const completionValidation = await validateCompletionLocation(activeRouteDestination);
+            if (!completionValidation.success) {
+                return completionValidation;
+            }
+
             let pointsForSave = points;
             if (pointsForSave.length === 0) {
-                const location = await Location.getCurrentPositionAsync({});
-                pointsForSave = [locationToRidePoint(location)];
+                pointsForSave = [locationToRidePoint(completionValidation.location)];
             }
 
             const rideData: NewRideData = {
@@ -329,10 +404,24 @@ export const useRideStore = create<RideState>((set, get) => ({
             set({
                 isRecording: false,
                 isPaused: false,
+                isEndingRide: false,
             });
             await setAsyncFlag('isPaused', false);
             await setAsyncFlag('isRecording', false);
-            return { success: true, rideId };
+
+            // The Firestore commit is already complete at this point. A native
+            // location cleanup failure must not be reported as a save failure,
+            // otherwise retrying would create a duplicate completed ride.
+            try {
+                const stillRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_RECORDING_TASK);
+                if (stillRunning) {
+                    await Location.stopLocationUpdatesAsync(LOCATION_RECORDING_TASK);
+                }
+            } catch (cleanupError) {
+                console.warn('Ride saved, but location tracking cleanup failed:', cleanupError);
+            }
+
+            return { success: true, rideId, distanceToDestinationM: completionValidation.distanceToDestinationM };
         } catch (error) {
             // The record screen shows a retry state on failure and the ride data stays
             // in this store, so an offline/transient failure is expected, not a crash.
@@ -341,6 +430,29 @@ export const useRideStore = create<RideState>((set, get) => ({
             } else {
                 console.error('Failed to save ride:', error);
             }
+            return { success: false, error, reason: 'save-failed' };
+        } finally {
+            if (get().isEndingRide) {
+                set({ isEndingRide: false });
+            }
+        }
+    },
+
+    discardRide: async () => {
+        if (get().isEndingRide) {
+            return { success: false, error: new Error('Trip end request already in progress') };
+        }
+        set({ isEndingRide: true });
+        try {
+            const stillRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_RECORDING_TASK);
+            if (stillRunning) {
+                await Location.stopLocationUpdatesAsync(LOCATION_RECORDING_TASK);
+            }
+            await get().resetRide();
+            return { success: true };
+        } catch (error) {
+            console.error('Failed to discard ride:', error);
+            set({ isEndingRide: false });
             return { success: false, error };
         }
     },
@@ -464,6 +576,7 @@ export const useRideStore = create<RideState>((set, get) => ({
             generatedRoutes: [],
             activeGeneratedRouteId: null,
             annotations: [],
+            isEndingRide: false,
         });
 
         // Also clear AsyncStorage flags to maintain consistency

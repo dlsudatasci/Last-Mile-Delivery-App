@@ -88,7 +88,13 @@ export default function TabLayout() {
                     title: 'Record',
                     tabBarButton: () => (
                         <TouchableOpacity
-                            onPress={() => router.push('/main/(tabs)/record/destination')}
+                            onPress={() =>
+                                router.push(
+                                    isRecording
+                                        ? '/main/(tabs)/record'
+                                        : '/main/(tabs)/record/destination'
+                                )
+                            }
                             style={{
                                 alignSelf: 'center',
                                 backgroundColor: theme.colors.surface,

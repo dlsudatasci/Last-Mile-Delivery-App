@@ -239,7 +239,6 @@ describe("joinStudy()", () => {
 
         expect(result).toMatchObject({
             userId: "user123",
-            email: "user@test.com",
             eventId: "devia-route-study",
             status: "joined",
         });
@@ -307,7 +306,6 @@ describe("enrollInStudy()", () => {
 
         expect(result).toMatchObject({
             userId: "user123",
-            email: "user@test.com",
             acceptedDataUsage: true,
             acceptedPrivacy: true,
             acceptedTerms: true,
