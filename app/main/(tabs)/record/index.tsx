@@ -168,13 +168,13 @@ export default function Record() {
         const distanceFromRouteM = getDistanceToRouteM(currentLngLat, activeRouteCoordinates);
         const now = Date.now();
 
-        if (distanceFromRouteM < 90) {
+        if (distanceFromRouteM < 35) {
             offRouteCountRef.current = 0;
             return;
         }
 
         offRouteCountRef.current += 1;
-        if (offRouteCountRef.current < 2 || now - lastRerouteAtRef.current < 45000) {
+        if (offRouteCountRef.current < 3 || now - lastRerouteAtRef.current < 45000) {
             return;
         }
 
@@ -237,7 +237,7 @@ export default function Record() {
         const distanceFromRouteM = activeRouteCoordinates.length >= 2
             ? getDistanceToRouteM(currentLngLat, activeRouteCoordinates)
             : 0;
-        const isOffRoute = distanceFromRouteM >= 90;
+        const isOffRoute = distanceFromRouteM >= 35;
         const previousInstruction = nextInstruction?.text;
         const previousEtaSec = etaRemainingSec;
 

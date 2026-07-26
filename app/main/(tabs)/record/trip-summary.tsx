@@ -6,7 +6,7 @@ import { Button, MD3Theme, Surface, Text, useTheme } from 'react-native-paper';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { FetchRideData, getRide } from '@/lib/firebase-crud/rides';
 import { getAuth } from '@react-native-firebase/auth';
-
+import { useRideStore } from '@/lib/store/useRideStore';
 export default function TripSummary() {
     const theme = useTheme();
     const styles = getStyles(theme);
@@ -47,7 +47,8 @@ export default function TripSummary() {
     const avgSpeed = `${((ride?.averageSpeed || 0) * 3.6).toFixed(1)} km/h`;
     const maxSpeed = `${((ride?.maxSpeed || 0) * 3.6).toFixed(1)} km/h`;
     const elevationGain = `${(ride?.elevationGain || 0).toFixed(0)} m`;
-    const deviationCount = 0;
+    const deviationEvents = useRideStore(state => state.deviationEvents);
+    const deviationCount = deviationEvents.length;
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
