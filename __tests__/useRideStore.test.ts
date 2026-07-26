@@ -1115,6 +1115,83 @@ describe("useRideStore", () => {
         expect(useRideStore.getState().points).toHaveLength(0);
     });
 
+    test("discarding and restarting the same route starts a completely new timer", async () => {
+        const destination: [number, number] = [121.1, 14.1];
+        const route = {
+            coordinates: [
+                [121.0, 14.0],
+                destination,
+            ],
+            durationSec: 900,
+            mapboxDurationSec: 900,
+            distanceM: 5000,
+            congestionSegments: [],
+            score: 1,
+            trafficDelaySec: 0,
+            restrictedRoadExposure: 0,
+            congestionSummary: {
+                unknown: { distanceM: 5000, count: 1 },
+                low: { distanceM: 0, count: 0 },
+                moderate: { distanceM: 0, count: 0 },
+                heavy: { distanceM: 0, count: 0 },
+                severe: { distanceM: 0, count: 0 },
+            },
+            steps: [],
+        } as any;
+        const previousStartTime = Date.now() - 15 * 60 * 1000;
+
+        useRideStore.setState({
+            isRecording: true,
+            isPaused: true,
+            startTime: previousStartTime,
+            pausedAt: Date.now() - 30_000,
+            pausedDurationMs: 60_000,
+            duration: 840,
+            totalDistance: 4200,
+            currentSpeed: 8,
+            averageSpeed: 5,
+            maxSpeed: 12,
+            points: [
+                {
+                    coordinate: { latitude: 14.05, longitude: 121.05 },
+                    timestamp: Date.now() - 1_000,
+                },
+            ],
+            activeRouteDestination: destination,
+        });
+
+        const discarded = await useRideStore.getState().discardRide();
+        expect(discarded.success).toBe(true);
+
+        const resetState = useRideStore.getState();
+        expect(resetState.startTime).toBeNull();
+        expect(resetState.duration).toBe(0);
+        expect(resetState.pausedAt).toBeNull();
+        expect(resetState.pausedDurationMs).toBe(0);
+
+        useRideStore.getState().setActiveRoute(route, destination);
+        const restartRequestedAt = Date.now();
+        const restarted = await useRideStore.getState().startRide();
+        const restartedState = useRideStore.getState();
+
+        expect(restarted).toBe(true);
+        expect(restartedState.isRecording).toBe(true);
+        expect(restartedState.isPaused).toBe(false);
+        expect(restartedState.startTime).not.toBeNull();
+        expect(restartedState.startTime as number).toBeGreaterThanOrEqual(restartRequestedAt);
+        expect(restartedState.startTime).not.toBe(previousStartTime);
+        expect(restartedState.duration).toBe(0);
+        expect(restartedState.pausedAt).toBeNull();
+        expect(restartedState.pausedDurationMs).toBe(0);
+        expect(restartedState.totalDistance).toBe(0);
+        expect(restartedState.currentSpeed).toBe(0);
+        expect(restartedState.averageSpeed).toBe(0);
+        expect(restartedState.maxSpeed).toBe(0);
+        expect(restartedState.points).toHaveLength(0);
+        expect(restartedState.displayPoints).toHaveLength(0);
+        expect(restartedState.activeRouteDestination).toEqual(destination);
+    });
+
     // #25
     test("finishRide returns failure when saveRide throws", async () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);

@@ -1,4 +1,5 @@
 import OpenCameraView from '@/components/camera/CameraView';
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import SpinningWheel from '@/components/common/SpinningWheel';
 import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
@@ -424,7 +425,7 @@ export default function Record() {
         ]);
     };
 
-    const confirmDiscardTrip = () => {
+    const confirmDiscardTrip = (onDiscarded?: () => void) => {
         if (isSaving || isDiscarding || isEndingRide) return;
 
         Alert.alert(
@@ -442,7 +443,11 @@ export default function Record() {
                         setIsDiscarding(false);
 
                         if (result.success) {
-                            router.replace('/main/(tabs)/record');
+                            if (onDiscarded) {
+                                onDiscarded();
+                            } else {
+                                router.replace('/main/(tabs)/record/new-trip');
+                            }
                             return;
                         }
 
@@ -458,6 +463,15 @@ export default function Record() {
         );
     };
 
+    const handleHeaderBack = () => {
+        if (!isRecording) {
+            router.back();
+            return;
+        }
+
+        confirmDiscardTrip(() => router.back());
+    };
+
     const showOutsideDestinationWarning = () => {
         Alert.alert(
             "You haven't reached your destination yet.",
@@ -467,7 +481,7 @@ export default function Record() {
                 {
                     text: 'Discard Trip',
                     style: 'destructive',
-                    onPress: confirmDiscardTrip,
+                    onPress: () => confirmDiscardTrip(),
                 },
             ],
             { cancelable: true }
@@ -636,6 +650,11 @@ export default function Record() {
         <>
             <Stack.Screen
                 options={{
+                    headerLeft: () => (
+                        <HeaderBackButton
+                            onPress={handleHeaderBack}
+                        />
+                    ),
                     headerRight: () => (
                         <IconButton
                             icon="restart"
