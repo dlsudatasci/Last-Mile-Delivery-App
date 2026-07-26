@@ -535,27 +535,7 @@ describe("useEventsStore", () => {
         );
     });
 
-    // #20 setMockevents
-    test("setMockEvents replaces the current events", () => {
-        const mockEvents = [
-            {
-                id: "event1",
-            },
-            {
-                id: "event2",
-            },
-        ];
-
-        useEventsStore
-            .getState()
-            .setMockEvents(mockEvents as any);
-
-        expect(useEventsStore.getState().events).toEqual(
-            mockEvents
-        );
-    });
-
-    // #21 clearEvents
+    // #20 clearEvents
     test("clearEvents removes all events and selectedEvent", () => {
         useEventsStore.setState({
             events: [

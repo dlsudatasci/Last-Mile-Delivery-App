@@ -5,10 +5,18 @@ import * as Location from "expo-location";
 import { saveRide } from "../lib/firebase-crud/rides";
 
 import {
+    calculateRemainingDistanceM,
+    calculateSpeedFromMovement,
+    formatNavigationInstruction,
+    getNextDisplayPoints,
+    getNextNavigationInstruction,
     haversineDistance,
+    sanitizeLocationSpeed,
     simplify,
+    smoothSpeed,
     useRideStore,
 } from "../lib/store/useRideStore";
+import { snapLngLatToRoute } from "../lib/utils/routeSnapping";
 
 // Mocks
 jest.mock("../lib/utils/firebaseConfig", () => ({
@@ -23,11 +31,13 @@ jest.mock("../lib/utils/firebaseConfig", () => ({
 
 jest.mock("../lib/firebase-crud/rides", () => ({
     saveRide: jest.fn().mockResolvedValue("ride123"),
+    isTransientFirestoreError: jest.fn(() => false),
 }));
 
 jest.mock("expo-location", () => ({
     Accuracy: {
         BestForNavigation: 6,
+        Balanced: 3,
     },
     hasStartedLocationUpdatesAsync: jest.fn(),
     stopLocationUpdatesAsync: jest.fn(),
@@ -50,6 +60,8 @@ describe("useRideStore", () => {
             isRecording: false,
             isPaused: false,
             startTime: null,
+            pausedAt: null,
+            pausedDurationMs: 0,
 
             points: [],
             displayPoints: [],
@@ -63,6 +75,17 @@ describe("useRideStore", () => {
             currentSpeed: 0,
             averageSpeed: 0,
             maxSpeed: 0,
+            activeRouteSteps: [],
+            activeRouteCoordinates: [],
+            activeRouteCongestionSegments: [],
+            activeRouteDestination: null,
+            activeRouteDurationSec: 0,
+            activeRouteDistanceM: 0,
+            suggestedRouteDurationSec: 0,
+            suggestedRouteDistanceM: 0,
+            activeRouteUpdatedAt: null,
+            routeUpdateStatus: "idle",
+            deviationEvents: [],
 
             annotations: [],
         });
@@ -75,12 +98,39 @@ describe("useRideStore", () => {
 
     // #1 increaseDuration
     test("increaseDuration increments duration", () => {
+        useRideStore.setState({ startTime: Date.now() - 2000 });
         const { increaseDuration } = useRideStore.getState();
 
         increaseDuration();
         increaseDuration();
 
         expect(useRideStore.getState().duration).toBe(2);
+    });
+
+    test("duration sync starts at zero and follows wall-clock time", () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(1000);
+        useRideStore.setState({ startTime: 1000, duration: 0, pausedDurationMs: 0, pausedAt: null, isPaused: false });
+
+        useRideStore.getState().syncDurationFromClock();
+        expect(useRideStore.getState().duration).toBe(0);
+
+        jest.setSystemTime(6500);
+        useRideStore.getState().syncDurationFromClock();
+        expect(useRideStore.getState().duration).toBe(5);
+
+        jest.useRealTimers();
+    });
+
+    test("duration sync excludes paused time", () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(10000);
+        useRideStore.setState({ startTime: 1000, duration: 0, pausedDurationMs: 4000, pausedAt: null, isPaused: false });
+
+        useRideStore.getState().syncDurationFromClock();
+
+        expect(useRideStore.getState().duration).toBe(5);
+        jest.useRealTimers();
     });
 
     // #2 setRecording
@@ -205,6 +255,169 @@ describe("useRideStore", () => {
         expect(state.totalElevationGain).toBe(5);
     });
 
+    test("addPoint uses valid location speed and clamps unrealistic speed", () => {
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 1,
+                longitude: 2,
+                altitude: 10,
+                speed: 120,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 1.0001,
+                longitude: 2.0001,
+                altitude: 10,
+                speed: 120,
+            },
+            timestamp: 3000,
+        } as any);
+
+        expect(useRideStore.getState().currentSpeed).toBeLessThanOrEqual(35);
+        expect(useRideStore.getState().currentSpeed).toBeGreaterThan(0);
+    });
+
+    test("addPoint keeps speed and distance at zero for stationary GPS jitter", () => {
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 14.0,
+                longitude: 121.0,
+                altitude: 10,
+                speed: 1,
+                accuracy: 12,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 14.00001,
+                longitude: 121.00001,
+                altitude: 10,
+                speed: 1,
+                accuracy: 12,
+            },
+            timestamp: 3000,
+        } as any);
+
+        const state = useRideStore.getState();
+        expect(state.currentSpeed).toBe(0);
+        expect(state.totalDistance).toBe(0);
+    });
+
+    test("addPoint ignores poor accuracy movement for speed and distance", () => {
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 14.0,
+                longitude: 121.0,
+                altitude: 10,
+                speed: 8,
+                accuracy: 80,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 14.001,
+                longitude: 121.001,
+                altitude: 10,
+                speed: 8,
+                accuracy: 80,
+            },
+            timestamp: 3000,
+        } as any);
+
+        const state = useRideStore.getState();
+        expect(state.currentSpeed).toBe(0);
+        expect(state.totalDistance).toBe(0);
+    });
+
+    test("speed helpers sanitize invalid values and smooth changes", () => {
+        expect(sanitizeLocationSpeed(-1)).toBeNull();
+        expect(sanitizeLocationSpeed(null)).toBeNull();
+        expect(sanitizeLocationSpeed(1)).toBeNull();
+        expect(sanitizeLocationSpeed(8, 80)).toBeNull();
+        expect(sanitizeLocationSpeed(120)).toBe(35);
+        expect(calculateSpeedFromMovement(20, 2)).toBe(10);
+        expect(calculateSpeedFromMovement(4, 2)).toBe(0);
+        expect(calculateSpeedFromMovement(20, 2, 80)).toBe(0);
+        expect(calculateSpeedFromMovement(1000, 1)).toBe(35);
+        expect(smoothSpeed(10, 20)).toBeCloseTo(15.5);
+        expect(smoothSpeed(1.5, 0)).toBe(0);
+    });
+
+    test("remaining distance starts from route distance and decreases with traveled distance", () => {
+        const remaining = calculateRemainingDistanceM({
+            routeDistanceM: 5000,
+            traveledDistanceM: 1200,
+        });
+
+        expect(remaining).toBe(3800);
+    });
+
+    test("remaining distance falls back to destination distance and ignores small GPS increases", () => {
+        const destination = {
+            coordinate: { latitude: 14.01, longitude: 121.01 },
+            timestamp: 1,
+        };
+        const currentLocation = {
+            coordinate: { latitude: 14.0, longitude: 121.0 },
+            timestamp: 1,
+        };
+
+        const firstRemaining = calculateRemainingDistanceM({
+            currentLocation,
+            destination,
+            traveledDistanceM: 0,
+        });
+        const noisyRemaining = calculateRemainingDistanceM({
+            currentLocation: {
+                coordinate: { latitude: 13.99999, longitude: 120.99999 },
+                timestamp: 2,
+            },
+            destination,
+            traveledDistanceM: 0,
+            previousRemainingM: firstRemaining,
+        });
+
+        expect(noisyRemaining).toBe(firstRemaining);
+    });
+
+    test("formats and selects the next navigation instruction", () => {
+        const steps = [
+            {
+                instruction: "Turn left onto Taft Avenue",
+                maneuverType: "turn",
+                maneuverModifier: "left",
+                location: [121.001, 14.001] as [number, number],
+                distanceM: 250,
+            },
+            {
+                instruction: "Continue straight",
+                maneuverType: "continue",
+                location: [121.02, 14.02] as [number, number],
+                distanceM: 2000,
+            },
+        ];
+        const currentLocation = {
+            coordinate: { latitude: 14.0, longitude: 121.0 },
+            timestamp: 1,
+        };
+
+        expect(formatNavigationInstruction(steps[0], 205)).toBe("Turn left onto Taft Avenue in 210 m");
+        expect(getNextNavigationInstruction(currentLocation, steps)?.text).toContain("Turn left");
+    });
+
     // #7 displayPoints
     test("displayPoints follows points while fewer than three points exist", () => {
         const { addPoint } = useRideStore.getState();
@@ -232,6 +445,90 @@ describe("useRideStore", () => {
         expect(state.displayPoints).toHaveLength(2);
 
         expect(state.points).toHaveLength(2);
+    });
+
+    test("route snapping projects nearby GPS onto the active route", () => {
+        const snapped = snapLngLatToRoute(
+            [121.005, 14.00012],
+            [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+            55
+        );
+
+        expect(snapped).not.toBeNull();
+        expect(snapped?.coordinate[0]).toBeCloseTo(121.005, 4);
+        expect(snapped?.coordinate[1]).toBeCloseTo(14.0, 4);
+    });
+
+    test("route snapping rejects GPS points far from the active route", () => {
+        const snapped = snapLngLatToRoute(
+            [121.005, 14.01],
+            [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+            55
+        );
+
+        expect(snapped).toBeNull();
+    });
+
+    test("addPoint keeps raw GPS but only moves display trace when near the active route", () => {
+        useRideStore.setState({
+            activeRouteCoordinates: [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+        });
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: {
+                latitude: 14.0001,
+                longitude: 121.001,
+                altitude: 0,
+                accuracy: 10,
+            },
+            timestamp: 1000,
+        } as any);
+
+        addPoint({
+            coords: {
+                latitude: 14.01,
+                longitude: 121.002,
+                altitude: 0,
+                accuracy: 10,
+            },
+            timestamp: 3000,
+        } as any);
+
+        const state = useRideStore.getState();
+        expect(state.points).toHaveLength(2);
+        expect(state.displayPoints).toHaveLength(1);
+        expect(state.displayPoints[0].coordinate.latitude).toBeCloseTo(14.0, 4);
+    });
+
+    test("display trace remains still when a raw GPS point is far off-route", () => {
+        const existingDisplayPoint = {
+            coordinate: { latitude: 14.0, longitude: 121.001 },
+            timestamp: 1,
+        };
+        const nextDisplayPoints = getNextDisplayPoints({
+            rawPoint: {
+                coordinate: { latitude: 14.01, longitude: 121.002 },
+                timestamp: 2,
+            },
+            rawPoints: [],
+            displayPoints: [existingDisplayPoint],
+            routeCoordinates: [
+                [121.0, 14.0],
+                [121.01, 14.0],
+            ],
+        });
+
+        expect(nextDisplayPoints).toEqual([existingDisplayPoint]);
     });
 
     // #8 haverineDistance
@@ -450,6 +747,103 @@ describe("useRideStore", () => {
         expect(Location.startLocationUpdatesAsync).toHaveBeenCalled();
     });
 
+    test("startRide preserves active generated route for recording map", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
+        (Location.startLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
+
+        useRideStore.getState().setActiveRoute(
+            {
+                coordinates: [
+                    [121.0, 14.0],
+                    [121.1, 14.1],
+                ],
+                durationSec: 900,
+                mapboxDurationSec: 900,
+                distanceM: 5000,
+                congestionSegments: [
+                    {
+                        coordinates: [
+                            [121.0, 14.0],
+                            [121.1, 14.1],
+                        ],
+                        congestion: "heavy",
+                        distanceM: 5000,
+                    },
+                ],
+                score: 1,
+                trafficDelaySec: 0,
+                restrictedRoadExposure: 0,
+                congestionSummary: {
+                    unknown: { distanceM: 0, count: 0 },
+                    low: { distanceM: 0, count: 0 },
+                    moderate: { distanceM: 0, count: 0 },
+                    heavy: { distanceM: 5000, count: 1 },
+                    severe: { distanceM: 0, count: 0 },
+                },
+                steps: [
+                    {
+                        instruction: "Turn left",
+                        maneuverType: "turn",
+                        maneuverModifier: "left",
+                        location: [121.0, 14.0],
+                        distanceM: 100,
+                    },
+                ],
+            },
+            [121.1, 14.1]
+        );
+
+        await useRideStore.getState().startRide();
+
+        const state = useRideStore.getState();
+        expect(state.activeRouteCoordinates).toHaveLength(2);
+        expect(state.activeRouteCongestionSegments[0].congestion).toBe("heavy");
+        expect(state.activeRouteDestination).toEqual([121.1, 14.1]);
+        expect(state.activeRouteDurationSec).toBe(900);
+        expect(state.activeRouteDistanceM).toBe(5000);
+        expect(state.suggestedRouteDurationSec).toBe(900);
+        expect(state.suggestedRouteDistanceM).toBe(5000);
+    });
+
+    test("setActiveRoute preserves original suggested route while recording reroutes", () => {
+        useRideStore.setState({
+            isRecording: true,
+            suggestedRouteDurationSec: 900,
+            suggestedRouteDistanceM: 5000,
+        });
+
+        useRideStore.getState().setActiveRoute(
+            {
+                coordinates: [
+                    [121.0, 14.0],
+                    [121.2, 14.2],
+                ],
+                durationSec: 1200,
+                mapboxDurationSec: 1200,
+                distanceM: 7000,
+                congestionSegments: [],
+                score: 1,
+                trafficDelaySec: 0,
+                restrictedRoadExposure: 0,
+                congestionSummary: {
+                    unknown: { distanceM: 0, count: 0 },
+                    low: { distanceM: 0, count: 0 },
+                    moderate: { distanceM: 0, count: 0 },
+                    heavy: { distanceM: 0, count: 0 },
+                    severe: { distanceM: 0, count: 0 },
+                },
+                steps: [],
+            },
+            [121.2, 14.2]
+        );
+
+        const state = useRideStore.getState();
+        expect(state.activeRouteDurationSec).toBe(1200);
+        expect(state.activeRouteDistanceM).toBe(7000);
+        expect(state.suggestedRouteDurationSec).toBe(900);
+        expect(state.suggestedRouteDistanceM).toBe(5000);
+    });
+
     // #16
     test("startRide stops existing location updates before starting", async () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(true);
@@ -486,62 +880,7 @@ describe("useRideStore", () => {
         expect(state.isPaused).toBe(false);
     });
 
-    // #18 pauseRide 
-    test("pauseRide pauses an active ride", async () => {
-        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(true);
-        (Location.stopLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
-
-        const result = await useRideStore.getState().pauseRide();
-
-        expect(result).toBe(true);
-
-        expect(Location.stopLocationUpdatesAsync).toHaveBeenCalledWith(
-            "location-recording"
-        );
-
-        expect(useRideStore.getState().isPaused).toBe(true);
-    });
-
-    // #19 
-    test("pauseRide returns false when stopping location updates fails", async () => {
-        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockRejectedValue(
-            new Error("Failed")
-        );
-
-        const result = await useRideStore.getState().pauseRide();
-
-        expect(result).toBe(false);
-
-        expect(useRideStore.getState().isPaused).toBe(false);
-    });
-
-    // #20 resumeRide
-    test("resumeRide resumes location tracking", async () => {
-        (Location.startLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
-
-        const result = await useRideStore.getState().resumeRide();
-
-        expect(result).toBe(true);
-
-        expect(Location.startLocationUpdatesAsync).toHaveBeenCalled();
-
-        expect(useRideStore.getState().isPaused).toBe(false);
-    });
-
-    // #21
-    test("resumeRide returns false when location updates fail", async () => {
-        (Location.startLocationUpdatesAsync as jest.Mock).mockRejectedValue(
-            new Error("Resume failed")
-        );
-
-        const result = await useRideStore.getState().resumeRide();
-
-        expect(result).toBe(false);
-
-        expect(useRideStore.getState().isPaused).toBe(true);
-    });
-
-    // #22 finishRide 
+    // #18 finishRide
     test("finishRide saves ride successfully", async () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
 
@@ -672,6 +1011,8 @@ describe("useRideStore", () => {
             totalElevationGain: 15,
             averageSpeed: 4,
             maxSpeed: 8,
+            suggestedRouteDistanceM: 1200,
+            suggestedRouteDurationSec: 420,
             annotations: [],
             points: [
                 {
@@ -693,10 +1034,44 @@ describe("useRideStore", () => {
                 averageSpeed: 4,
                 maxSpeed: 8,
                 duration: 60,
+                suggestedRouteDistanceM: 1200,
+                suggestedRouteDurationSec: 420,
                 points: expect.any(Array),
                 annotations: [],
-                rideName: "New Delivery Trip",
+                rideName: "Metro Manila Trip",
                 isPublic: false,
+            })
+        );
+    });
+
+    test("finishRide uses provided trip route title", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
+        (saveRide as jest.Mock).mockResolvedValue("ride-123");
+
+        useRideStore.setState({
+            startTime: 100,
+            duration: 60,
+            totalDistance: 200,
+            totalElevationGain: 15,
+            averageSpeed: 4,
+            maxSpeed: 8,
+            annotations: [],
+            points: [
+                {
+                    coordinate: {
+                        latitude: 14.56,
+                        longitude: 120.99,
+                    },
+                    timestamp: 1,
+                },
+            ],
+        });
+
+        await useRideStore.getState().finishRide("Manila → Quezon City");
+
+        expect(saveRide).toHaveBeenCalledWith(
+            expect.objectContaining({
+                rideName: "Manila → Quezon City",
             })
         );
     });

@@ -523,7 +523,7 @@ describe("useCommunityRidesStore", () => {
         await useCommunityRidesStore.getState().selectRide("ride1");
 
         expect(useCommunityRidesStore.getState().error)
-            .toBe("Ride not found");
+            .toBe("Trip not found");
     });
 
     // #20
