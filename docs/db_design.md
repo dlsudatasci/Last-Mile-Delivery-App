@@ -22,7 +22,7 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 ---
 
 ## 2. Entity-Relationship Diagram (ERD) 
-Last changed: 24/07/2026
+Last changed: 28/07/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
@@ -72,8 +72,7 @@ erDiagram
     }
     
     postTripQuestionnaire_response {
-        string rideId PK "Auto-generated UUID"
-        string rideId_FK FK "Points to rides document ID"
+        string rideId PK "Points to rides document ID"
         string arrival
         number etaRating
         number stressRating
@@ -377,7 +376,7 @@ Last changed: 24/07/2026
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores the rider's responses to the post-trip questionnaire completed after finishing a ride.
 
-Last changed: 22/07/2026
+Last changed: 28/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `rideId` | String | Yes | Primary key and foreign key referencing rides.rideId |
