@@ -1,7 +1,9 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { themeColors } from '@/lib/common/colors';
 import { useCustomFonts } from '@/lib/hooks/useFonts';
 import { getAsyncFlag, useRideStore } from '@/lib/store/useRideStore';
 import { firestore } from '@/lib/utils/firebaseConfig';
+import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { doc, getDoc } from '@react-native-firebase/firestore';
 import Mapbox from '@rnmapbox/maps';
@@ -11,11 +13,26 @@ import { router, Stack } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
 import * as Updates from 'expo-updates';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Linking, Platform, Text, TouchableOpacity, useColorScheme } from 'react-native';
+import { Alert, Linking, Platform, Text, useColorScheme, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Button, Dialog, Icon, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
+import { Button, Dialog, MD3DarkTheme, MD3LightTheme, PaperProvider, Portal, useTheme } from 'react-native-paper';
 
-Mapbox.setAccessToken('pk.eyJ1IjoiYW5kcmVzd2UiLCJhIjoiY203N3Z2ZXZkMTdnajJqcTg0ZGwweDV1YSJ9.8-Muri-txLBOiaKSsCZjWA');
+// Suppress noisy warnings/errors that are expected on flaky mobile networks or
+// come from third-party native modules we don't control:
+// - NativeEventEmitter warnings are emitted by native modules (Firebase, Location).
+// - Mapbox logs one "Map load failed" error per failed tile when offline; a single
+//   dropped connection can produce thousands of these. They are cosmetic — the map
+//   recovers automatically once connectivity returns.
+// - Firestore [firestore/unavailable] is handled gracefully with a cache fallback.
+LogBox.ignoreLogs([
+    'new NativeEventEmitter',
+    '`removeEventListener`',
+    'Mapbox [error] RNMBXMapView',
+    'Map load failed',
+    'firestore/unavailable',
+]);
+
+configureMapboxAccessToken(Mapbox);
 
 if (!TaskManager.isTaskDefined('location-recording')) {
     TaskManager.defineTask(
@@ -27,8 +44,6 @@ if (!TaskManager.isTaskDefined('location-recording')) {
             }
             if (data?.locations?.length > 0) {
                 try {
-                    const location = data.locations[0];
-
                     const isRecording = await getAsyncFlag('isRecording');
                     const isPaused = await getAsyncFlag('isPaused');
 
@@ -37,7 +52,9 @@ if (!TaskManager.isTaskDefined('location-recording')) {
                     const { addPoint } = useRideStore.getState();
 
                     if (isRecording && !isPaused) {
-                        addPoint(location);
+                        for (const location of data.locations) {
+                            addPoint(location);
+                        }
                     }
                 } catch (e) {
                     console.error('Error processing location:', e);
@@ -46,18 +63,6 @@ if (!TaskManager.isTaskDefined('location-recording')) {
         }
     );
 }
-
-// Add cleanup function for location updates
-const cleanupLocationUpdates = async () => {
-    try {
-        const isRegistered = await TaskManager.isTaskRegisteredAsync('location-recording');
-        if (isRegistered) {
-            await Location.stopLocationUpdatesAsync('location-recording');
-        }
-    } catch (error) {
-        console.error('Error cleaning up location updates:', error);
-    }
-};
 
 // Version context
 const VersionContext = createContext<{
@@ -156,13 +161,6 @@ export default function RootLayout() {
 
     const [fontsLoaded] = useCustomFonts();
 
-    // Add cleanup on unmount
-    React.useEffect(() => {
-        return () => {
-            cleanupLocationUpdates();
-        };
-    }, []);
-
     if (!fontsLoaded) return null;
 
     const paperTheme =
@@ -201,34 +199,16 @@ export default function RootLayout() {
             <VersionDialogProvider>
                 <GestureHandlerRootView>
                     <Stack
-                        initialRouteName="login"
+                        initialRouteName="index"
                         screenOptions={{
                             ...commonScreenOptions,
-                            headerLeft: () => (
-                                <TouchableOpacity onPress={() => router.dismiss()}>
-                                    <Icon source={'chevron-left'} size={sizes.size32} />
-                                </TouchableOpacity>
-                            ),
+                            headerLeft: () => <HeaderBackButton onPress={() => router.dismiss()} />,
                         }}
                     >
                         <Stack.Screen
                             name="index"
                             options={{
                                 title: 'Home',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="login"
-                            options={{
-                                title: 'Login',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="register"
-                            options={{
-                                title: 'Register',
                                 headerShown: false,
                             }}
                         />
@@ -247,6 +227,13 @@ export default function RootLayout() {
                             }}
                         />
                         <Stack.Screen
+                            name="rider-code"
+                            options={{
+                                title: 'Rider Code',
+                                headerShown: false,
+                            }}
+                        />
+                        <Stack.Screen
                             name="create-profile"
                             options={{
                                 title: 'Create Profile',
@@ -261,35 +248,9 @@ export default function RootLayout() {
                             }}
                         />
                         <Stack.Screen
-                            name="study-consent"
-                            options={{
-                                title: 'Study Consent',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="enrollment-complete"
-                            options={{
-                                title: 'Enrollment Complete',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
                             name="main"
                             options={{
                                 headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="forgot-password"
-                            options={{
-                                title: 'Forgot Password',
-                                headerShown: true,
-                                headerLeft: () => (
-                                    <TouchableOpacity onPress={() => router.dismiss()}>
-                                        <Icon source={'chevron-left'} size={sizes.size32} />
-                                    </TouchableOpacity>
-                                ),
                             }}
                         />
                         <Stack.Screen

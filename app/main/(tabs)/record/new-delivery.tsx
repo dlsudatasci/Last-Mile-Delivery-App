@@ -1,3 +1,4 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import React, { useState } from 'react';
 import { Alert, View, StyleSheet, Image, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
@@ -5,7 +6,6 @@ import * as ImagePicker from 'expo-image-picker';
 import {
     Button,
     Checkbox,
-    IconButton,
     MD3Theme,
     Text,
     TextInput,
@@ -64,7 +64,7 @@ export default function NewDelivery() {
             <Stack.Screen
                 options={{
                     title: 'New Delivery',
-                    headerLeft: () => <IconButton icon="arrow-left" onPress={() => router.back()} size={24} />,
+                    headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
                 }}
             />
 

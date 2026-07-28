@@ -1,9 +1,9 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { router, Stack } from 'expo-router';
-import { Icon, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { fontSizes } from '@/lib/utils/responsive-sizing';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { TouchableOpacity } from 'react-native';
 
 export default function Layout() {
     const theme = useTheme();
@@ -39,12 +39,8 @@ export default function Layout() {
                 <Stack.Screen
                     name="rides"
                     options={{
-                        title: 'Rides',
-                        headerLeft: () => (
-                            <TouchableOpacity onPress={() => router.dismiss()}>
-                                <Icon source={'chevron-left'} size={sizes.size32} />
-                            </TouchableOpacity>
-                        ),
+                        title: 'Trips',
+                        headerLeft: () => <HeaderBackButton onPress={() => router.dismiss()} />,
                         headerShown: false,
                     }}
                 />
@@ -60,11 +56,7 @@ export default function Layout() {
                     options={{
                         title: 'Devia Route Study',
                         headerShown: true,
-                        headerLeft: () => (
-                            <TouchableOpacity onPress={() => router.dismiss()}>
-                                <Icon source={'chevron-left'} size={sizes.size32} />
-                            </TouchableOpacity>
-                        ),
+                        headerLeft: () => <HeaderBackButton onPress={() => router.dismiss()} />,
                     }}
                 />
                 <Stack.Screen

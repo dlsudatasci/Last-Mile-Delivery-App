@@ -15,6 +15,7 @@ export interface UserProfile {
     ageRange?: string | null;
     city?: string | null;
     yearsExperience?: string | null;
+    isEnrolled?: boolean | null;
 }
 
 interface UserState {
