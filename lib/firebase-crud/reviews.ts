@@ -82,7 +82,6 @@ export const submitTripReview = async (rideId: string) => {
                         stopDuration: answer.questionnaire.stopDuration ?? null,
                         deviateAgain: answer.affect ?? null,
                         avoidRoadFrequency: answer.questionnaire.avoidRoadFrequency ?? null,
-                        usuallyAvoidRoad: answer.confidence ?? null,
                         language: answer.language ?? 'en',
                         submittedAt: Date.now(),
                         createdAt: Date.now(),
@@ -141,7 +140,6 @@ export const fetchTripReview = async (rideId: string): Promise<TripReview | null
             review.answers[deviationId] = {
                 whyRoute: '',
                 affect: '',
-                confidence: '',
                 metadata: {
                     deviationId: data.deviationId,
                     routeId: data.routeId,
@@ -171,7 +169,6 @@ export const fetchTripReview = async (rideId: string): Promise<TripReview | null
             if (review.answers[deviationId]) {
                 review.answers[deviationId].whyRoute = data.primaryReasonOther || data.primaryReason || '';
                 review.answers[deviationId].affect = data.deviateAgain || '';
-                review.answers[deviationId].confidence = data.usuallyAvoidRoad || '';
                 review.answers[deviationId].language = data.language ?? 'en';
                 review.answers[deviationId].questionnaire = {
                     primaryReason: data.primaryReason,

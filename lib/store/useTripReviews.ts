@@ -13,7 +13,6 @@ import { DeviationQuestionnaireAnswers } from '../deviation-questionnaire';
 export interface DeviationAnswers {
     whyRoute: string;
     affect: string;
-    confidence: string;
     questionnaire?: DeviationQuestionnaireAnswers;
     metadata?: DeviationMetadata;
     language?: 'en' | 'tl';
@@ -39,7 +38,6 @@ export interface DeviationMetadata {
     streetName?: string | null;
     generatedInstruction?: string | null;
     deviationInstruction?: string | null;
-    type?: 'point' | 'segment' | null;
     points?: { latitude: number; longitude: number }[] | null;
     start_timestamp?: number | null;
     end_timestamp?: number | null;

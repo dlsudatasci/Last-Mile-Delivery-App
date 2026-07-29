@@ -88,7 +88,6 @@ function buildDeviationMetadata(
         streetName,
         generatedInstruction,
         deviationInstruction,
-        type: event ? 'point' : null,
         points: event ? [{ latitude: event.location[1], longitude: event.location[0] }] : null,
         start_timestamp: event?.timestamp ?? null,
         end_timestamp: event?.timestamp ?? null,
@@ -155,7 +154,6 @@ export default function ReasonForDeviation() {
         saveDeviation(rideId, deviationId, {
             whyRoute: answers.primaryReason === 'Other' ? `Other: ${answers.primaryReasonOther?.trim()}` : answers.primaryReason,
             affect: answers.deviateAgainFrequency,
-            confidence: answers.avoidRoadFrequency,
             questionnaire: answers,
             metadata,
             language,
