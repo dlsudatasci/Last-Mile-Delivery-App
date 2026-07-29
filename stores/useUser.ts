@@ -4,8 +4,6 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 export interface UserProfile {
     id: string;
-    avatarUrl: string | null;
-    email: string | null;
     username: string | null;
     createdAt: Date | null;
     // Onboarding profile fields

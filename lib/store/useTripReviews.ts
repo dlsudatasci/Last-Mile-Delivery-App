@@ -25,7 +25,6 @@ export interface DeviationMetadata {
     rideId?: string | null;
     userId?: string | null;
     index?: number | null;
-    originalRoute?: string | null;
     dateTime?: string | null;
     isFaster?: boolean | null;
     timestamp?: number | null;

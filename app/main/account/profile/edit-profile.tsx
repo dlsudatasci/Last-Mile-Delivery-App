@@ -30,7 +30,7 @@ export default function EditProfile() {
                 throw new Error('User not found');
             }
 
-            await updateUserProfile(currentUser.uid, username.trim(), null);
+            await updateUserProfile(currentUser.uid, username.trim());
             const userProfile = await getUserProfile(currentUser.uid);
 
             if (userProfile.success && userProfile.data) {
@@ -59,7 +59,7 @@ export default function EditProfile() {
                 <TextInput
                     mode="outlined"
                     label="Phone Number"
-                    value={user?.phone ?? user?.email?.replace('@devia.app', '') ?? ''}
+                    value={user?.phone ?? ''}
                     readOnly
                     style={{ marginTop: sizes.medium }}
                 />

@@ -4,30 +4,30 @@ import {
     BLOCKAGE_OPTIONS,
     DeviationQuestionnaireAnswers,
     FREQUENCY_OPTIONS,
+    isDeviationQuestionnaireComplete,
     LANGUAGE_LABELS,
     PERSONAL_STOP_OPTIONS,
     PRIMARY_REASON_OPTIONS,
     PrimaryDeviationReason,
     QUESTION_TEXT,
     QuestionnaireLanguage,
-    STOP_DURATION_OPTIONS,
-    TRAFFIC_SEVERITY_OPTIONS,
-    YES_NO_UNSURE_OPTIONS,
-    isDeviationQuestionnaireComplete,
     shouldAskBlockageFollowUp,
     shouldAskPersonalStopFollowUps,
     shouldAskTrafficFollowUps,
+    STOP_DURATION_OPTIONS,
+    TRAFFIC_SEVERITY_OPTIONS,
+    YES_NO_UNSURE_OPTIONS,
 } from '@/lib/deviation-questionnaire';
-import { DeviationMetadata, useTripReviews } from '@/lib/store/useTripReviews';
-import { RideDeviationEvent, useRideStore } from '@/lib/store/useRideStore';
 import { submitTripReview } from '@/lib/firebase-crud/reviews';
+import { RideDeviationEvent, useRideStore } from '@/lib/store/useRideStore';
+import { DeviationMetadata, useTripReviews } from '@/lib/store/useTripReviews';
 import { formatRouteInstructionSummary } from '@/lib/trip-record-display';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
-import { Button, Checkbox, MD3Theme, RadioButton, SegmentedButtons, Surface, Text, TextInput, useTheme, ActivityIndicator } from 'react-native-paper';
+import { ActivityIndicator, Button, Checkbox, MD3Theme, RadioButton, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 
 const emptyAnswers = (): DeviationQuestionnaireAnswers => ({
     primaryReason: '',
@@ -74,7 +74,6 @@ function buildDeviationMetadata(
         rideId: rideId ?? null,
         userId: null,
         index: deviationIndex,
-        originalRoute: generatedInstruction,
         dateTime: now.toISOString(),
         isFaster,
         timestamp: now.getTime(),

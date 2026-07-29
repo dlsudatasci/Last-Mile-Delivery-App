@@ -114,42 +114,14 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
     };
 }
 
-export async function createUserProfile(uid: string, email: string, username: string, imageUri: string | null) {
+export async function createUserProfile(uid: string, username: string) {
     try {
-        let avatarUrl = null;
-
-        // Upload image if provided
-        if (imageUri) {
-            // Create storage reference with user's UID
-            const storageRef = storage().ref(`profile-images/${uid}`);
-
-            // Fetch image and convert to blob
-            // const response = await fetch(imageUri);
-            // const blob = await response.blob();
-
-            // Upload blob to Firebase Storage
-            // await uploadBytes(storageRef, blob);
-
-            // Get download URL
-            // avatarUrl = await getDownloadURL(storageRef);
-            const task = storageRef.putFile(imageUri);
-
-            task.on('state_changed', snapshot => {
-                console.log('Upload is ' + snapshot.bytesTransferred);
-            });
-
-            await task;
-            avatarUrl = await storageRef.getDownloadURL();
-        }
-
         // Create/update user document
         const userRef = doc(firestore, 'users', uid);
         await setDoc(
             userRef,
             {
                 username,
-                avatarUrl,
-                email,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             },
@@ -161,8 +133,6 @@ export async function createUserProfile(uid: string, email: string, username: st
             data: {
                 id: uid,
                 username,
-                avatarUrl,
-                email,
             },
         };
     } catch (error) {
@@ -211,8 +181,6 @@ function profileFromLocalAccount(user: FirebaseAuthTypes.User, local: Awaited<Re
         id: user.uid,
         username: local.fullName,
         fullName: local.fullName,
-        avatarUrl: null,
-        email: user.email,
         phone: local.phone,
         gender: local.gender,
         ageRange: local.ageRange,
@@ -257,40 +225,14 @@ export async function resolveAuthenticatedSession(user: FirebaseAuthTypes.User):
     return { destination: '/create-profile', profile: null };
 }
 
-export async function updateUserProfile(uid: string, username: string, imageUri: string | null) {
+export async function updateUserProfile(uid: string, username: string) {
     try {
-        let avatarUrl = null;
-
-        // Upload image if provided
-        if (imageUri) {
-            // Create storage reference with user's UID
-            const storageRef = storage().ref(`profile-images/${uid}`);
-            // const storageRef = ref(storage, `profile-images/${uid}`);
-
-            // // Fetch image and convert to blob
-            // const response = await fetch(imageUri);
-            // const blob = await response.blob();
-
-            // // Upload blob to Firebase Storage
-            // await uploadBytes(storageRef, blob);
-            const task = storageRef.putFile(imageUri);
-
-            task.on('state_changed', snapshot => {
-                console.log('Upload is ' + snapshot.bytesTransferred);
-            });
-
-            await task;
-            // Get download URL
-            avatarUrl = await storageRef.getDownloadURL();
-        }
-
         // Update user document
         const userRef = doc(firestore, 'users', uid);
         await setDoc(
             userRef,
             {
                 username,
-                ...(imageUri ? { avatarUrl } : {}),
                 updatedAt: new Date().toISOString(),
             },
             { merge: true }
@@ -300,7 +242,6 @@ export async function updateUserProfile(uid: string, username: string, imageUri:
             success: true,
             data: {
                 username,
-                avatarUrl,
             },
         };
     } catch (error) {

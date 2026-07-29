@@ -81,7 +81,7 @@ export default function Profile() {
                     <Text style={styles.username} numberOfLines={1} adjustsFontSizeToFit>
                         {user?.username}
                     </Text>
-                    <Text style={styles.email}>{user?.phone ?? user?.email?.replace('@devia.app', '')}</Text>
+                    <Text style={styles.email}>{user?.phone}</Text>
                 </View>
             </View>
 

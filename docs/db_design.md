@@ -22,7 +22,7 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 ---
 
 ## 2. Entity-Relationship Diagram (ERD) 
-Last changed: 24/07/2026
+Last changed: 29/07/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
@@ -31,7 +31,6 @@ erDiagram
         string userId PK "Firebase Auth UID"  
         string riderCode
         string preferredName  ""    
-        string email UK ""  
         varchar phoneNum UK "varchar(10)"  
         enum gender  "Male, Female, Prefer not to Say"  
         enum ageRange  "---"  
@@ -41,7 +40,6 @@ erDiagram
         boolean acceptedPolicies  ""  
         number createdAt  "Unix Timestamp ms" 
         number updatedAt  "Unix Timestamp ms" 
-        string profilePicture  "Optional, Firebase Storage URL" 
     }
 
     rides {
@@ -98,7 +96,6 @@ erDiagram
         string rideId FK "Points to rides document ID"
         string userId FK "Points to users document ID"
         int index
-        string originalRoute
         number dateTime "Unix Timestamp ms"
         string gpsLocation
         string originalRouteEdge
@@ -221,13 +218,12 @@ erDiagram
 * **Document ID:** Firebase Auth UID. The document ID acts as the primary key; a separate `id` field is **not** stored in the Firestore document itself.
 * **Purpose:** Stores profile details and onboarding survey information of the rider.
 
-Last changed: 22/07/2026
+Last changed: 29/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `userId` | String | Yes | Firebase Auth UID |
 | `riderCode` | String | Yes | Unique rider code assigned to the participant for the study |
 | `preferredName` | String | Yes | Rider's preferred display name shown within the application |
-| `email` | String | Yes | Firebase Auth email address |
 | `phoneNum` | Varchar | Yes | Philippine mobile number, format: `09xxxxxxxxx` |
 | `gender` | Enum | Yes | Gender identity selected during onboarding |
 | `ageRange` | Enum | Yes | Age range category (e.g., "18-24", "25-34") |
@@ -237,7 +233,6 @@ Last changed: 22/07/2026
 | `acceptedPolicies` | Boolean | Yes | Must be `true`; agreed to Terms of Service & Privacy Policy|
 | `createdAt` | Number | Yes | Unix timestamp (ms) when the user account was created |
 | `updatedAt` | Number | Yes | Unix timestamp (ms) when the profile was last updated |
-| `profilePicture` | String | No | Firebase Storage download URL for profile photo |
 ---
 
 ### 3.2. Collection: `rides`
@@ -330,7 +325,6 @@ Last changed: 24/07/2026
 | `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
 | `userId` | String | Yes | Foreign key referencing users.userId (Firebase Auth UID of the rider) |
 | `index` | Int | Yes | Sequential order of the deviation within the ride |
-| `originalRoute` | String | Yes | Identifier or reference to the generated route that the rider deviated from |
 | `dateTime` | Number | Yes | Unix timestamp (ms) when the deviation occurred |
 | `gpsLocation` | String | Yes | GPS coordinate where the rider first deviated from the generated route |
 | `originalRouteEdge` | String | Yes | |

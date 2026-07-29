@@ -124,8 +124,6 @@ export default function CreateProfile() {
                 id: user.uid,
                 username: trimmedName,
                 fullName: trimmedName,
-                avatarUrl: null,
-                email: user.email,
                 phone,
                 gender,
                 ageRange,

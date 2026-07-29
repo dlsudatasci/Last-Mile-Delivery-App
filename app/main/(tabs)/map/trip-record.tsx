@@ -1,7 +1,7 @@
 import SpinningWheel from '@/components/common/SpinningWheel';
 import { formatDuration } from '@/lib/common/formulas';
-import { FetchedGeneratedRoute, FetchRideData, getGeneratedRoutesByRideId, getRidePoints } from '@/lib/firebase-crud/rides';
 import { fetchTripReview } from '@/lib/firebase-crud/reviews';
+import { FetchedGeneratedRoute, FetchRideData, getGeneratedRoutesByRideId, getRidePoints } from '@/lib/firebase-crud/rides';
 import { useRidesStore } from '@/lib/store/useRidesStore';
 import { RidePoint } from '@/lib/store/useRideStore';
 import { DeviationAnswers, TripReview, useTripReviews } from '@/lib/store/useTripReviews';
@@ -548,13 +548,13 @@ export default function TripRecordDetails() {
                             bounds={
                                 bounds
                                     ? {
-                                          ne: bounds.ne,
-                                          sw: bounds.sw,
-                                          paddingLeft: 40,
-                                          paddingRight: 40,
-                                          paddingTop: 40,
-                                          paddingBottom: 40,
-                                      }
+                                        ne: bounds.ne,
+                                        sw: bounds.sw,
+                                        paddingLeft: 40,
+                                        paddingRight: 40,
+                                        paddingTop: 40,
+                                        paddingBottom: 40,
+                                    }
                                     : undefined
                             }
                             animationDuration={0}
