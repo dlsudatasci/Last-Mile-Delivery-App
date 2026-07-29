@@ -12,12 +12,10 @@ describe("useTripReviews", () => {
                         d1: {
                             whyRoute: "Matinding trapiko",
                             affect: "Nakatipid sa oras",
-                            confidence: "Sigurado",
                         },
                         d2: {
                             whyRoute: "Mas maikling ruta",
                             affect: "Nakaikli ng distansya",
-                            confidence: "Sobrang sigurado",
                         },
                     },
                 },
@@ -61,7 +59,6 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         const review = useTripReviews.getState().reviews["trip1"];
@@ -75,13 +72,11 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().saveDeviation("trip1", "d2", {
             whyRoute: "Construction",
             affect: "Longer trip",
-            confidence: "Medium",
         });
 
         const answers = useTripReviews.getState().reviews["trip1"].answers;
@@ -96,13 +91,11 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Flood",
             affect: "Delayed",
-            confidence: "Low",
         });
 
         expect(
@@ -195,7 +188,6 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip6", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().markReviewed("trip6");
@@ -246,7 +238,6 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip6", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().markPending("trip6");

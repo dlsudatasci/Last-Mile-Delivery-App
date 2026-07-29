@@ -103,7 +103,6 @@ export function getDeviationRows(answer: DeviationAnswers): DisplayRow[] {
         return [
             { label: 'Primary reason', value: answer.whyRoute },
             { label: 'Would make this route change again', value: answer.affect },
-            { label: 'Usually avoid this road', value: answer.confidence },
         ].filter(row => row.value);
     }
 
