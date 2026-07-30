@@ -108,7 +108,6 @@ erDiagram
         array points "GPS coordinates of the deviation"
         number timestamp "Unix ms"
         number createdAt "Unix Timestamp ms"
-        string mapMatchedEdge "98547_93724"
     }
 
     studies {
@@ -337,8 +336,7 @@ Last changed: 29/07/2026
 | `points` | Array | Yes | GPS coordinates representing the deviation location or segment |
 | `timestamp` | Number | Yes | Unix ms |
 | `createdAt` | Number | Yes | Unix Timestamp ms |
-| `mapMatchedEdge` | String | Yes | Identifier of the road network edge after map matching (e.g., 98547_93724) |
-
+---
 
 ### 3.X. Sub-subcollection: `deviationResponses` (Under `deviations`)
 * **Path:** `/rides/{rideId}/generatedRoutes/{routeId}/deviations/{deviationId}/deviationResponses/{responseId}`
