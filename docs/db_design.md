@@ -46,8 +46,6 @@ erDiagram
         string rideId PK "Auto-generated UUID (also stored as field)"
         string userId FK "Points to users document ID"
         string rideName
-        string startPoint ""
-        string endPoint ""
         number startTime "Unix Timestamp ms"
         number endTime "Unix Timestamp ms"
         int duration "Seconds"
@@ -94,7 +92,8 @@ erDiagram
     }
 
     deviations {
-        string deviationId PK "Points to generatedRoutes document ID"
+        string deviationId PK "Auto-generated UUID"
+        string routeId FK "Points to generatedRoutes document ID"
         string rideId FK "Points to rides document ID"
         string userId FK "Points to users document ID"
         int index
@@ -245,8 +244,6 @@ Last changed: 30/07/2026
 | `rideId` | String | Yes | Same as the document ID |
 | `userId` | String | Yes | Foreign key — the Firebase Auth UID of the rider |
 | `rideName` | String | Yes | Name given to the trip |
-| `startPoint` | String | Yes | Starting location of the trip |
-| `endPoint` | String | Yes | Destination entered by the rider before starting the trip |
 | `startTime` | Number | Yes | Unix timestamp (ms) when the ride started |
 | `endTime` | Number | Yes | Unix timestamp (ms) when the ride ended |
 | `duration` | Int | Yes | Total ride time in seconds |
@@ -319,10 +316,11 @@ Last changed: 22/07/2026
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores each deviation marker the rider tagged during or after the trip, linked to the specific generated route that was active when the deviation occurred.
 
-Last changed: 29/07/2026
+Last changed: 30/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `deviationId` | String | Yes | Same as the document ID |
+| `routeId` | String | Yes | Parent route document ID (foreign key referencing generatedRoutes.routeId) |
 | `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
 | `userId` | String | Yes | Foreign key referencing users.userId (Firebase Auth UID of the rider) |
 | `index` | Int | Yes | Sequential order of the deviation within the ride |
