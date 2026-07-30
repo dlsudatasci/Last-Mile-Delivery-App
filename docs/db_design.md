@@ -151,18 +151,15 @@ erDiagram
         string primaryReasonOther
         enum trafficSeverity "1-5 Very Light, Light, Moderate, Heavy, Severe"
         string rushHourCause
-        enum rushHour "yes, no, unsure"
         string chooseDuringNonRush
-        enum wouldUseNonRushHour "yes, no, unsure"
         string blockageReason
-        enum blockageType "Flood, Accident, Road Closure, Illegal Parking, Others"
+        string blockageReasonOther 
         array personalStopReason
-        enum personalStopType "Break, Meal, Restroom, Refuel, Took a Call, Acciden/Repair, Others"
+        string personalStopOther
         enum stopDuration "optional enum"
         enum deviateAgain "Always, Often, Sometimes, Rarely, Never"
         string avoidRoadFrequency "Always, Often, Sometimes, Rarely, Never, I don't usually pass here"
         string language
-        string otherDeviateReason "optional"
         number submittedAt "Unix Timestamp ms"
         number createdAt "Unix Timestamp ms"
     }
