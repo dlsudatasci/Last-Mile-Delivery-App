@@ -22,7 +22,7 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 ---
 
 ## 2. Entity-Relationship Diagram (ERD) 
-Last changed: 29/07/2026
+Last changed: 30/07/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
@@ -52,6 +52,8 @@ erDiagram
         number endTime "Unix Timestamp ms"
         int duration "Seconds"
         number distance "Meters"
+        number suggestedRouteDistanceM "Meters"
+        number suggestedRouteDurationSec "Seconds"
         number averageSpeed "m/s"
         number maxSpeed "m/s"
         number elevationGain "Meters"
@@ -238,7 +240,7 @@ Last changed: 29/07/2026
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores summary stats of a completed delivery trip.
 
-Last changed: 24/07/2026
+Last changed: 30/07/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `rideId` | String | Yes | Same as the document ID |
@@ -253,6 +255,8 @@ Last changed: 24/07/2026
 | `averageSpeed` | Number | Yes | Average speed in m/s |
 | `maxSpeed` | Number | Yes | Peak speed in m/s |
 | `elevationGain` | Number | Yes | Total elevation gain in meters |
+| `suggestedRouteDistanceM` | Number | Yes | Suggested route distance in meters |
+| `suggestedRouteDurationSec` | Number | Yes | Suggested route duration in seconds |
 | `deviationCount` | Int | Yes | Total number of deviations detected during the ride |
 | `createdAt` | Number | Yes | Unix timestamp (ms) of when the ride record was created |
 ---
