@@ -7,6 +7,7 @@ import {
     getRideAnnotations,
     getRidePoints,
     getRides,
+    getTotalRideCount,
 } from "../lib/firebase-crud/rides";
 
 import { deleteAnnotation } from "../lib/firebase-crud/annotations";
@@ -25,6 +26,7 @@ jest.mock("../lib/firebase-crud/rides", () => ({
     getRide: jest.fn(),
     getRidePoints: jest.fn(),
     getRideAnnotations: jest.fn(),
+    getTotalRideCount: jest.fn(),
     deleteRide: jest.fn(),
 }));
 
@@ -37,6 +39,7 @@ const mockedGetRides = getRides as jest.Mock;
 const mockedGetRide = getRide as jest.Mock;
 const mockedGetRidePoints = getRidePoints as jest.Mock;
 const mockedGetRideAnnotations = getRideAnnotations as jest.Mock;
+const mockedGetTotalRideCount = getTotalRideCount as jest.Mock;
 const mockedDeleteRide = deleteRide as jest.Mock;
 const mockedDeleteAnnotation = deleteAnnotation as jest.Mock;
 
@@ -50,6 +53,7 @@ describe("useRidesStore", () => {
             rides: [],
             selectedRide: null,
             selectedRidePoints: null,
+            totalRideCount: 0,
 
             isLoading: false,
             isRefreshing: false,
@@ -62,6 +66,7 @@ describe("useRidesStore", () => {
                 hasMore: true,
             },
         });
+        mockedGetTotalRideCount.mockResolvedValue(0);
     });
 
     // #1 clearRides
@@ -705,7 +710,7 @@ describe("useRidesStore", () => {
         await useRidesStore.getState().selectRide("ride1");
 
         expect(useRidesStore.getState().error)
-            .toBe("Ride not found");
+            .toBe("Trip not found");
     });
 
     // #27

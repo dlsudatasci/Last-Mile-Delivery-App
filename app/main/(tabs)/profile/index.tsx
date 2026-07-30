@@ -1,12 +1,12 @@
 import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { createSupportRequest } from '@/lib/firebase-crud/support';
-import { deleteLocalAccount } from '@/lib/local-db/accounts';
 import { useCommunityRidesStore } from '@/lib/store/useCommunityRidesStore';
 import { useEventsStore } from '@/lib/store/useEventsStore';
 import { useRidesStore } from '@/lib/store/useRidesStore';
 import { auth } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useUser } from '@/stores/useUser';
+import { signOut } from '@react-native-firebase/auth';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -42,51 +42,15 @@ export default function Profile() {
 
     const handleLogout = async () => {
         try {
-            await auth.signOut();
+            await signOut(auth);
             clearUser();
             clearRides();
             clearEvents();
             clearCommunityRides();
-            router.dismissAll();
             router.replace('/get-started');
         } catch (error) {
             console.error('Error signing out:', error);
         }
-    };
-
-    const handleDeleteAccount = async () => {
-        const phone = user?.phone ?? user?.email?.replace('@devia.app', '');
-        try {
-            if (phone) {
-                await deleteLocalAccount(phone);
-            }
-            // Best-effort: also remove the remote auth account.
-            try {
-                await auth.currentUser?.delete();
-            } catch (deleteError) {
-                console.warn('Could not delete remote account, signing out instead:', deleteError);
-                await auth.signOut();
-            }
-            clearUser();
-            clearRides();
-            clearEvents();
-            clearCommunityRides();
-            router.dismissAll();
-            router.replace('/get-started');
-        } catch (error) {
-            console.error('Error deleting account:', error);
-        }
-    };
-
-    const confirmDeleteAccount = () => {
-        Alert.alert(
-            'Delete Account',
-            'This permanently deletes your account and data on this device. This cannot be undone.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: handleDeleteAccount },
-            ]
-        );
     };
 
     const handleSendSupport = async () => {
@@ -117,7 +81,7 @@ export default function Profile() {
                     <Text style={styles.username} numberOfLines={1} adjustsFontSizeToFit>
                         {user?.username}
                     </Text>
-                    <Text style={styles.email}>{user?.phone ?? user?.email?.replace('@devia.app', '')}</Text>
+                    <Text style={styles.email}>{user?.phone}</Text>
                 </View>
             </View>
 
@@ -158,16 +122,6 @@ export default function Profile() {
                         }}
                         style={{ borderRadius: sizes.medium }}
                         titleStyle={{ color: theme.colors.onBackground }}
-                        descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
-                    />
-                    <List.Item
-                        title="Delete Account"
-                        description="Permanently delete your account and data"
-                        left={props => <List.Icon {...props} icon="delete" color={theme.colors.error} />}
-                        right={props => <List.Icon {...props} icon="chevron-right" />}
-                        onPress={confirmDeleteAccount}
-                        style={{ borderRadius: sizes.medium }}
-                        titleStyle={{ color: theme.colors.error }}
                         descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
                     />
                 </List.Section>

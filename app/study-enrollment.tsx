@@ -13,6 +13,8 @@ const TEAL = '#0E6E73';
 const POLICY_CARDS: { key: PolicyKey; icon: string; title: string }[] = [
     { key: 'privacy', icon: 'lock', title: 'Privacy Policy' },
     { key: 'terms', icon: 'file-document-outline', title: 'Terms of Service' },
+    { key: 'data', icon: 'cog', title: 'Research Data Usage' },
+    { key: 'participation', icon: 'account-group', title: 'Study Participation Terms' },
 ];
 
 export default function StudyEnrollment() {
@@ -36,7 +38,12 @@ export default function StudyEnrollment() {
             return;
         }
         setAcceptedPolicies(true);
-        router.push('/create-profile');
+        router.push('/enter-phone');
+    };
+
+    const handleExit = () => {
+        useOnboarding.getState().reset();
+        router.replace('/get-started');
     };
 
     return (
@@ -46,8 +53,10 @@ export default function StudyEnrollment() {
                 contentContainerStyle={styles.content}
                 showsVerticalScrollIndicator={false}
             >
-                <Text style={styles.title}>Privacy &amp; Consent</Text>
-                <Text style={styles.subtitle}>Please review and agree to continue.</Text>
+                <Text style={styles.title}>Privacy &amp; Study Consent</Text>
+                <Text style={styles.subtitle}>
+                    Please review the app terms, privacy policy, and research participation consent before continuing.
+                </Text>
 
                 {POLICY_CARDS.map(card => (
                     <TouchableRipple key={card.key} onPress={() => setActivePolicy(card.key)} style={styles.card} borderless>
@@ -67,7 +76,10 @@ export default function StudyEnrollment() {
                 <TouchableRipple onPress={() => setAgreed(prev => !prev)} style={styles.agreeRow} borderless>
                     <View style={styles.agreeInner}>
                         <Checkbox status={agreed ? 'checked' : 'unchecked'} color={TEAL} />
-                        <Text style={styles.agreeText}>I have read and agree to the Privacy Policy and Terms of Service.</Text>
+                        <Text style={styles.agreeText}>
+                            I have read and agree to the Privacy Policy, Terms of Service, research data usage, and study
+                            participation terms.
+                        </Text>
                     </View>
                 </TouchableRipple>
             </ScrollView>
@@ -84,6 +96,15 @@ export default function StudyEnrollment() {
                     disabled={!agreed}
                 >
                     Continue
+                </Button>
+                <Button
+                    mode="text"
+                    textColor={TEAL}
+                    style={styles.exitButton}
+                    labelStyle={styles.buttonLabel}
+                    onPress={handleExit}
+                >
+                    Exit
                 </Button>
             </View>
 
@@ -157,6 +178,7 @@ const styles = StyleSheet.create({
     },
     footer: { paddingHorizontal: sizes.large, paddingBottom: sizes.large },
     button: { borderRadius: sizes.small },
+    exitButton: { marginTop: sizes.tiny },
     buttonContent: { height: sizes.size56 },
     buttonLabel: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.small },
 });
