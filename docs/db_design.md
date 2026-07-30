@@ -83,7 +83,7 @@ erDiagram
     generatedRoutes {
         string routeId PK "Auto-generated UUID (stored as field)"
         string rideId FK "Points to rides document ID"
-        enum type "Initial Route, Regenerated Route"
+        enum type "Initial Route, Regenerated Route, Traffic Update"
         array routePoints "Generated route GPS coordinate array"
         number sequence "Route generation order index"
         number generatedAt "Unix Timestamp ms"
