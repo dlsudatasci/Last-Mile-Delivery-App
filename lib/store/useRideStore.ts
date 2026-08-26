@@ -121,6 +121,8 @@ interface RideState {
     syncDurationFromClock: () => void;
     addPoint: (location: LocationObject) => void;
     resetRide: () => void;
+    pauseRide: () => Promise<void>;
+    resumeRide: () => Promise<void>;
     addAnnotation: (annotation: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>) => void;
     setRecording: (isRecording: boolean) => void;
     setActiveRouteSteps: (steps: RouteStep[]) => void;
@@ -435,6 +437,16 @@ export const useRideStore = create<RideState>((set, get) => ({
         }));
     },
     resetRide: async () => {
+        // Stop background location tracking if still running
+        try {
+            const isRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
+            if (isRunning) {
+                await Location.stopLocationUpdatesAsync('location-recording');
+            }
+        } catch (error) {
+            console.warn('Failed to stop location updates during reset:', error);
+        }
+
         set({
             isRecording: false,
             isPaused: false,
@@ -469,6 +481,46 @@ export const useRideStore = create<RideState>((set, get) => ({
         // Also clear AsyncStorage flags to maintain consistency
         await setAsyncFlag('isRecording', false);
         await setAsyncFlag('isPaused', false);
+    },
+    pauseRide: async () => {
+        // Stop background location tracking while paused
+        try {
+            const isRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
+            if (isRunning) {
+                await Location.stopLocationUpdatesAsync('location-recording');
+            }
+        } catch (error) {
+            console.warn('Failed to stop location updates during pause:', error);
+        }
+
+        set({ isPaused: true, pausedAt: Date.now(), currentSpeed: 0 });
+        await setAsyncFlag('isPaused', true);
+    },
+    resumeRide: async () => {
+        const { pausedAt, pausedDurationMs } = get();
+        const additionalPausedMs = pausedAt ? Math.max(0, Date.now() - pausedAt) : 0;
+
+        set({
+            isPaused: false,
+            pausedAt: null,
+            pausedDurationMs: pausedDurationMs + additionalPausedMs,
+        });
+        await setAsyncFlag('isPaused', false);
+
+        // Restart background location tracking
+        try {
+            await Location.startLocationUpdatesAsync('location-recording', {
+                accuracy: Location.Accuracy.BestForNavigation,
+                timeInterval: 2000,
+                distanceInterval: 2,
+                foregroundService: {
+                    notificationTitle: 'Recording Delivery',
+                    notificationBody: 'Devia is recording your delivery trip',
+                },
+            });
+        } catch (error) {
+            console.warn('Failed to restart location updates after resume:', error);
+        }
     },
     setRecording: (isRecording: boolean) => {
         set({ isRecording });

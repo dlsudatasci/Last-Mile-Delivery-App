@@ -59,6 +59,8 @@ export default function Record() {
         increaseDuration,
         syncDurationFromClock,
         resetRide,
+        pauseRide,
+        resumeRide,
         addAnnotation,
         setRecording,
         setActiveRoute,
@@ -555,22 +557,6 @@ export default function Record() {
 
     return (
         <>
-            <Stack.Screen
-                options={{
-                    headerRight: () => (
-                        <IconButton
-                            icon="restart"
-                            iconColor={theme.colors.onSurface}
-                            onPress={() => {
-                                Alert.alert('Reset Trip', 'Are you sure you want to reset this trip recording?', [
-                                    { text: 'Cancel', style: 'cancel' },
-                                    { text: 'Reset', onPress: () => resetRide() },
-                                ]);
-                            }}
-                        />
-                    ),
-                }}
-            />
             <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
                 {/* Saving Ride UI */}
                 {isSaving && (
@@ -660,7 +646,7 @@ export default function Record() {
                     </View>
                 </Surface>
 
-                {/* Controls — single Stop while recording (Start is just a fallback) */}
+                {/* Controls — Pause + Stop while recording */}
                 <Surface style={styles.controlsContainer}>
                     {!isRecording ? (
                         <Button
@@ -672,16 +658,28 @@ export default function Record() {
                             Start Trip
                         </Button>
                     ) : (
-                        <Button
-                            mode="contained"
-                            onPress={handleFinish}
-                            icon="stop"
-                            style={[styles.button, styles.stopButton]}
-                            labelStyle={styles.buttonLabel}
-                            contentStyle={{ flexDirection: 'row-reverse', height: sizes.size56 }}
-                        >
-                            Stop
-                        </Button>
+                        <View style={styles.controlsRow}>
+                            <Button
+                                mode={isPaused ? 'contained' : 'outlined'}
+                                onPress={isPaused ? resumeRide : pauseRide}
+                                icon={isPaused ? 'play' : 'pause'}
+                                style={[styles.button, styles.pauseButton, isPaused && styles.resumeButton]}
+                                labelStyle={styles.buttonLabel}
+                                contentStyle={{ flexDirection: 'row-reverse', height: sizes.size56 }}
+                            >
+                                {isPaused ? 'Resume' : 'Pause'}
+                            </Button>
+                            <Button
+                                mode="contained"
+                                onPress={handleFinish}
+                                icon="stop"
+                                style={[styles.button, styles.stopButton]}
+                                labelStyle={styles.buttonLabel}
+                                contentStyle={{ flexDirection: 'row-reverse', height: sizes.size56 }}
+                            >
+                                Stop
+                            </Button>
+                        </View>
                     )}
                 </Surface>
 
@@ -926,7 +924,21 @@ const getStyles = (theme: MD3Theme) =>
             fontFamily: 'LGEIHeadline-Semibold',
         },
         stopButton: {
+            flex: 1,
             backgroundColor: theme.colors.error,
+        },
+        controlsRow: {
+            flexDirection: 'row',
+            gap: sizes.medium,
+        },
+        pauseButton: {
+            flex: 1,
+            backgroundColor: 'transparent',
+            borderColor: theme.colors.outline,
+        },
+        resumeButton: {
+            backgroundColor: theme.colors.primary,
+            borderColor: theme.colors.primary,
         },
         mapFAB: {
             backgroundColor: theme.colors.surface,

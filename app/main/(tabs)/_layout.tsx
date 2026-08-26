@@ -10,6 +10,7 @@ import { Icon, IconButton, useTheme } from 'react-native-paper';
 export default function TabLayout() {
     const theme = useTheme();
     const isRecording = useRideStore(state => state.isRecording);
+    const resetRide = useRideStore(state => state.resetRide);
 
     const headerStyle: ViewStyle = {
         backgroundColor: theme.colors.surface,
@@ -49,7 +50,20 @@ export default function TabLayout() {
         tabPress: (event: { preventDefault: () => void }) => {
             if (!isRecording) return;
             event.preventDefault();
-            Alert.alert('Trip in progress', 'Please stop the current trip before opening another page.');
+            Alert.alert(
+                'Trip in Progress',
+                'You must cancel the current trip before navigating away. All recorded data will be lost.',
+                [
+                    { text: 'Continue Trip', style: 'cancel' },
+                    {
+                        text: 'Cancel Trip',
+                        style: 'destructive',
+                        onPress: async () => {
+                            await resetRide();
+                        },
+                    },
+                ]
+            );
         },
     };
 
