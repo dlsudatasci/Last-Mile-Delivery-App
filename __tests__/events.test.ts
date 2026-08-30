@@ -5,7 +5,7 @@ import {
     getDocs,
     limit,
     orderBy,
-    startAfter
+    startAfter,
 } from "@react-native-firebase/firestore";
 import { getEvents } from "../lib/firebase-crud/events";
 import { firestore } from "../lib/utils/firebaseConfig";
@@ -70,11 +70,28 @@ describe("getEvents()", () => {
             firestore,
             "events"
         );
+        
+        expect(orderBy).toHaveBeenCalledWith(
+            "createdAt",
+            "desc"
+        );
 
+        expect(limit).toHaveBeenCalledWith(5);
         expect(getDocs).toHaveBeenCalled();
         expect(result.items).toHaveLength(2);
-        expect(result.items[0].id).toBe("event1");
-        expect(result.items[1].id).toBe("event2");
+
+        expect(result.items[0]).toEqual({
+            id: "event1",
+            eventName: "Ride 1",
+            createdAt: 100,
+        });
+
+        expect(result.items[1]).toEqual({
+            id: "event2",
+            eventName: "Ride 2",
+            createdAt: 200,
+        });
+
         expect(result.lastDocId).toBe("event2");
         expect(result.hasMore).toBe(false);
     });

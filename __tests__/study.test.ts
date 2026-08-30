@@ -239,13 +239,31 @@ describe("joinStudy()", () => {
 
         expect(result).toMatchObject({
             userId: "user123",
-            email: "user@test.com",
             eventId: "devia-route-study",
             status: "joined",
         });
     });
 
+        test("uses the supplied eventId", async () => {
+        const result = await joinStudy({
+            ...validData,
+            eventId: "custom-study",
+        });
 
+        expect(result.eventId).toBe("custom-study");
+
+        expect(setDoc).toHaveBeenCalledTimes(1);
+    });
+
+    test("throws when there is no authenticated user", async () => {
+        (getAuth as jest.Mock).mockReturnValue({
+            currentUser: null,
+        });
+
+        await expect(joinStudy(validData)).rejects.toThrow(
+            "User not authenticated"
+        );
+    });
 
     test("throws when terms are not accepted", async () => {
         await expect(
@@ -256,6 +274,7 @@ describe("joinStudy()", () => {
         ).rejects.toThrow(
             "Please accept the terms and privacy policy to join."
         );
+        expect(setDoc).not.toHaveBeenCalled();
     });
 
     test("throws when privacy policy is not accepted", async () => {
@@ -268,6 +287,7 @@ describe("joinStudy()", () => {
             "Please accept the terms and privacy policy to join."
         );
     });
+    expect(setDoc).not.toHaveBeenCalled();
 });
  
 // enrollInStudy() testing
@@ -292,14 +312,7 @@ describe("enrollInStudy()", () => {
         acceptedParticipationTerms: true,
     };
 
-    test("enrolls successfully using the user's profile", async () => {
-        (getDoc as jest.Mock).mockResolvedValue({
-            exists: () => true,
-            data: () => ({
-                fullName: "Juan Dela Cruz",
-                phone: "09171234567",
-            }),
-        });
+    test("enrolls successfully with valid consent", async () => {
 
         const result = await enrollInStudy(validConsent);
 
@@ -307,7 +320,6 @@ describe("enrollInStudy()", () => {
 
         expect(result).toMatchObject({
             userId: "user123",
-            email: "user@test.com",
             acceptedDataUsage: true,
             acceptedPrivacy: true,
             acceptedTerms: true,
@@ -316,7 +328,15 @@ describe("enrollInStudy()", () => {
         });
     });
 
+    test("throws when there is no authenticated user", async () => {
+        (getAuth as jest.Mock).mockReturnValue({
+            currentUser: null,
+        });
 
+        await expect(enrollInStudy(validConsent)).rejects.toThrow(
+            "User not authenticated"
+        );
+    });
 
     test("throws when privacy policy is not accepted", async () => {
         await expect(
@@ -327,6 +347,7 @@ describe("enrollInStudy()", () => {
         ).rejects.toThrow(
             "Please agree to all terms and conditions to enroll."
         );
+        expect(setDoc).not.toHaveBeenCalled();
     });
 
     test("throws when data usage is not accepted", async () => {
@@ -338,6 +359,7 @@ describe("enrollInStudy()", () => {
         ).rejects.toThrow(
             "Please agree to all terms and conditions to enroll."
         );
+        expect(setDoc).not.toHaveBeenCalled();
     });
 
     test("throws when participation terms are not accepted", async () => {
@@ -349,6 +371,7 @@ describe("enrollInStudy()", () => {
         ).rejects.toThrow(
             "Please agree to all terms and conditions to enroll."
         );
+        expect(setDoc).not.toHaveBeenCalled();
     });
 });
 

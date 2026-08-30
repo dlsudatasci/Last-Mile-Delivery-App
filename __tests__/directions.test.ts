@@ -1,25 +1,25 @@
 import {
+    buildCongestionSegments,
+    buildRouteSteps,
+    calculateSpeedAdjustedEtaSec,
+    chooseRiderFriendlyRoute,
+    estimateMetroManilaEtaSec,
     formatDistance,
     formatEta,
     formatSearchDistance,
     geocode,
-    rankSearchResults,
-    buildCongestionSegments,
-    buildRouteSteps,
-    chooseRiderFriendlyRoute,
-    getRestrictedRoadExposure,
-    scoreRiderRoute,
-    summarizeRouteCongestion,
-    estimateMetroManilaEtaSec,
-    getRoute,
     getDistanceToRouteM,
-    calculateSpeedAdjustedEtaSec,
+    getRestrictedRoadExposure,
+    getRoute,
+    rankSearchResults,
+    scoreRiderRoute,
     searchPlaces,
+    summarizeRouteCongestion,
 } from "../lib/utils/directions";
 
 global.fetch = jest.fn();
 
-// formateEta() testing
+// formatEta() testing
 describe("formatEta()", () => {
 
     // 0s = 1m
@@ -73,16 +73,26 @@ describe("formatDistance()", () => {
     });
 });
 
+// formatSearchDistance() testing
 describe("formatSearchDistance()", () => {
     test("formats meters below one kilometer", () => {
         expect(formatSearchDistance(850)).toBe("850 m");
     });
 
+    test("formats exactly one kilometer", () => {
+        expect(formatSearchDistance(1000)).toBe("1.0 km");
+    });
+
     test("formats kilometers at one kilometer and above", () => {
         expect(formatSearchDistance(4200)).toBe("4.2 km");
     });
+
+    test("formats zero meters", () => {
+        expect(formatSearchDistance(0)).toBe("0 m");
+    });
 });
 
+// calculateSpeedAdjustedEtaSec() testing
 describe("calculateSpeedAdjustedEtaSec()", () => {
     test("keeps traffic ETA when speed is stopped or unreliable", () => {
         expect(
@@ -115,6 +125,7 @@ describe("calculateSpeedAdjustedEtaSec()", () => {
     });
 });
 
+// getDistanceToRouteM() testing
 describe("getDistanceToRouteM()", () => {
     test("returns a small distance for a point on the route", () => {
         const route: [number, number][] = [
@@ -135,6 +146,7 @@ describe("getDistanceToRouteM()", () => {
     });
 });
 
+// rankSearchResults() testing
 describe("rankSearchResults()", () => {
     test("prioritizes exact phrase and all-word name matches", () => {
         const results = [
@@ -258,6 +270,7 @@ describe("rankSearchResults()", () => {
     });
 });
 
+// searchPlaces() testing
 describe("searchPlaces()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -836,6 +849,29 @@ describe("getRoute()", () => {
                 legs: [],
             })
         ).toEqual([]);
+    });
+
+    test("uses unknown congestion when an annotation is missing", () => {
+        const segments = buildCongestionSegments({
+            geometry: {
+                coordinates: [
+                    [121.0, 14.0],
+                    [121.01, 14.01],
+                    [121.02, 14.02],
+                ],
+            },
+            legs: [
+                {
+                    annotation: {
+                        congestion: ["low"],
+                        distance: [1000],
+                    },
+                },
+            ],
+        });
+
+        expect(segments[0].congestion).toBe("low");
+        expect(segments[1].congestion).toBe("unknown");
     });
 
     test("returns null when no routes are returned", async () => {

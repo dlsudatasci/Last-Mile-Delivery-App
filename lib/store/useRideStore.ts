@@ -194,7 +194,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 activeRouteUpdatedAt,
             } = get();
             // First, reset the ride state
-            get().resetRide();
+            await get().resetRide();
 
             // Seed the initial generated route so the first suggested route is always captured
             const initialRouteId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -403,7 +403,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 newHeading = calculatedBearing >= 0 ? calculatedBearing : 360 + calculatedBearing;
             }
         }
-
+        
         newPoint.heading = newHeading;
 
         const newPoints = [...points, newPoint];
@@ -532,7 +532,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         const state = get();
         const shouldRefreshSuggestedRoute =
             !state.isRecording || state.suggestedRouteDistanceM <= 0 || state.suggestedRouteDurationSec <= 0;
-
+            
         let newGeneratedRoutes = state.generatedRoutes;
         let newActiveGeneratedRouteId = state.activeGeneratedRouteId;
 
@@ -540,7 +540,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         if (state.isRecording) {
             const sequence = state.generatedRoutes.length + 1;
             const routeId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-
+            
             const newGeneratedRoute: GeneratedRoute = {
                 routeId,
                 rideId: '', // Will be populated in saveRide
@@ -553,7 +553,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 remainingDistanceOriginal: sequence === 1 ? null : state.activeRouteDistanceM,
                 remainingDistanceNew: route.distanceM,
             };
-
+            
             newGeneratedRoutes = [...state.generatedRoutes, newGeneratedRoute];
             newActiveGeneratedRouteId = routeId;
         }
@@ -603,14 +603,9 @@ export function getNextDisplayPoints({
         );
 
         if (!snapped) {
-            // When an active route exists and we already have display points,
-            // don't add off-route GPS to the display trace because the rider is
-            // likely experiencing GPS drift or a temporary deviation.
-            // The raw point is still recorded in points[] for post-ride analysis.
             if (displayPoints.length > 0) {
                 return displayPoints;
             }
-            // No display points yet so use the raw point as the starting display point
             return [rawPoint];
         }
 

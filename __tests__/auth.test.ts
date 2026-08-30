@@ -659,6 +659,33 @@ describe("resolveAuthenticatedSession()", () => {
 
         expect(getLocalAccount).not.toHaveBeenCalled();
     });
+
+    test("does not use a persisted profile belonging to another user", async () => {
+        (getDoc as jest.Mock).mockRejectedValue(
+            new Error("Firestore unavailable")
+        );
+
+        const setUser = jest.fn();
+
+        (useUser.getState as jest.Mock).mockReturnValue({
+            user: {
+                id: "user999",
+                username: "Wrong User",
+            },
+            setUser,
+        });
+
+        (getLocalAccount as jest.Mock).mockResolvedValue(null);
+
+        const result = await resolveAuthenticatedSession({
+            uid: "user123",
+            email: "09171234567@devia.app",
+        } as any);
+
+        expect(result.destination).toBe("/create-profile");
+        expect(result.profile).toBeNull();
+        expect(setUser).not.toHaveBeenCalled();
+    });
 });
 
 // createUserProfile() testing

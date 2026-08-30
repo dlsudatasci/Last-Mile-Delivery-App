@@ -60,4 +60,80 @@ describe("deviation questionnaire helpers", () => {
         );
         expect(TRAFFIC_SEVERITY_OPTIONS[4].label.tl).toContain("stop-and-go");
     });
+
+    test("primary reason other requires an explanation", () => {
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Other",
+                deviateAgainFrequency: "Sometimes",
+                avoidRoadFrequency: "Rarely",
+            })
+        ).toBe(false);
+
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Other",
+                primaryReasonOther: "Road was easier",
+                deviateAgainFrequency: "Sometimes",
+                avoidRoadFrequency: "Rarely",
+            })
+        ).toBe(true);
+    });
+
+    test("road blockage with Other requires an explanation", () => {
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Road Blockage/Hazard (Flood, Accident, Poor road condition)",
+                blockageReason: "Other",
+                deviateAgainFrequency: "Sometimes",
+                avoidRoadFrequency: "Rarely",
+            })
+        ).toBe(false);
+
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Road Blockage/Hazard (Flood, Accident, Poor road condition)",
+                blockageReason: "Other",
+                blockageReasonOther: "Construction materials blocked the road",
+                deviateAgainFrequency: "Sometimes",
+                avoidRoadFrequency: "Rarely",
+            })
+        ).toBe(true);
+    });
+
+    test("personal stop with Other requires an explanation", () => {
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Personal Stop (Meal, Restroom, Break, Refueling, etc.)",
+                personalStopReason: ["Other"],
+                stopDuration: "5-15mins",
+                deviateAgainFrequency: "Sometimes",
+                avoidRoadFrequency: "Rarely",
+            })
+        ).toBe(false);
+
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Personal Stop (Meal, Restroom, Break, Refueling, etc.)",
+                personalStopReason: ["Other"],
+                personalStopOther: "Had to wait for someone",
+                stopDuration: "5-15mins",
+                deviateAgainFrequency: "Sometimes",
+                avoidRoadFrequency: "Rarely",
+            })
+        ).toBe(true);
+    });
+
+    test("complete traffic questionnaire is valid", () => {
+        expect(
+            isDeviationQuestionnaireComplete({
+                primaryReason: "Traffic Congestion",
+                trafficSeverity: "4 = Heavy",
+                rushHourCause: "Yes",
+                chooseDuringNonRush: "No",
+                deviateAgainFrequency: "Often",
+                avoidRoadFrequency: "Sometimes",
+            })
+        ).toBe(true);
+    });
 });
