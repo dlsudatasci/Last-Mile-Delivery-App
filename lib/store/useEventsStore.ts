@@ -16,7 +16,6 @@ interface EventsState {
     };
     fetchEvents: (refresh?: boolean) => Promise<void>;
     fetchMoreEvents: () => Promise<void>;
-    setMockEvents: (mockEvents: FetchEventData[]) => void;
     selectEvent: (eventId: string) => Promise<FetchEventData | undefined>;
     clearEvents: () => void;
 }
@@ -127,6 +126,7 @@ export const useEventsStore = create<EventsState>((set, get) => ({
             // Update the ride in the list
             set({
                 events: get().events.map(e => (e.id === eventId ? updatedEvent : e)),
+                selectedEvent: updatedEvent,
             });
 
             return updatedEvent;
@@ -135,10 +135,6 @@ export const useEventsStore = create<EventsState>((set, get) => ({
         } finally {
             set({ isLoading: false });
         }
-    },
-
-    setMockEvents: (mockEvents: FetchEventData[]) => {
-        set({ events: mockEvents });
     },
 
     clearEvents: () => {

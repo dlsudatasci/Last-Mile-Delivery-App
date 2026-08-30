@@ -1,11 +1,16 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
+import { useRideStore } from '@/lib/store/useRideStore';
 import { router, Stack } from 'expo-router';
-import { Icon, useTheme } from 'react-native-paper';
+import { Alert } from 'react-native';
+import { useTheme } from 'react-native-paper';
 
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { TouchableOpacity } from 'react-native';
+import { fontSizes } from '@/lib/utils/responsive-sizing';
 
 export default function Layout() {
     const theme = useTheme();
+    const isRecording = useRideStore(state => state.isRecording);
+    const resetRide = useRideStore(state => state.resetRide);
+
     const headerStyle = {
         backgroundColor: theme.colors.surface,
     };
@@ -25,11 +30,7 @@ export default function Layout() {
             initialRouteName="index"
             screenOptions={{
                 ...commonScreenOptions,
-                headerLeft: () => (
-                    <TouchableOpacity onPress={() => router.back()}>
-                        <Icon source={'chevron-left'} size={sizes.size32} />
-                    </TouchableOpacity>
-                ),
+                headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
                 headerTitleAlign: 'center',
             }}
         >
@@ -38,6 +39,31 @@ export default function Layout() {
                 options={{
                     headerShown: true,
                     title: 'Trip Recording',
+                    headerLeft: () => (
+                        <HeaderBackButton
+                            onPress={() => {
+                                if (isRecording) {
+                                    Alert.alert(
+                                        'Cancel Trip?',
+                                        'All recorded trip data will be lost. Are you sure you want to cancel?',
+                                        [
+                                            { text: 'Continue Trip', style: 'cancel' },
+                                            {
+                                                text: 'Cancel Trip',
+                                                style: 'destructive',
+                                                onPress: async () => {
+                                                    await resetRide();
+                                                    router.back();
+                                                },
+                                            },
+                                        ]
+                                    );
+                                } else {
+                                    router.back();
+                                }
+                            }}
+                        />
+                    ),
                 }}
             />
             <Stack.Screen name="new-trip" options={{ headerShown: false }} />
@@ -45,7 +71,9 @@ export default function Layout() {
             <Stack.Screen name="study-information" options={{ headerShown: false }} />
             <Stack.Screen name="destination" options={{ headerShown: false }} />
             <Stack.Screen name="route-preview" options={{ headerShown: false }} />
-            <Stack.Screen name="trip-end" options={{ headerShown: false }} />
+            <Stack.Screen name="post-trip-questionnaire" options={{ headerShown: true }} />
+            <Stack.Screen name="change-routes" options={{ headerShown: true }} />
+            <Stack.Screen name="reason-for-deviation" options={{ headerShown: true }} />
         </Stack>
     );
 }

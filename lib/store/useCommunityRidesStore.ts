@@ -125,7 +125,7 @@ export const useCommunityRidesStore = create<RidesState>((set, get) => ({
             // Find the ride in the current list
             const ride = get().rides.find(r => r.id === rideId);
             if (!ride) {
-                throw new Error('Ride not found');
+                throw new Error('Trip not found');
             }
 
             // Fetch points for the selected ride
@@ -138,6 +138,8 @@ export const useCommunityRidesStore = create<RidesState>((set, get) => ({
             // Update the ride in the list
             set({
                 rides: get().rides.map(r => (r.id === rideId ? updatedRide : r)),
+                selectedRide: updatedRide,
+                selectedRidePoints: points,
             });
 
             return updatedRide;
