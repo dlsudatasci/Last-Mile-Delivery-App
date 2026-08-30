@@ -138,6 +138,8 @@ export const useCommunityRidesStore = create<RidesState>((set, get) => ({
             // Update the ride in the list
             set({
                 rides: get().rides.map(r => (r.id === rideId ? updatedRide : r)),
+                selectedRide: updatedRide,
+                selectedRidePoints: points,
             });
 
             return updatedRide;

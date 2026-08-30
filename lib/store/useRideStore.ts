@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import bearing from '@turf/bearing';
 import * as Location from 'expo-location';
 import { LocationObject } from 'expo-location';
 import { create } from 'zustand';
-import bearing from '@turf/bearing';
 import { Annotation } from '../firebase-crud/annotations';
 import { isTransientFirestoreError, NewRideData, saveRide } from '../firebase-crud/rides';
 import { LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
@@ -403,7 +403,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 newHeading = calculatedBearing >= 0 ? calculatedBearing : 360 + calculatedBearing;
             }
         }
-        
+
         newPoint.heading = newHeading;
 
         const newPoints = [...points, newPoint];
@@ -532,7 +532,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         const state = get();
         const shouldRefreshSuggestedRoute =
             !state.isRecording || state.suggestedRouteDistanceM <= 0 || state.suggestedRouteDurationSec <= 0;
-            
+
         let newGeneratedRoutes = state.generatedRoutes;
         let newActiveGeneratedRouteId = state.activeGeneratedRouteId;
 
@@ -540,7 +540,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         if (state.isRecording) {
             const sequence = state.generatedRoutes.length + 1;
             const routeId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-            
+
             const newGeneratedRoute: GeneratedRoute = {
                 routeId,
                 rideId: '', // Will be populated in saveRide
@@ -553,7 +553,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 remainingDistanceOriginal: sequence === 1 ? null : state.activeRouteDistanceM,
                 remainingDistanceNew: route.distanceM,
             };
-            
+
             newGeneratedRoutes = [...state.generatedRoutes, newGeneratedRoute];
             newActiveGeneratedRouteId = routeId;
         }
@@ -603,11 +603,15 @@ export function getNextDisplayPoints({
         );
 
         if (!snapped) {
-            const lastDisplayPoint = displayPoints[displayPoints.length - 1];
-            if (lastDisplayPoint && haversineDistance(lastDisplayPoint, rawPoint) < MIN_DISPLAY_POINT_DISTANCE_M) {
+            // When an active route exists and we already have display points,
+            // don't add off-route GPS to the display trace because the rider is
+            // likely experiencing GPS drift or a temporary deviation.
+            // The raw point is still recorded in points[] for post-ride analysis.
+            if (displayPoints.length > 0) {
                 return displayPoints;
             }
-            return [...displayPoints, rawPoint];
+            // No display points yet so use the raw point as the starting display point
+            return [rawPoint];
         }
 
         const snappedPoint: RidePoint = {

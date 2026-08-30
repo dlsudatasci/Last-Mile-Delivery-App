@@ -126,6 +126,7 @@ export const useEventsStore = create<EventsState>((set, get) => ({
             // Update the ride in the list
             set({
                 events: get().events.map(e => (e.id === eventId ? updatedEvent : e)),
+                selectedEvent: updatedEvent,
             });
 
             return updatedEvent;

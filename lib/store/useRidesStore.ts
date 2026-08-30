@@ -149,9 +149,14 @@ export const useRidesStore = create<RidesState>((set, get) => ({
 
             ride = { ...ride, points, annotations };
 
-            // Update the ride in the list
+            // Update or add the ride in the list
+            const existsInList = get().rides.some(r => r.id === rideId);
             set({
-                rides: get().rides.map(r => (r.id === rideId ? ride : r)),
+                rides: existsInList
+                    ? get().rides.map(r => (r.id === rideId ? ride : r))
+                    : [...get().rides, ride],
+                selectedRide: ride,
+                selectedRidePoints: points,
             });
 
             return ride;
@@ -195,10 +200,9 @@ export const useRidesStore = create<RidesState>((set, get) => ({
 
             const updatedRide = { ...ride, annotations: [...ride.annotations, annotation] };
 
-            // set({ selectedRide: updatedRide });
             set({
                 rides: get().rides.map(r => (r.id === ride.id ? updatedRide : r)),
-                // selectedRide: updatedRide,
+                selectedRide: updatedRide,
             });
         } catch (error) {
             set({ error: error instanceof Error ? error.message : 'Failed to add annotation' });
