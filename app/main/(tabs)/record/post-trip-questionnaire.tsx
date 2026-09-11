@@ -1,5 +1,6 @@
+import { showRequiredReviewNotice, useRequiredTripReview } from '@/lib/hooks/useRequiredTripReview';
 import HeaderBackButton from '@/components/common/HeaderBackButton';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme, ActivityIndicator } from 'react-native-paper';
@@ -33,6 +34,12 @@ const arrivalLabels: Record<string, Record<QuestionnaireLanguage, string>> = {
 
 export default function PostTripQuestionnaire() {
     const { rideId, deviationCount } = useLocalSearchParams<{ rideId?: string; deviationCount?: string }>();
+    const reviewed = useRequiredTripReview(rideId);
+    const inFlight = useRef(false);
+    const [submitted, setSubmitted] = useState(false);
+    useEffect(() => {
+        if (submitted && reviewed) router.replace('/main/(tabs)/map');
+    }, [submitted, reviewed]);
     const [arrival, setArrival] = useState<string>('');
     const [etaRating, setEtaRating] = useState<number>(0);
     const [stressRating, setStressRating] = useState<number>(0);
@@ -42,21 +49,23 @@ export default function PostTripQuestionnaire() {
     const styles = getStyles(theme);
     const savePostTrip = useTripReviews(state => state.savePostTrip);
     const markReviewed = useTripReviews(state => state.markReviewed);
-    const goBackToNewTrip = () => router.replace('/main/(tabs)/record/new-trip');
+    const handleBack = () => reviewed ? router.back() : showRequiredReviewNotice();
     const totalDeviationCount = Math.max(0, Number(deviationCount || 0));
 
     const handleNext = async () => {
-        if (!rideId || !arrival || etaRating === 0 || stressRating === 0) return;
+        if (inFlight.current || reviewed || !rideId || !arrival || etaRating === 0 || stressRating === 0) return;
 
         savePostTrip(rideId, { arrival, etaRating, stressRating, language });
 
         if (totalDeviationCount <= 0) {
             try {
+                inFlight.current = true;
                 setSubmitting(true);
                 await submitTripReview(rideId);
                 markReviewed(rideId);
-                router.replace('/main/(tabs)/map');
+                setSubmitted(true);
             } catch (error) {
+                inFlight.current = false;
                 console.error(error);
                 Alert.alert('Error', 'Failed to submit review. Please check your connection and try again.');
             } finally {
@@ -79,7 +88,8 @@ export default function PostTripQuestionnaire() {
             <Stack.Screen
                 options={{
                     title: postTripText.title[language],
-                    headerLeft: () => <HeaderBackButton onPress={goBackToNewTrip} />,
+                    gestureEnabled: reviewed,
+                    headerLeft: () => <HeaderBackButton onPress={handleBack} />,
                 }}
             />
             <ScrollView
@@ -142,7 +152,7 @@ export default function PostTripQuestionnaire() {
                     </View>
 
                     <View style={styles.actionsRow}>
-                        <Button mode="outlined" onPress={goBackToNewTrip} style={styles.navButton}>
+                        <Button mode="outlined" onPress={handleBack} style={styles.navButton}>
                             {postTripText.back[language]}
                         </Button>
                         <Button

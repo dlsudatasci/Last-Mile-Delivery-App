@@ -1,16 +1,28 @@
+import { useTripNavigationGuard } from '@/lib/hooks/useTripNavigationGuard';
+import { showRequiredReviewNotice } from '@/lib/hooks/useRequiredTripReview';
+import { useTripReviews } from '@/lib/store/useTripReviews';
 import { useRideStore } from '@/lib/store/useRideStore';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
-import { router, Tabs } from 'expo-router';
+import { router, Tabs, useGlobalSearchParams, useSegments } from 'expo-router';
 import React from 'react';
-import { Alert, Platform, Text, TouchableOpacity, ViewStyle } from 'react-native';
+import { Platform, Text, TouchableOpacity, ViewStyle } from 'react-native';
 import { Icon, IconButton, useTheme } from 'react-native-paper';
 
 export default function TabLayout() {
     const theme = useTheme();
-    const isRecording = useRideStore(state => state.isRecording);
-    const resetRide = useRideStore(state => state.resetRide);
+    const guardTripNavigation = useTripNavigationGuard();
+    const segments = useSegments();
+    const { rideId } = useGlobalSearchParams<{ rideId?: string }>();
+    const reviewed = useTripReviews(state => !!rideId && state.reviews[rideId]?.status === 'reviewed');
+    const reviewRequired = segments.some(segment =>
+        ['post-trip-questionnaire', 'change-routes', 'reason-for-deviation'].includes(segment)
+    ) && !reviewed;
+    const navigate = (action: () => void) => {
+        if (reviewRequired) { showRequiredReviewNotice(); return; }
+        guardTripNavigation(action);
+    };
 
     const headerStyle: ViewStyle = {
         backgroundColor: theme.colors.surface,
@@ -46,32 +58,19 @@ export default function TabLayout() {
         headerTitleAlign: 'left',
     };
 
-    const guardedTabListeners = {
+    const guardedTabListeners = (tab: 'home' | 'community' | 'map' | 'profile') => ({
         tabPress: (event: { preventDefault: () => void }) => {
-            if (!isRecording) return;
+            if (!reviewRequired && !useRideStore.getState().isRecording) return;
             event.preventDefault();
-            Alert.alert(
-                'Trip in Progress',
-                'You must cancel the current trip before navigating away. All recorded data will be lost.',
-                [
-                    { text: 'Continue Trip', style: 'cancel' },
-                    {
-                        text: 'Cancel Trip',
-                        style: 'destructive',
-                        onPress: async () => {
-                            await resetRide();
-                        },
-                    },
-                ]
-            );
+            navigate(() => router.navigate(`/main/(tabs)/${tab}`));
         },
-    };
+    });
 
     return (
         <Tabs screenOptions={commonScreenOptions}>
             <Tabs.Screen
                 name="home"
-                listeners={guardedTabListeners}
+                listeners={guardedTabListeners('home')}
                 options={{
                     title: 'Home',
                     tabBarIcon: ({ color }: { color: string }) => (
@@ -82,7 +81,7 @@ export default function TabLayout() {
             />
             <Tabs.Screen
                 name="community"
-                listeners={guardedTabListeners}
+                listeners={guardedTabListeners('community')}
                 options={{
                     title: 'Studies',
                     tabBarLabel: ({ color }: { focused: boolean; color: string }) => (
@@ -102,7 +101,7 @@ export default function TabLayout() {
                     title: 'Record',
                     tabBarButton: () => (
                         <TouchableOpacity
-                            onPress={() => router.push('/main/(tabs)/record/destination')}
+                            onPress={() => navigate(() => router.push('/main/(tabs)/record/destination'))}
                             style={{
                                 alignSelf: 'center',
                                 backgroundColor: theme.colors.surface,
@@ -134,7 +133,7 @@ export default function TabLayout() {
             />
             <Tabs.Screen
                 name="map"
-                listeners={guardedTabListeners}
+                listeners={guardedTabListeners('map')}
                 options={({ route }) => ({
                     title: 'Trips',
                     tabBarIcon: ({ color }: { color: string }) => (
@@ -149,7 +148,7 @@ export default function TabLayout() {
             />
             <Tabs.Screen
                 name="profile"
-                listeners={guardedTabListeners}
+                listeners={guardedTabListeners('profile')}
                 options={{
                     title: 'Profile',
                     tabBarIcon: ({ color }: { color: string }) => (

@@ -652,6 +652,9 @@ describe("useRideStore", () => {
             isRecording: true,
             isPaused: true,
             startTime: 123,
+            activeRouteDestination: [121, 14],
+            activeRouteCoordinates: [[121, 14], [122, 15]],
+            activeGeneratedRouteId: "old-route",
 
             duration: 50,
 
@@ -699,6 +702,9 @@ describe("useRideStore", () => {
         expect(state.isRecording).toBe(false);
         expect(state.isPaused).toBe(false);
         expect(state.startTime).toBeNull();
+        expect(state.activeRouteDestination).toBeNull();
+        expect(state.activeRouteCoordinates).toEqual([]);
+        expect(state.activeGeneratedRouteId).toBeNull();
 
         expect(state.points).toEqual([]);
         expect(state.displayPoints).toEqual([]);

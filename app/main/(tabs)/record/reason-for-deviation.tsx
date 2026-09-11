@@ -25,7 +25,7 @@ import { formatRouteInstructionSummary } from '@/lib/trip-record-display';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { ActivityIndicator, Button, Checkbox, MD3Theme, RadioButton, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 
@@ -110,6 +110,12 @@ export default function ReasonForDeviation() {
         language?: QuestionnaireLanguage;
     }>();
     const saveDeviation = useTripReviews(state => state.saveDeviation);
+    const inFlight = useRef(false);
+    const [submitted, setSubmitted] = useState(false);
+    const reviewed = useTripReviews(state => !!rideId && state.reviews[rideId]?.status === 'reviewed');
+    useEffect(() => {
+        if (submitted && reviewed) router.replace('/main/(tabs)/map');
+    }, [submitted, reviewed]);
     const markReviewed = useTripReviews(state => state.markReviewed);
     const deviationEvents = useRideStore(state => state.deviationEvents);
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
@@ -148,7 +154,7 @@ export default function ReasonForDeviation() {
     };
 
     const handleNext = async () => {
-        if (!rideId || !canContinue) return;
+        if (inFlight.current || reviewed || !rideId || !canContinue) return;
         const deviationId = `dev-${rideId}-${currentDeviationIndex}`;
 
         saveDeviation(rideId, deviationId, {
@@ -170,11 +176,13 @@ export default function ReasonForDeviation() {
         }
 
         try {
+            inFlight.current = true;
             setSubmitting(true);
             await submitTripReview(rideId);
             markReviewed(rideId);
-            router.replace('/main/(tabs)/map');
+            setSubmitted(true);
         } catch (error) {
+            inFlight.current = false;
             console.error(error);
             Alert.alert('Error', 'Failed to submit review. Please check your connection and try again.');
         } finally {
