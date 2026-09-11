@@ -5,7 +5,7 @@ import { LocationObject } from 'expo-location';
 import { create } from 'zustand';
 import { Annotation } from '../firebase-crud/annotations';
 import { isTransientFirestoreError, NewRideData, saveRide } from '../firebase-crud/rides';
-import { LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
+import { getDistanceToRouteM, getRoute, LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
 import { snapLngLatToRoute } from '../utils/routeSnapping';
 
 const setAsyncFlag = async (key: string, value: boolean) => {
@@ -120,7 +120,7 @@ interface RideState {
     increaseDuration: () => void;
     syncDurationFromClock: () => void;
     addPoint: (location: LocationObject) => void;
-    resetRide: () => void;
+    resetRide: () => Promise<void>;
     pauseRide: () => Promise<void>;
     resumeRide: () => Promise<void>;
     addAnnotation: (annotation: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>) => void;
@@ -580,6 +580,110 @@ export const useRideStore = create<RideState>((set, get) => ({
         set(state => ({ deviationEvents: [...state.deviationEvents, { ...event, activeRouteId }] }));
     },
 }));
+
+// Only recover a cold session. A storage read must never overwrite a trip that
+// started, paused, finished, or was cancelled while that read was pending.
+export async function recoverRecordingSession() {
+    const snapshot = useRideStore.getState();
+    if (snapshot.isRecording || snapshot.startTime !== null) return;
+    const recording = await getAsyncFlag('isRecording');
+    const paused = await getAsyncFlag('isPaused');
+    if (!recording || useRideStore.getState() !== snapshot) return;
+    useRideStore.setState({ isRecording: true, isPaused: paused });
+    if (!paused) {
+        const running = await Location.hasStartedLocationUpdatesAsync('location-recording');
+        const latest = useRideStore.getState();
+        if (!running && latest.isRecording && !latest.isPaused) {
+            await latest.resumeRide();
+        }
+    }
+}
+
+// Observe raw points, not render/effect counts: a batched location callback can
+// deliver several fixes before React renders. A deviation can supersede traffic
+// refresh, and only the latest request for the same trip/route may apply.
+export function subscribeLiveRouteUpdates(
+    requestRoute: typeof getRoute = getRoute,
+    getRemainingEta: () => number = () => useRideStore.getState().activeRouteDurationSec
+) {
+    let disposed = false;
+    let lastPoint: RidePoint | null = null;
+    let offRouteCount = 0;
+    let lastRerouteAt = 0;
+    let lastTrafficAt = 0;
+    let pending: { state: RideState; kind: 'traffic' | 'rerouting' } | null = null;
+
+    const update = () => {
+        const state = useRideStore.getState();
+        if (pending && (!state.isRecording || state.isPaused ||
+            state.startTime !== pending.state.startTime ||
+            state.activeRouteCoordinates !== pending.state.activeRouteCoordinates ||
+            state.activeRouteDestination !== pending.state.activeRouteDestination)) {
+            pending = null;
+            state.setRouteUpdateStatus('idle');
+        }
+        if (disposed || !state.isRecording || state.isPaused) {
+            offRouteCount = 0;
+            if (!state.isRecording) {
+                lastPoint = null;
+                lastRerouteAt = 0;
+                lastTrafficAt = 0;
+            }
+            return;
+        }
+        const point = state.points[state.points.length - 1];
+        if (!point || point === lastPoint || !state.activeRouteDestination || state.activeRouteCoordinates.length < 2) return;
+        lastPoint = point;
+        const from: LngLat = [point.coordinate.longitude, point.coordinate.latitude];
+        const distance = getDistanceToRouteM(from, state.activeRouteCoordinates);
+        const now = Date.now();
+        offRouteCount = distance >= 35 ? offRouteCount + 1 : 0;
+        const deviation = offRouteCount >= 3 && now - lastRerouteAt >= 45000;
+        // Traffic must not replace the route before the existing deviation
+        // criteria have been met, or block a confirmed deviation behind it.
+        if (!deviation && (pending || distance >= 35 || now - (lastTrafficAt || state.activeRouteUpdatedAt || 0) < 180000)) return;
+        if (deviation) { lastRerouteAt = now; offRouteCount = 0; }
+        else lastTrafficAt = now;
+        const request = { state, kind: deviation ? 'rerouting' as const : 'traffic' as const };
+        pending = request;
+        const previousEtaSec = getRemainingEta();
+        state.setRouteUpdateStatus(request.kind);
+        const destination = state.activeRouteDestination;
+        void requestRoute(from, destination).then(route => {
+            const latest = useRideStore.getState();
+            if (disposed || pending !== request || !route || !latest.isRecording || latest.isPaused ||
+                latest.startTime !== state.startTime || latest.activeRouteCoordinates !== state.activeRouteCoordinates ||
+                latest.activeRouteDestination !== destination) return;
+            pending = null;
+            latest.setActiveRoute(route, destination, deviation ? 'Regenerated Route' : 'Traffic Update');
+            if (deviation) latest.addDeviationEvent({
+                timestamp: now,
+                location: from,
+                offRouteDistanceM: distance,
+                previousInstruction: getNextNavigationInstruction(point, state.activeRouteSteps)?.text,
+                newInstruction: route.steps[0]?.instruction,
+                previousEtaSec,
+                newEtaSec: route.durationSec,
+            });
+            latest.setRouteUpdateStatus('idle');
+        }).catch(error => {
+            console.warn('Failed to update live route:', error);
+        }).finally(() => {
+            if (pending === request) {
+                pending = null;
+                useRideStore.getState().setRouteUpdateStatus('idle');
+            }
+        });
+    };
+    const unsubscribe = useRideStore.subscribe(update);
+    update();
+    return () => {
+        disposed = true;
+        unsubscribe();
+        if (pending) useRideStore.getState().setRouteUpdateStatus('idle');
+        pending = null;
+    };
+}
 
 const DISPLAY_ROUTE_SNAP_THRESHOLD_M = 55;
 const MIN_DISPLAY_POINT_DISTANCE_M = 1.5;

@@ -1,16 +1,19 @@
+import { useRecordingBackGuard } from '@/lib/hooks/useTripNavigationGuard';
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import OpenCameraView from '@/components/camera/CameraView';
 import SpinningWheel from '@/components/common/SpinningWheel';
 import MapRender from '@/components/map/MapRender';
 import { PredefinedAnnotation, predefinedAnnotations } from '@/lib/common/annotations';
-import { calculateRemainingDistanceM, getAsyncFlag, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
-import { calculateSpeedAdjustedEtaSec, getDistanceToRouteM, getRoute, LngLat } from '@/lib/utils/directions';
+import { calculateRemainingDistanceM, recoverRecordingSession, subscribeLiveRouteUpdates, getNextNavigationInstruction, RidePoint, useRideStore } from '@/lib/store/useRideStore';
+import { calculateSpeedAdjustedEtaSec, LngLat } from '@/lib/utils/directions';
 import { clampFraction, DEFAULT_ROUTE_PROGRESS_SNAP_M, estimateRemainingEtaSec, getRouteProgress } from '@/lib/utils/routeProgress';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { buildTripRouteTitle } from '@/lib/utils/tripTitle';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import {
     Button,
@@ -51,21 +54,15 @@ export default function Record() {
         activeRouteDestination,
         activeRouteDurationSec,
         activeRouteDistanceM,
-        activeRouteUpdatedAt,
         routeUpdateStatus,
         deviationEvents,
         startRide,
         finishRide,
         increaseDuration,
         syncDurationFromClock,
-        resetRide,
         pauseRide,
         resumeRide,
         addAnnotation,
-        setRecording,
-        setActiveRoute,
-        setRouteUpdateStatus,
-        addDeviationEvent,
     } = useRideStore();
 
     // const [duration, setDuration] = useState(0);
@@ -142,10 +139,10 @@ export default function Record() {
         currentSpeedMps: currentSpeed,
     });
     const autoStartedRef = useRef(false);
-    const offRouteCountRef = useRef(0);
-    const lastRerouteAtRef = useRef(0);
-    const lastTrafficRefreshAtRef = useRef(0);
-    const isRouteRequestActiveRef = useRef(false);
+    const requestBack = useRecordingBackGuard();
+    const remainingEtaRef = useRef(etaRemainingSec);
+    remainingEtaRef.current = etaRemainingSec;
+    useFocusEffect(useCallback(() => subscribeLiveRouteUpdates(undefined, () => remainingEtaRef.current), []));
 
     // Timer effect for duration
     useEffect(() => {
@@ -162,128 +159,8 @@ export default function Record() {
     }, [remainingDistanceM]);
 
     useEffect(() => {
-        if (!isRecording || isPaused || !currentPoint || !destinationCoordinates || activeRouteCoordinates.length < 2 || isRouteRequestActiveRef.current) {
-            return;
-        }
-
-        const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
-        const distanceFromRouteM = getDistanceToRouteM(currentLngLat, activeRouteCoordinates);
-        const now = Date.now();
-
-        if (distanceFromRouteM < 35) {
-            offRouteCountRef.current = 0;
-            return;
-        }
-
-        offRouteCountRef.current += 1;
-        if (offRouteCountRef.current < 3 || now - lastRerouteAtRef.current < 45000) {
-            return;
-        }
-
-        lastRerouteAtRef.current = now;
-        offRouteCountRef.current = 0;
-        isRouteRequestActiveRef.current = true;
-        const previousInstruction = nextInstruction?.text;
-        const previousEtaSec = etaRemainingSec;
-        setRouteUpdateStatus('rerouting');
-
-        getRoute(currentLngLat, destinationCoordinates)
-            .then(route => {
-                if (!route) return;
-                setActiveRoute(route, destinationCoordinates, 'Regenerated Route');
-                setPreviousRemainingDistanceM(route.distanceM);
-                addDeviationEvent({
-                    timestamp: now,
-                    location: currentLngLat,
-                    offRouteDistanceM: distanceFromRouteM,
-                    previousInstruction,
-                    newInstruction: route.steps[0]?.instruction,
-                    previousEtaSec,
-                    newEtaSec: route.durationSec,
-                });
-            })
-            .catch(error => {
-                console.warn('Failed to reroute after deviation:', error);
-            })
-            .finally(() => {
-                isRouteRequestActiveRef.current = false;
-                setRouteUpdateStatus('idle');
-            });
-    }, [
-        activeRouteCoordinates,
-        addDeviationEvent,
-        currentPoint,
-        destinationCoordinates,
-        etaRemainingSec,
-        isPaused,
-        isRecording,
-        nextInstruction?.text,
-        setActiveRoute,
-        setRouteUpdateStatus,
-    ]);
-
-    useEffect(() => {
-        if (!isRecording || isPaused || !currentPoint || !destinationCoordinates || isRouteRequestActiveRef.current) {
-            return;
-        }
-
-        const now = Date.now();
-        const refreshEveryMs = 3 * 60 * 1000;
-        const lastRefresh = lastTrafficRefreshAtRef.current || activeRouteUpdatedAt || 0;
-        if (now - lastRefresh < refreshEveryMs) return;
-
-        lastTrafficRefreshAtRef.current = now;
-        isRouteRequestActiveRef.current = true;
-
-        const currentLngLat: LngLat = [currentPoint.coordinate.longitude, currentPoint.coordinate.latitude];
-        const distanceFromRouteM = activeRouteCoordinates.length >= 2
-            ? getDistanceToRouteM(currentLngLat, activeRouteCoordinates)
-            : 0;
-        const isOffRoute = distanceFromRouteM >= 35;
-        const previousInstruction = nextInstruction?.text;
-        const previousEtaSec = etaRemainingSec;
-
-        setRouteUpdateStatus(isOffRoute ? 'rerouting' : 'traffic');
-
-        getRoute(currentLngLat, destinationCoordinates)
-            .then(route => {
-                if (!route) return;
-                setActiveRoute(route, destinationCoordinates, isOffRoute ? 'Regenerated Route' : 'Traffic Update');
-                setPreviousRemainingDistanceM(route.distanceM);
-                if (isOffRoute) {
-                    offRouteCountRef.current = 0;
-                    lastRerouteAtRef.current = now;
-                    addDeviationEvent({
-                        timestamp: now,
-                        location: currentLngLat,
-                        offRouteDistanceM: distanceFromRouteM,
-                        previousInstruction,
-                        newInstruction: route.steps[0]?.instruction,
-                        previousEtaSec,
-                        newEtaSec: route.durationSec,
-                    });
-                }
-            })
-            .catch(error => {
-                console.warn('Failed to refresh live traffic route:', error);
-            })
-            .finally(() => {
-                isRouteRequestActiveRef.current = false;
-                setRouteUpdateStatus('idle');
-            });
-    }, [
-        activeRouteCoordinates,
-        activeRouteUpdatedAt,
-        addDeviationEvent,
-        currentPoint,
-        destinationCoordinates,
-        etaRemainingSec,
-        isPaused,
-        isRecording,
-        nextInstruction?.text,
-        setActiveRoute,
-        setRouteUpdateStatus,
-    ]);
+        setPreviousRemainingDistanceM(undefined);
+    }, [activeRouteCoordinates]);
 
     // Check background location permission on mount
     useEffect(() => {
@@ -308,40 +185,6 @@ export default function Record() {
             }
         })();
     }, [backgroundPermissionWarningShown]);
-
-    // State recovery effect - sync AsyncStorage with Zustand state
-    useEffect(() => {
-        (async () => {
-            try {
-                const asyncIsRecording = await getAsyncFlag('isRecording');
-                const asyncIsPaused = await getAsyncFlag('isPaused');
-
-                // If AsyncStorage says we're recording but Zustand state doesn't match, sync them
-                if (asyncIsRecording !== isRecording || asyncIsPaused !== isPaused) {
-                    console.log('State mismatch detected, syncing...');
-                    setRecording(asyncIsRecording);
-
-                    if (asyncIsRecording && !isRecording) {
-                        const isLocationRunning = await Location.hasStartedLocationUpdatesAsync('location-recording');
-                        if (!isLocationRunning && !asyncIsPaused) {
-                            console.log('Location updates not running, attempting to resume tracking');
-                            await Location.startLocationUpdatesAsync('location-recording', {
-                                accuracy: Location.Accuracy.BestForNavigation,
-                                timeInterval: 2000,
-                                distanceInterval: 2,
-                                foregroundService: {
-                                    notificationTitle: 'Recording Delivery',
-                                    notificationBody: 'Devia is recording your delivery trip',
-                                },
-                            });
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error during state recovery:', error);
-            }
-        })();
-    }, []);
 
     const formatDuration = (seconds: number) => {
         const hrs = Math.floor(seconds / 3600);
@@ -399,10 +242,15 @@ export default function Record() {
     // The trip was already confirmed on Route Preview ("Start Trip"), so begin
     // recording automatically on entry — no need for a second Start button.
     useEffect(() => {
-        if (!isRecording && !autoStartedRef.current) {
+        let mounted = true;
+        if (!autoStartedRef.current) {
             autoStartedRef.current = true;
-            handleStart();
+            void recoverRecordingSession().then(() => {
+                const state = useRideStore.getState();
+                if (mounted && !state.isRecording && state.startTime === null) void handleStart();
+            }).catch(error => console.warn('Unable to recover recording session:', error));
         }
+        return () => { mounted = false; };
     }, []);
 
     const finishRideProcess = async () => {
@@ -557,6 +405,7 @@ export default function Record() {
 
     return (
         <>
+            <Stack.Screen options={{ headerLeft: () => <HeaderBackButton onPress={requestBack} />, headerRight: () => null }} />
             <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
                 {/* Saving Ride UI */}
                 {isSaving && (

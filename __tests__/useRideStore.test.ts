@@ -1,3 +1,5 @@
+import React from 'react';
+import MapRender from '../components/map/MapRender';
 // Imports
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
@@ -5,6 +7,8 @@ import * as Location from "expo-location";
 import { saveRide } from "../lib/firebase-crud/rides";
 
 import {
+    recoverRecordingSession,
+    subscribeLiveRouteUpdates,
     calculateRemainingDistanceM,
     calculateSpeedFromMovement,
     formatNavigationInstruction,
@@ -53,6 +57,14 @@ jest.mock(
         )
 );
 
+jest.mock('../lib/utils/mapbox', () => ({ configureMapboxAccessToken: jest.fn() }));
+jest.mock('../components/map/polygon', () => ({ Polygon: 'Polygon' }));
+jest.mock('@rnmapbox/maps', () => ({
+    __esModule: true,
+    default: { MapView: 'MapView', VectorSource: 'VectorSource', LineLayer: 'LineLayer', ShapeSource: 'ShapeSource', Camera: 'Camera', PointAnnotation: 'PointAnnotation' },
+}));
+jest.mock('react-native-paper', () => ({ FAB: 'FAB', Icon: 'Icon', useTheme: () => ({ colors: {} }) }));
+
 // useRideStore testing
 describe("useRideStore", () => {
     beforeEach(() => {
@@ -94,6 +106,108 @@ describe("useRideStore", () => {
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
         (Location.stopLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
         (Location.startLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    test('an active trip remains authoritative over old inactive storage flags', async () => {
+        useRideStore.setState({ isRecording: true, isPaused: false, startTime: 123 });
+        (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce('false').mockResolvedValueOnce('false');
+        await recoverRecordingSession();
+        expect(useRideStore.getState().isRecording).toBe(true);
+        expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+        (AsyncStorage.getItem as jest.Mock).mockReset();
+    });
+
+    test('delayed saved flags cannot deactivate a newly started trip', async () => {
+        let resolve!: (value: string | null) => void;
+        (AsyncStorage.getItem as jest.Mock).mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+        const recovery = recoverRecordingSession();
+        useRideStore.setState({ isRecording: true, startTime: 123 });
+        resolve('false');
+        await recovery;
+        expect(useRideStore.getState().isRecording).toBe(true);
+        expect(useRideStore.getState().startTime).toBe(123);
+    });
+
+    test('delayed saved active flag cannot reactivate a cancelled trip', async () => {
+        let resolve!: (value: string | null) => void;
+        (AsyncStorage.getItem as jest.Mock).mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+        const recovery = recoverRecordingSession();
+        await useRideStore.getState().resetRide();
+        resolve('true');
+        await recovery;
+        expect(useRideStore.getState().isRecording).toBe(false);
+    });
+
+    test('cold recovery preserves the persisted paused state', async () => {
+        (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce('true').mockResolvedValueOnce('true');
+        await recoverRecordingSession();
+        expect(useRideStore.getState().isRecording).toBe(true);
+        expect(useRideStore.getState().isPaused).toBe(true);
+        expect(Location.startLocationUpdatesAsync).not.toHaveBeenCalled();
+    });
+
+    test('three raw off-route fixes supersede traffic and update map without a refresh; stale traffic is ignored', async () => {
+        const { create, act } = require('react-test-renderer');
+        const original: [number, number][] = [[121, 14], [121.01, 14]];
+        const destination: [number, number] = [121.01, 14];
+        useRideStore.setState({ isRecording: true, startTime: 123, activeRouteCoordinates: original,
+            activeRouteDestination: destination, activeRouteUpdatedAt: Date.now() - 200000 });
+        const resolvers: ((route: any) => void)[] = [];
+        const request = jest.fn(() => new Promise<any>(resolve => resolvers.push(resolve)));
+        const stop = subscribeLiveRouteUpdates(request);
+        const point = (lat: number, timestamp: number) => useRideStore.getState().addPoint({
+            coords: { latitude: lat, longitude: 121, altitude: 0, accuracy: 5, altitudeAccuracy: 0, heading: 0, speed: 5 }, timestamp,
+        });
+        point(14, 1000);
+        expect(request).toHaveBeenCalledTimes(1);
+        point(14.001, 2000);
+        point(14.002, 3000);
+        expect(request).toHaveBeenCalledTimes(1);
+        // Unrelated renders/store updates must not count as another GPS fix.
+        useRideStore.getState().increaseDuration();
+        expect(request).toHaveBeenCalledTimes(1);
+        point(14.003, 4000);
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(request).toHaveBeenLastCalledWith([121, 14.003], destination);
+        expect(useRideStore.getState().routeUpdateStatus).toBe('rerouting');
+        expect(useRideStore.getState().isRecording).toBe(true);
+        useRideStore.setState({ displayPoints: [] });
+        let tree: any;
+        act(() => { tree = create(React.createElement(MapRender)); });
+        const route = { coordinates: [[121, 14.003], destination], steps: [], congestionSegments: [], durationSec: 100, distanceM: 1000 };
+        await act(async () => { resolvers[1](route); });
+        expect(useRideStore.getState().activeRouteCoordinates).toEqual(route.coordinates);
+        const shape = tree.root.findAllByType('ShapeSource').find((node: any) => node.props.id === 'recordingUpcomingRouteSource');
+        expect(shape.props.shape.geometry.coordinates).toEqual(route.coordinates);
+        await act(async () => { resolvers[0]({ ...route, coordinates: original }); });
+        expect(useRideStore.getState().activeRouteCoordinates).toEqual(route.coordinates);
+        expect(useRideStore.getState().deviationEvents).toHaveLength(1);
+        expect(useRideStore.getState().isRecording).toBe(true);
+        expect(Location.stopLocationUpdatesAsync).not.toHaveBeenCalled();
+        act(() => tree.unmount());
+        stop();
+    });
+
+    test.each(['cancel', 'pause', 'route change', 'unmount'])('pending reroute cannot apply after %s', async action => {
+        useRideStore.setState({ isRecording: true, startTime: 123,
+            activeRouteCoordinates: [[121, 14], [121.01, 14]], activeRouteDestination: [121.01, 14], activeRouteUpdatedAt: Date.now() });
+        let resolve!: (route: any) => void;
+        const request = jest.fn(() => new Promise<any>(r => { resolve = r; }));
+        const stop = subscribeLiveRouteUpdates(request);
+        for (let i = 1; i <= 3; i++) useRideStore.getState().addPoint({
+            coords: { latitude: 14.001 + i * 0.001, longitude: 121, altitude: 0, accuracy: 5, altitudeAccuracy: 0, heading: 0, speed: 5 }, timestamp: i * 1000,
+        });
+        expect(request).toHaveBeenCalledTimes(1);
+        if (action === 'cancel') await useRideStore.getState().resetRide();
+        if (action === 'pause') await useRideStore.getState().pauseRide();
+        if (action === 'route change') useRideStore.setState({ activeRouteCoordinates: [[121, 15], [122, 15]] });
+        if (action === 'unmount') stop();
+        const expected = useRideStore.getState().activeRouteCoordinates;
+        resolve({ coordinates: [[121, 16], [122, 16]], steps: [], congestionSegments: [], durationSec: 100, distanceM: 1000 });
+        await Promise.resolve();
+        expect(useRideStore.getState().activeRouteCoordinates).toBe(expected);
+        expect(useRideStore.getState().deviationEvents).toHaveLength(0);
+        stop();
     });
 
     // #1 increaseDuration

@@ -1,15 +1,11 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
-import { useRideStore } from '@/lib/store/useRideStore';
 import { router, Stack } from 'expo-router';
-import { Alert } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
 import { fontSizes } from '@/lib/utils/responsive-sizing';
 
 export default function Layout() {
     const theme = useTheme();
-    const isRecording = useRideStore(state => state.isRecording);
-    const resetRide = useRideStore(state => state.resetRide);
 
     const headerStyle = {
         backgroundColor: theme.colors.surface,
@@ -39,31 +35,10 @@ export default function Layout() {
                 options={{
                     headerShown: true,
                     title: 'Trip Recording',
-                    headerLeft: () => (
-                        <HeaderBackButton
-                            onPress={() => {
-                                if (isRecording) {
-                                    Alert.alert(
-                                        'Cancel Trip?',
-                                        'All recorded trip data will be lost. Are you sure you want to cancel?',
-                                        [
-                                            { text: 'Continue Trip', style: 'cancel' },
-                                            {
-                                                text: 'Cancel Trip',
-                                                style: 'destructive',
-                                                onPress: async () => {
-                                                    await resetRide();
-                                                    router.back();
-                                                },
-                                            },
-                                        ]
-                                    );
-                                } else {
-                                    router.back();
-                                }
-                            }}
-                        />
-                    ),
+                    // Removal is guarded by the recording screen, covering the
+                    // header, system Back, gestures, and parent-stack actions.
+                    headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
+                    headerRight: () => null,
                 }}
             />
             <Stack.Screen name="new-trip" options={{ headerShown: false }} />

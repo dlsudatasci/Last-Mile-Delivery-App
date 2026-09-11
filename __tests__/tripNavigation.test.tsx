@@ -4,16 +4,33 @@ import { router } from 'expo-router';
 import { useTripReviews } from '../lib/store/useTripReviews';
 import { submitTripReview } from '../lib/firebase-crud/reviews';
 import TabLayout from '../app/main/(tabs)/_layout';
+import Record from '../app/main/(tabs)/record/index';
+import { useRecordingBackGuard } from '../lib/hooks/useTripNavigationGuard';
 import PostTripQuestionnaire from '../app/main/(tabs)/record/post-trip-questionnaire';
 
 const { create, act } = require('react-test-renderer');
 let mockPrevented = false;
-let mockRemove: () => void;
+let mockRemove: (event?: any) => void;
 let mockHardwareBack: () => boolean;
 let mockSegments = ['main', '(tabs)', 'record', 'index'];
 let mockParams = { rideId: 'ride-1', deviationCount: '0' };
-const mockRide = { isRecording: true, isPaused: true, activeRouteDestination: [121, 14], points: [1, 2], resetRide: jest.fn() };
-jest.mock('../lib/store/useRideStore', () => ({ useRideStore: { getState: () => mockRide } }));
+const mockRide = { startTime: null as number | null, activeRouteCoordinates: [], activeRouteSteps: [], duration: 0, totalDistance: 0, currentSpeed: 0, syncDurationFromClock: jest.fn(), increaseDuration: jest.fn(), isRecording: true, isPaused: true, activeRouteDestination: [121, 14], points: [1, 2], resetRide: jest.fn() };
+jest.mock('../lib/store/useRideStore', () => ({
+    useRideStore: Object.assign((selector?: any) => selector ? selector(mockRide) : mockRide, { getState: () => mockRide }),
+    recoverRecordingSession: jest.fn(async () => {}),
+    subscribeLiveRouteUpdates: jest.fn(() => jest.fn()),
+    calculateRemainingDistanceM: () => 0,
+    getNextNavigationInstruction: () => null,
+}));
+jest.mock('../components/camera/CameraView', () => 'CameraView');
+jest.mock('../components/common/SpinningWheel', () => 'SpinningWheel');
+jest.mock('../components/map/MapRender', () => 'MapRender');
+jest.mock('../lib/common/annotations', () => ({ predefinedAnnotations: [] }));
+jest.mock('expo-location', () => ({
+    requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+    requestBackgroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+}));
+const mockNavigation = { dispatch: jest.fn(), canGoBack: jest.fn(() => true) };
 jest.mock('../lib/firebase-crud/reviews', () => ({ submitTripReview: jest.fn() }));
 jest.mock('../lib/utils/responsive-sizing', () => ({ fontSizes: {}, sizes: {} }));
 jest.mock('../components/common/HeaderBackButton', () => 'HeaderBackButton');
@@ -26,11 +43,13 @@ jest.mock('expo-router', () => ({
     useLocalSearchParams: () => mockParams,
 }));
 jest.mock('@react-navigation/native', () => ({
+    useNavigation: () => mockNavigation,
     getFocusedRouteNameFromRoute: () => 'index',
     usePreventRemove: (prevented: boolean, callback: () => void) => { mockPrevented = prevented; mockRemove = callback; },
     useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]),
 }));
 jest.mock('react-native-paper', () => ({
+    Modal: 'Modal', Portal: 'Portal',
     Button: 'Button', SegmentedButtons: 'SegmentedButtons', Surface: 'Surface', Text: 'Text',
     ActivityIndicator: 'ActivityIndicator', Icon: 'Icon', IconButton: 'IconButton',
     useTheme: () => ({ colors: {} }),
@@ -40,6 +59,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     useTripReviews.setState({ reviews: {} });
     mockRide.isRecording = true;
+    mockNavigation.canGoBack.mockReturnValue(true);
     mockSegments = ['main', '(tabs)', 'record', 'index'];
     mockParams = { rideId: 'ride-1', deviationCount: '0' };
     mockRide.resetRide.mockImplementation(async () => { mockRide.isRecording = false; });
@@ -167,4 +187,49 @@ test('reviewed questionnaire allows ordinary Back without a new submission', () 
     act(() => button('Back').props.onPress());
     expect(router.back).toHaveBeenCalledTimes(1);
     expect(submitTripReview).not.toHaveBeenCalled();
+});
+
+function RecordingBackHarness() {
+    const back = useRecordingBackGuard();
+    return React.createElement('RecordingBack', { onPress: back });
+}
+test.each(['header', 'hardware', 'gesture'])('recording %s Back confirms before removal and preserves state when declined', async source => {
+    act(() => { tree = create(<RecordingBackHarness />); });
+    const action = { type: 'POP', payload: { count: 1 } };
+    const attempt = () => {
+        if (source === 'header') tree.root.findByType('RecordingBack').props.onPress();
+        if (source === 'hardware') expect(mockHardwareBack()).toBe(true);
+        if (source === 'gesture') mockRemove({ data: { action } });
+    };
+    act(attempt);
+    expect(lastAlert()[0]).toBe('Trip in Progress');
+    expect(mockRide.resetRide).not.toHaveBeenCalled();
+    expect(mockNavigation.dispatch).not.toHaveBeenCalled();
+    act(() => lastAlert()[2][0].onPress());
+    expect(mockRide.isRecording).toBe(true);
+    expect(mockRide.isPaused).toBe(true);
+    act(attempt);
+    await act(async () => lastAlert()[2][1].onPress());
+    expect(mockRide.resetRide).toHaveBeenCalledTimes(1);
+    expect(mockPrevented).toBe(false);
+    await act(async () => {});
+    expect(mockNavigation.dispatch).toHaveBeenCalledWith(source === 'gesture' ? action : { type: 'GO_BACK' });
+});
+test('inactive recording screen does not intercept system Back', () => {
+    mockRide.isRecording = false;
+    act(() => { tree = create(<RecordingBackHarness />); });
+    expect(mockHardwareBack()).toBe(false);
+    expect(mockPrevented).toBe(false);
+    expect(Alert.alert).not.toHaveBeenCalled();
+});
+test('Trip Recording renders no Reset control and its actual header opens cancellation', async () => {
+    // No timer is started in this paused trip fixture.
+    mockRide.points = [];
+    await act(async () => { tree = create(<Record />); });
+    const header = tree.root.findByType('StackScreen').props.options;
+    expect(header.headerRight()).toBeNull();
+    expect(tree.root.findAllByType('Button').some((b: any) => b.props.children === 'Reset')).toBe(false);
+    act(() => header.headerLeft().props.onPress());
+    expect(lastAlert()[0]).toBe('Trip in Progress');
+    mockRide.points = [1, 2];
 });
