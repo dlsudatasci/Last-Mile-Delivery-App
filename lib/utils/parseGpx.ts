@@ -64,8 +64,10 @@ export const parseGpx = async (gpxUrl: string): Promise<RideData> => {
             throw new Error('No track points found.');
         }
 
+        const trackPoints = Array.isArray(trackSegment) ? trackSegment : [trackSegment];
+
         // Extract coordinates with timestamps
-        const extractedCoordinates: CoordinateTime[] = trackSegment.map((pt: any) => ({
+        const extractedCoordinates: CoordinateTime[] = trackPoints.map((pt: any) => ({
             latitude: parseFloat(pt['@_lat']),
             longitude: parseFloat(pt['@_lon']),
             elevation: pt.ele ? parseFloat(pt.ele) : undefined,

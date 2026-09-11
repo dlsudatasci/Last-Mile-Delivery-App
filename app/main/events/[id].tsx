@@ -1,10 +1,11 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { events } from '@/lib/common/events';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
-import { Button, Icon, MD3Theme, Text, useTheme } from 'react-native-paper';
+import { Button, MD3Theme, Text, useTheme } from 'react-native-paper';
 
 export default function EventDetails() {
     const theme = useTheme();
@@ -33,11 +34,7 @@ export default function EventDetails() {
             <Stack.Screen
                 options={{
                     headerShown: true,
-                    headerLeft: () => (
-                        <TouchableOpacity onPress={() => router.back()}>
-                            <Icon source="chevron-left" size={sizes.size32} />
-                        </TouchableOpacity>
-                    ),
+                    headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
                 }}
             />
             <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>

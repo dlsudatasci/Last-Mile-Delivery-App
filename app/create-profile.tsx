@@ -2,9 +2,11 @@ import CustomSnackbar, { SnackbarType } from '@/components/common/Snackbar';
 import { SelectField } from '@/components/onboarding/FormFields';
 import { saveOnboardingProfile, signUpOrSignInWithPhone } from '@/lib/firebase-crud/auth';
 import { saveLocalAccount } from '@/lib/local-db/accounts';
+import { firestore } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useOnboarding } from '@/stores/useOnboarding';
 import { useUser } from '@/stores/useUser';
+import { doc, setDoc } from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
@@ -30,16 +32,18 @@ const CITIES = [
 ];
 const EXPERIENCE = ['Less than 6 months', '6 months–1 year', '1–3 years', '3–5 years', 'More than 5 years'];
 const AGE_RANGES = ['18–24', '25–34', '35–44', '45–54', '55+'];
+const PLATFORMS = ['Grab', 'Foodpanda', 'Lalamove', 'JoyRide', 'Borzo', 'Other'];
 
 export default function CreateProfile() {
+    const { riderCode, phone, acceptedPolicies, reset } = useOnboarding();
     const { setUser } = useUser();
-    const { phone, acceptedPolicies, setPendingStudyOffer } = useOnboarding();
 
     const [fullName, setFullName] = useState('');
     const [gender, setGender] = useState('');
     const [ageRange, setAgeRange] = useState('');
     const [city, setCity] = useState('');
     const [yearsExperience, setYearsExperience] = useState('');
+    const [deliveryPlatform, setDeliveryPlatform] = useState('');
 
     const [submitted, setSubmitted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -53,11 +57,11 @@ export default function CreateProfile() {
         setSnackbarVisible(true);
     };
 
-    const handleCreateAccount = async () => {
+    const handleRegister = async () => {
         if (isLoading) return;
         setSubmitted(true);
 
-        if (!fullName.trim() || !gender || !ageRange || !city || !yearsExperience) {
+        if (!fullName.trim() || !gender || !ageRange || !city || !yearsExperience || !deliveryPlatform) {
             showError('Please complete all fields to continue.');
             return;
         }
@@ -68,59 +72,70 @@ export default function CreateProfile() {
             return;
         }
 
+        if (!riderCode) {
+            router.replace('/rider-code');
+            return;
+        }
+
+        const trimmedName = fullName.trim();
+        const profile = {
+            fullName: trimmedName,
+            preferredName: trimmedName,
+            gender,
+            ageRange,
+            city,
+            yearsExperience,
+            deliveryPlatform,
+        };
+
         setIsLoading(true);
         try {
-            // Account is created here (no OTP/password — derived from the phone number).
             const { user } = await signUpOrSignInWithPhone(phone);
-            const trimmedName = fullName.trim();
 
-            // Always record the registered account in the local DB first, so every
-            // registration is stored for testing even if the remote save fails.
-            await saveLocalAccount({
-                phone,
-                fullName: trimmedName,
-                gender,
-                ageRange,
-                city,
-                yearsExperience,
-                acceptedPolicies,
-                createdAt: new Date().toISOString(),
-            });
-
-            // Best-effort remote save (Firestore).
             try {
                 await saveOnboardingProfile(user.uid, {
-                    fullName: trimmedName,
-                    gender,
-                    ageRange,
-                    city,
-                    yearsExperience,
+                    ...profile,
                     phone,
+                    riderCode,
                     acceptedPolicies,
                 });
             } catch (remoteError) {
-                console.warn('Remote profile save failed (kept locally):', remoteError);
+                console.warn('Remote profile save failed (kept locally after registration):', remoteError);
             }
+
+            const createdAt = new Date().toISOString();
+            await saveLocalAccount({
+                riderCode,
+                phone,
+                ...profile,
+                acceptedPolicies,
+                createdAt,
+            });
+
+            // Mark the rider code as claimed in Firestore
+            await setDoc(doc(firestore, 'riderCodes', riderCode), {
+                isClaimed: true,
+                claimedBy: user.uid,
+                phone: phone,
+                claimedAt: Date.now()
+            }, { merge: true });
 
             setUser({
                 id: user.uid,
                 username: trimmedName,
                 fullName: trimmedName,
-                avatarUrl: null,
-                email: user.email,
                 phone,
                 gender,
                 ageRange,
                 city,
                 yearsExperience,
-                createdAt: new Date(),
+                createdAt: new Date(createdAt),
             });
 
-            // Tell Home to show the Join Study offer once, then go home.
-            setPendingStudyOffer(true);
+            reset();
             router.replace('/main/(tabs)/home');
         } catch (error) {
-            showError(error instanceof Error ? error.message : 'Could not create your account. Please try again.');
+            showError(error instanceof Error ? error.message : 'Could not register. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -185,6 +200,14 @@ export default function CreateProfile() {
                         onSelect={setYearsExperience}
                         error={submitted && !yearsExperience}
                     />
+                    <SelectField
+                        label="Delivery Platform"
+                        value={deliveryPlatform}
+                        placeholder="Select your primary platform"
+                        options={PLATFORMS}
+                        onSelect={setDeliveryPlatform}
+                        error={submitted && !deliveryPlatform}
+                    />
 
                     <Button
                         mode="contained"
@@ -193,11 +216,11 @@ export default function CreateProfile() {
                         style={styles.button}
                         contentStyle={styles.buttonContent}
                         labelStyle={styles.buttonLabel}
-                        onPress={handleCreateAccount}
+                        onPress={handleRegister}
                         loading={isLoading}
                         disabled={isLoading}
                     >
-                        Create Account
+                        Register
                     </Button>
                 </ScrollView>
             </KeyboardAvoidingView>

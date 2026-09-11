@@ -8,18 +8,12 @@ export const STUDY_REQUIRED_SUBMISSIONS = 10;
 
 export type PaymentMethod = 'gcash' | 'maya' | 'gotyme';
 
-export interface StudySignupData {
-    riderName: string;
-    phoneNumber: string;
-    deliveryPlatform: string;
-    vehicleType: string;
+export interface StudyParticipation {
+    userId: string;
+    eventId: string;
     acceptedTerms: boolean;
     acceptedPrivacy: boolean;
-}
-
-export interface StudyParticipation extends StudySignupData {
-    userId: string;
-    email: string | null;
+    acceptedDataUsage?: boolean;
     status: 'joined' | 'removed';
     joinedAt: number;
     updatedAt: number;
@@ -64,34 +58,18 @@ export const getStudyParticipation = async (userId?: string): Promise<StudyParti
     return participantDoc.data() as StudyParticipation;
 };
 
-export const joinStudy = async (data: StudySignupData) => {
+export const joinStudy = async (data: { acceptedTerms: boolean; acceptedPrivacy: boolean; eventId?: string }) => {
     const user = getCurrentUser();
-    const phoneNumber = normalizePhone(data.phoneNumber);
 
-    if (!data.riderName.trim()) {
-        throw new Error('Rider name is required.');
-    }
-    if (!isValidPhilippineMobileNumber(phoneNumber)) {
-        throw new Error('Use a valid Philippine mobile number starting with 09.');
-    }
-    if (!data.deliveryPlatform.trim()) {
-        throw new Error('Delivery platform is required.');
-    }
-    if (!data.vehicleType.trim()) {
-        throw new Error('Vehicle type is required.');
-    }
     if (!data.acceptedTerms || !data.acceptedPrivacy) {
         throw new Error('Please accept the terms and privacy policy to join.');
     }
 
     const participant: StudyParticipation = {
-        ...data,
-        riderName: data.riderName.trim(),
-        phoneNumber,
-        deliveryPlatform: data.deliveryPlatform.trim(),
-        vehicleType: data.vehicleType.trim(),
         userId: user.uid,
-        email: user.email,
+        eventId: data.eventId || 'devia-route-study',
+        acceptedTerms: data.acceptedTerms,
+        acceptedPrivacy: data.acceptedPrivacy,
         status: 'joined',
         joinedAt: Date.now(),
         updatedAt: Date.now(),
@@ -118,19 +96,12 @@ export const enrollInStudy = async (consent: StudyConsentData) => {
         throw new Error('Please agree to all terms and conditions to enroll.');
     }
 
-    const profileSnap = await getDoc(doc(firestore, 'users', user.uid));
-    const profile = profileSnap.exists() ? (profileSnap.data() as { fullName?: string; username?: string; phone?: string }) : {};
-
-    const participant: StudyParticipation & { acceptedDataUsage: boolean } = {
-        riderName: profile.fullName || profile.username || '',
-        phoneNumber: profile.phone || '',
-        deliveryPlatform: '',
-        vehicleType: '',
+    const participant: StudyParticipation = {
+        userId: user.uid,
+        eventId: 'devia-route-study',
         acceptedTerms: consent.acceptedParticipationTerms,
         acceptedPrivacy: consent.acceptedPrivacyPolicy,
         acceptedDataUsage: consent.acceptedDataUsage,
-        userId: user.uid,
-        email: user.email,
         status: 'joined',
         joinedAt: Date.now(),
         updatedAt: Date.now(),
