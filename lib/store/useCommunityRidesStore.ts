@@ -56,8 +56,7 @@ export const useCommunityRidesStore = create<RidesState>((set, get) => ({
                 {
                     limit: PAGE_SIZE,
                     startAfter: refresh ? null : undefined,
-                },
-                true
+                }
             );
 
             set({
@@ -93,8 +92,7 @@ export const useCommunityRidesStore = create<RidesState>((set, get) => ({
                 {
                     limit: PAGE_SIZE,
                     startAfter: pagination.lastDocId,
-                },
-                true
+                }
             );
 
             set({
