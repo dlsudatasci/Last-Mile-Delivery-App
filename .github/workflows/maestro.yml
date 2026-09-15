@@ -47,5 +47,7 @@ jobs:
           force-avd-creation: true
           script: |
             adb devices
-            cd android
-            ./gradlew assembleDebug
+            echo "=== Android directory ==="
+            ls -la android
+            echo "=== Gradle files ==="
+            find android -maxdepth 2 -type f \( -name "gradlew*" -o -name "gradle-wrapper*" \) -print
