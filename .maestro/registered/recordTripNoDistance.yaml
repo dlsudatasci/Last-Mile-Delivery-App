@@ -1,0 +1,113 @@
+# Preconditions:
+# - User has been onboarded
+# Purpose:
+# - Test record screen and its functions.
+
+appId: com.samg.devia
+
+---
+# Login
+- launchApp
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 60000
+- assertVisible: "Track routes."
+- tapOn: "Get Started"
+
+# Rider Code Screen
+- assertVisible: "Enter your rider code"
+- tapOn: "000000"
+- inputText: "466 309" # (Test Account B)
+- tapOn: "Continue"
+
+# Enter Phone Number Screen
+- assertVisible: "Enter your phone number"
+- tapOn: "912 345 6789"
+- inputText: "912 345 6789"
+- tapOn: "Continue"
+
+# Home Screen
+- extendedWaitUntil:
+    visible: "DEVIA ROUTE STUDY"
+    timeout: 60000
+- assertVisible: "Join Study"
+- tapOn: 
+    id: "study-popup-close"
+- assertVisible: "Devia Route Study"
+- assertVisible: "Record"
+- tapOn: "Record"
+
+# Record Screen
+- assertVisible: "New Trip"
+- assertVisible: "Search places in Metro Manila"
+- tapOn: "Search places in Metro Manila"
+- inputText: "SM North EDSA"
+- extendedWaitUntil: # wait for the search result to appear
+    visible: "SM North EDSA Sky Dome"
+    timeout: 60000
+- tapOn: "SM North EDSA Sky Dome"
+- waitForAnimationToEnd
+- assertVisible: "Start Trip"
+- tapOn: "Start Trip"
+# Trip started
+- extendedWaitUntil: 
+    timeout: 30000
+    visible: "Pause"
+- assertVisible: "Pause"
+- tapOn: "Pause"
+# Try to change screen while trip is ongoing
+- assertVisible: "Home"
+- tapOn: "Home"
+- assertVisible: "Trip in Progress"
+- assertVisible: "Continue Trip"
+- assertVisible: "Cancel Trip"
+- tapOn: "Continue Trip"
+- assertVisible: "Resume"
+- tapOn: "Resume"
+- assertVisible: "Stop"
+- tapOn: "Stop"
+- assertVisible: "No distance recorded"
+- assertVisible: "CANCEL"
+- assertVisible: "FINISH ANYWAY"
+- tapOn: "FINISH ANYWAY"
+
+# Post Trip Questionnaire
+- extendedWaitUntil: # wait for the questionnaire to appear
+    visible: "Post-Trip Questionnaire"
+    timeout: 60000
+
+- assertVisible: "Q1: Did you arrive earlier, on time, or late?"
+- assertVisible: 
+    id: "arrival-early"
+- assertVisible: 
+    id: "arrival-on-time"
+- assertVisible: 
+    id: "arrival-late"
+- tapOn: 
+    id: "arrival-early"
+
+- assertVisible: "Q2: How accurate was the ETA? Choose 1 for not accurate and 5 for very accurate."
+- assertVisible: 
+    id: "eta-rating-1"
+- tapOn: 
+    id: "eta-rating-1"
+
+- scroll
+
+- assertVisible: "Q3: How stressful was the trip? Choose 1 for not stressful and 5 for very stressful."
+- assertVisible: 
+    id: "stress-rating-1"
+- tapOn: 
+    id: "stress-rating-1"
+
+- assertVisible: 
+    id: "post-trip-next"
+- tapOn: 
+    id: "post-trip-next"
+
+# Logout
+- assertVisible: "Profile"
+- tapOn: "Profile"
+- assertVisible: "Logout"
+- tapOn: "Logout"
+- tapOn: "LOGOUT"

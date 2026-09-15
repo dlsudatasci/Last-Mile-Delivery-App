@@ -1,0 +1,9 @@
+# Preconditions:
+# - User has not yet been onboarded (Test Account A)
+# Purpose:
+# - Test if app can launch successfully
+
+appId: com.samg.devia
+
+---
+- launchApp

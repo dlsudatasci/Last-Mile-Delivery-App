@@ -1,0 +1,66 @@
+# Preconditions:
+# - User has not yet been onboarded (Test Account A)
+# Purpose:
+# - Test if about yourself screen is displayed and needs to be filled before continuing
+
+appId: com.samg.devia
+
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 60000
+- assertVisible: "Track routes."
+- tapOn: "Get Started"
+
+# Rider Code Screen
+- assertVisible: "Enter your rider code"
+- tapOn: "000000"
+- inputText: "312378" # (Test Account A)
+- tapOn: "Continue"
+
+# Privacy Policy Screen
+- assertVisible: "Privacy Policy"
+- assertVisible: "Terms of Service"
+- assertVisible: "Research Data Usage"
+- assertVisible: "Study Participation Terms"
+# Pass to next screen
+- tapOn: "I have read and agree to the Privacy Policy, Terms of Service, research data usage, and study participation terms."
+- tapOn: "Continue"
+
+# Enter Phone Number Screen
+- assertVisible: "Enter your phone number"
+- tapOn: "912 345 6789"
+- inputText: "912 345 6780"
+- tapOn: "Continue"
+
+# About Yourself Screen
+- assertVisible: "Tell us about yourself"
+# Fail to continue
+- tapOn: "Register"
+- assertVisible: "Please complete all fields to continue."
+# Pass to next screen
+- tapOn: "What should we call you?"
+- inputText: "Tester"
+- tapOn: "Select gender"
+- waitForAnimationToEnd
+- assertVisible: "Gender"
+- tapOn: "Other"
+- tapOn: "Other"
+- tapOn: "Select your age range"
+- waitForAnimationToEnd
+- assertVisible: "Age Range"
+- tapOn: "55+"
+- tapOn: "Select your city / municipality"
+- waitForAnimationToEnd
+- assertVisible: "City / Municipality"
+- tapOn: "Caloocan"
+- tapOn: "Select experience"
+- waitForAnimationToEnd
+- assertVisible: "Years of Experience as a driver"
+- tapOn: "Less than 6 months"
+- tapOn: "Select your primary platform"
+- waitForAnimationToEnd
+- assertVisible: "Delivery Platform"
+- tapOn: "Grab"
+# Pressing Register will make a new account and log in the user, so we will not press it to avoid creating multiple accounts

@@ -1,0 +1,37 @@
+# Preconditions:
+# - User has not yet been onboarded (Test Account A)
+# Purpose:
+# - Test if app flow continues when an invalid phone number is entered
+
+appId: com.samg.devia
+
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 30000
+- assertVisible: "Track routes."
+- tapOn: "Get Started"
+
+# Rider Code Screen
+- assertVisible: "Enter your rider code"
+- tapOn: "000000"
+- inputText: "312378" # (Test Account A)
+- tapOn: "Continue"
+
+# Privacy Policy Screen
+- assertVisible: "Privacy Policy"
+- assertVisible: "Terms of Service"
+- assertVisible: "Research Data Usage"
+- assertVisible: "Study Participation Terms"
+# Pass to next screen
+- tapOn: "I have read and agree to the Privacy Policy, Terms of Service, research data usage, and study participation terms."
+- tapOn: "Continue"
+
+# Enter Phone Number Screen
+- assertVisible: "Enter your phone number"
+- tapOn: "912 345 6789"
+# Fail to continue
+- inputText: "111 111 1111"
+- tapOn: "Continue"
+- assertVisible: "Enter a valid Philippine mobile number (e.g. 912 345 6789)."

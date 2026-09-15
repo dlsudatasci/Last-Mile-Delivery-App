@@ -1,0 +1,58 @@
+# Preconditions:
+# - User has been onboarded
+# - User has been logged out
+# Purpose:
+# - Test home screen layout and navigation to other screens
+
+appId: com.samg.devia
+
+---
+# Login
+- launchApp
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 60000
+- assertVisible: "Track routes."
+- tapOn: "Get Started"
+
+# Rider Code Screen
+- assertVisible: "Enter your rider code"
+- tapOn: "000000"
+- inputText: "466 309" # (Test Account B)
+- tapOn: "Continue"
+
+# Enter Phone Number Screen
+- assertVisible: "Enter your phone number"
+- tapOn: "912 345 6789"
+- inputText: "912 345 6789"
+- tapOn: "Continue"
+
+# Home Screen
+- extendedWaitUntil:
+    visible: "DEVIA ROUTE STUDY"
+    timeout: 60000
+- assertVisible: "Join Study"
+- tapOn: 
+    id: "study-popup-close"
+
+# Check Home navigation to different screens
+- assertVisible: "Devia Route Study"
+- assertVisible: "Home"
+- assertVisible: "Studies"
+- assertVisible: "Record"
+- assertVisible: "Trips"
+- assertVisible: "Profile"
+- tapOn: "Studies"
+- tapOn: "Record"
+- tapOn: "Trips"
+- tapOn: "Profile"
+- tapOn: "Home"
+- tapOn: 
+    id: "study-popup-close"
+
+# Logout
+- assertVisible: "Profile"
+- tapOn: "Profile"
+- assertVisible: "Logout"
+- tapOn: "Logout"
+- tapOn: "LOGOUT"

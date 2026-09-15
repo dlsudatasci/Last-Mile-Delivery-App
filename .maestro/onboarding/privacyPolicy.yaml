@@ -1,0 +1,36 @@
+# Preconditions:
+# - User has not yet been onboarded (Test Account A)
+# Purpose:
+# - Test if privacy policy is displayed and needs to be accepted before continuing
+
+appId: com.samg.devia
+
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 30000
+- assertVisible: "Track routes."
+- tapOn: "Get Started"
+
+# Rider Code Screen
+- assertVisible: "Enter your rider code"
+- tapOn: "000000"
+- inputText: "312378" # (Test Account A)
+- tapOn: "Continue"
+
+# Privacy Policy Screen
+- assertVisible: "Privacy Policy"
+- tapOn: "Privacy Policy"
+- tapOn: "I Understand"
+- tapOn: "Terms of Service"
+- tapOn: "I Understand"
+- tapOn: "Research Data Usage"
+- tapOn: "I Understand"
+- tapOn: "Study Participation Terms"
+- tapOn: "I Understand"
+# Fail to continue
+- tapOn: "Continue"
+# Pass to next screen
+- tapOn: "I have read and agree to the Privacy Policy, Terms of Service, research data usage, and study participation terms."
+- tapOn: "Continue"

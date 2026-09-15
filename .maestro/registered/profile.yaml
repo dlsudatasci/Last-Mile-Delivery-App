@@ -1,0 +1,101 @@
+# Preconditions:
+# - User has been onboarded
+# - User has been logged out
+# Purpose:
+# - Test profile screen and its functions.
+
+appId: com.samg.devia
+
+---
+# Login
+- launchApp
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 60000
+- assertVisible: "Track routes."
+- tapOn: "Get Started"
+
+# Rider Code Screen
+- assertVisible: "Enter your rider code"
+- tapOn: "000000"
+- inputText: "466 309" # (Test Account B)
+- tapOn: "Continue"
+
+# Enter Phone Number Screen
+- assertVisible: "Enter your phone number"
+- tapOn: "912 345 6789"
+- inputText: "912 345 6789"
+- tapOn: "Continue"
+
+# Home Screen
+- extendedWaitUntil:
+    visible: "DEVIA ROUTE STUDY"
+    timeout: 60000
+- assertVisible: "Join Study"
+- tapOn: 
+    id: "study-popup-close"
+- assertVisible: "Devia Route Study"
+- assertVisible: "Profile"
+- tapOn: "Profile"
+
+# Profile Screen
+- assertVisible: "Tester"
+- assertVisible: "Edit Profile"
+- assertVisible: "Help & Support"
+- assertVisible: "Logout"
+
+# Edit Profile Screen - Test - Edit Name and Save Changes
+- tapOn: "Edit Profile"
+- assertVisible: "Edit Your Details"
+- tapOn: "Tester"
+- eraseText
+- inputText: "Test User"
+- tapOn: "Save Changes"
+# Check
+- assertVisible: "Test User"
+- assertVisible: "09123456789"
+
+# Contact Support - Test - Support Ticket
+- tapOn: "Help & Support"
+- assertVisible: "Contact Support"
+- assertVisible: "Account Issues"
+- assertVisible: "App Problems"
+- assertVisible: "Delivery Tracking"
+- assertVisible: "Other"
+- tapOn: "Other"
+- tapOn: "Description"
+- inputText: "Testing"
+- tapOn: "Send"
+# Check
+- assertVisible: "Support request sent!"
+- tapOn: "Close"
+
+# Test - Logout and Login
+- tapOn: "Logout"
+- tapOn: "LOGOUT"
+- tapOn: "Get Started"
+- tapOn: "000000"
+- inputText: "466309"
+- tapOn: "Continue"
+- assertVisible: "Enter your phone number"
+- tapOn: "912 345 6789"
+- inputText: "912 345 6789"
+- tapOn: "Continue"
+- assertVisible: "Join Study"
+- tapOn: 
+    id: "study-popup-close"
+    
+# Check and Reset the username to Tester
+- tapOn: "Profile"
+- assertVisible: "Test User"
+- assertVisible: "09123456789"
+- tapOn: "Edit Profile"
+- tapOn: "Test User"
+- eraseText
+- inputText: "Tester"
+- tapOn: "Save Changes"
+
+# Logout
+- assertVisible: "Logout"
+- tapOn: "Logout"
+- tapOn: "LOGOUT"

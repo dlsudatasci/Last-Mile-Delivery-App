@@ -1,0 +1,23 @@
+# Preconditions:
+# - User has not yet been onboarded (Test Account A)
+# Purpose:
+# - Test if app flow continues when an invalid rider code is entered
+
+appId: com.samg.devia
+
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 30000
+- assertVisible: "Track routes."
+- tapOn: "Get Started"
+
+# Rider Code Screen
+- assertVisible: "Enter your rider code"
+# Fail to continue
+- tapOn: "Continue"
+- tapOn: "000000"
+- inputText: "123456"
+- tapOn: "Continue"
+- assertVisible: "This code is claimed but missing user data."
