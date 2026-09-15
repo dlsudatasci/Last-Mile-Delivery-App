@@ -4,17 +4,15 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 export interface UserProfile {
     id: string;
-    avatarUrl: string | null;
-    email: string | null;
-    username: string | null;
+    preferredName: string | null;
     createdAt: Date | null;
     // Onboarding profile fields
     phone?: string | null;
-    fullName?: string | null;
     gender?: string | null;
     ageRange?: string | null;
     city?: string | null;
     yearsExperience?: string | null;
+    isEnrolled?: boolean | null;
 }
 
 interface UserState {

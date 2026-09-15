@@ -1,6 +1,7 @@
 // Imports
 import {
     deleteRide,
+    getGeneratedRoutesByRideId,
     getLongestRide,
     getMonthlyDistanceAndCount,
     getRide,
@@ -10,9 +11,9 @@ import {
     getTotalDistanceAndCountAndAverageSpeedAndElevation,
     getTotalRideCount,
     getWeeklyRideCount,
+    isTransientFirestoreError,
     saveRide,
-    updateRideName,
-    updateVisibilitySettings,
+    updateRideName
 } from "../lib/firebase-crud/rides";
 
 import {
@@ -46,8 +47,7 @@ const baseRide = {
     averageSpeed: 25,
     maxSpeed: 40,
     elevationGain: 100,
-
-    isPublic: true,
+    deviationCount: 0,
 
     points: [
         {
@@ -63,6 +63,7 @@ const baseRide = {
 describe("getRides()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useFakeTimers();
 
         (collection as jest.Mock).mockReturnValue("rides");
 
@@ -71,6 +72,10 @@ describe("getRides()", () => {
         (orderBy as jest.Mock).mockReturnValue("orderBy");
 
         (limit as jest.Mock).mockReturnValue("limit");
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     test("returns paginated rides", async () => {
@@ -139,6 +144,27 @@ describe("getRides()", () => {
         expect(startAfter).toHaveBeenCalled();
     });
 
+    test("does not paginate when the startAfter document does not exist", async () => {
+        (doc as jest.Mock).mockReturnValue("lastDoc");
+
+        (getDoc as jest.Mock).mockResolvedValue({
+            exists: () => false,
+        });
+
+        (getDocs as jest.Mock).mockResolvedValue({
+            docs: [],
+        });
+
+        await getRides("user123", {
+            limit: 5,
+            startAfter: "missingRide",
+        });
+
+        expect(getDoc).toHaveBeenCalled();
+
+        expect(startAfter).not.toHaveBeenCalled();
+    });
+
     test("rethrows firestore errors", async () => {
         (getDocs as jest.Mock).mockRejectedValue(
             new Error("Firestore failed")
@@ -149,6 +175,23 @@ describe("getRides()", () => {
                 limit: 5,
             })
         ).rejects.toThrow("Firestore failed");
+    });
+
+    test("rethrows transient firestore errors after retrying", async () => {
+        (getDocs as jest.Mock).mockRejectedValue(
+            new Error("network unavailable")
+        );
+
+        const promise = getRides("user123", {
+            limit: 5,
+        });
+
+        const expectation = expect(promise).rejects.toThrow(
+            "network unavailable"
+        );
+
+        await jest.runAllTimersAsync();
+        await expectation;
     });
 });
 
@@ -192,7 +235,7 @@ describe("getRide()", () => {
                 "user123",
                 "ride123"
             )
-        ).rejects.toThrow("Ride not found");
+        ).rejects.toThrow("Trip not found");
     });
 
     test("rethrows firestore errors", async () => {
@@ -334,6 +377,112 @@ describe("getRideAnnotations()", () => {
     });
 });
 
+// getGeneratedRoutesByRideId() testing
+describe("getGeneratedRoutesByRideId()", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+
+        (collection as jest.Mock).mockReturnValue("generatedRoutes");
+        (where as jest.Mock).mockReturnValue("where");
+        (orderBy as jest.Mock).mockReturnValue("orderBy");
+    });
+
+    test("returns generated routes with converted route points", async () => {
+        (getDocs as jest.Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: "route1",
+                    data: () => ({
+                        routeId: "route1",
+                        rideId: "ride123",
+                        type: "Initial Route",
+                        routePoints: [
+                            { lng: 120.9842, lat: 14.5995 },
+                            { lng: 120.9850, lat: 14.6000 },
+                        ],
+                        sequence: 0,
+                        generatedAt: 123456,
+                        remainingTravelTimeOriginal: null,
+                        remainingTravelTimeNew: 300,
+                        remainingDistanceOriginal: null,
+                        remainingDistanceNew: 5000,
+                    }),
+                },
+            ],
+        });
+
+        const result = await getGeneratedRoutesByRideId("ride123");
+
+        expect(result).toEqual([
+            {
+                routeId: "route1",
+                rideId: "ride123",
+                type: "Initial Route",
+                routePoints: [
+                    [120.9842, 14.5995],
+                    [120.9850, 14.6],
+                ],
+                sequence: 0,
+                generatedAt: 123456,
+                remainingTravelTimeOriginal: null,
+                remainingTravelTimeNew: 300,
+                remainingDistanceOriginal: null,
+                remainingDistanceNew: 5000,
+            },
+        ]);
+    });
+
+    test("returns empty array when no generated routes exist", async () => {
+        (getDocs as jest.Mock).mockResolvedValue({
+            docs: [],
+        });
+
+        const result = await getGeneratedRoutesByRideId("ride123");
+        expect(result).toEqual([]);
+    });
+
+    test("uses default values for missing route fields", async () => {
+        (getDocs as jest.Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: "route1",
+                    data: () => ({
+                        rideId: "ride123",
+                        routePoints: [],
+                    }),
+                },
+            ],
+        });
+
+        const result = await getGeneratedRoutesByRideId("ride123");
+
+        expect(result).toEqual([
+            {
+                routeId: "route1",
+                rideId: "ride123",
+                type: "Initial Route",
+                routePoints: [],
+                sequence: 0,
+                generatedAt: 0,
+                remainingTravelTimeOriginal: null,
+                remainingTravelTimeNew: 0,
+                remainingDistanceOriginal: null,
+                remainingDistanceNew: 0,
+            },
+        ]);
+    });
+
+    test("rethrows firestore errors", async () => {
+        (getDocs as jest.Mock).mockRejectedValue(
+            new Error("Firestore failed")
+        );
+
+        await expect(
+            getGeneratedRoutesByRideId("ride123")
+        ).rejects.toThrow("Firestore failed");
+    });
+});
+
 // updateRideName() testing
 describe("updateRideName()", () => {
     beforeEach(() => {
@@ -368,41 +517,17 @@ describe("updateRideName()", () => {
 
 });
 
-// updatevisibilitySettings() testing
-describe("updateVisibilitySettings()", () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-    });
 
-    test("updates ride visibility", async () => {
-        (updateDoc as jest.Mock).mockResolvedValue(undefined);
-
-        await updateVisibilitySettings(
-            "ride123",
-            true
-        );
-
-        expect(updateDoc).toHaveBeenCalled();
-    });
-
-    test("rethrows firestore error", async () => {
-        (updateDoc as jest.Mock).mockRejectedValue(
-            new Error("Firestore failed")
-        );
-
-        await expect(
-            updateVisibilitySettings(
-                "ride123",
-                true
-            )
-        ).rejects.toThrow("Firestore failed");
-    });
-});
 
 // getTotalRideCount() testing
 describe("getTotalRideCount()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     test("returns total ride count", async () => {
@@ -415,6 +540,20 @@ describe("getTotalRideCount()", () => {
         const result = await getTotalRideCount("user123");
 
         expect(result).toBe(15);
+    });
+
+    test("falls back to cached rides when the server is unavailable", async () => {
+        (getCountFromServer as jest.Mock).mockRejectedValue(
+            new Error("network unavailable")
+        );
+
+        (getDocs as jest.Mock).mockResolvedValue({
+            size: 7,
+        });
+
+        const promise = getTotalRideCount("user123");
+        await jest.runAllTimersAsync();
+        await expect(promise).resolves.toBe(7);
     });
 
     test("rethrows firestore error", async () => {
@@ -432,6 +571,11 @@ describe("getTotalRideCount()", () => {
 describe("getWeeklyRideCount()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     test("returns weekly ride count", async () => {
@@ -444,6 +588,20 @@ describe("getWeeklyRideCount()", () => {
         const result = await getWeeklyRideCount("user123");
 
         expect(result).toBe(4);
+    });
+
+    test("falls back to cached rides when the server is unavailable", async () => {
+        (getCountFromServer as jest.Mock).mockRejectedValue(
+            new Error("network unavailable")
+        );
+
+        (getDocs as jest.Mock).mockResolvedValue({
+            size: 3,
+        });
+
+        const promise = getWeeklyRideCount("user123");
+        await jest.runAllTimersAsync();
+        await expect(promise).resolves.toBe(3);
     });
 
     test("rethrows firestore error", async () => {
@@ -461,6 +619,11 @@ describe("getWeeklyRideCount()", () => {
 describe("getMonthlyDistanceAndCount()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     test("returns monthly distance and count", async () => {
@@ -492,6 +655,36 @@ describe("getMonthlyDistanceAndCount()", () => {
         });
     });
 
+    test("falls back to cached rides when the server is unavailable", async () => {
+        (getAggregateFromServer as jest.Mock).mockRejectedValue(
+            new Error("network unavailable")
+        );
+
+        (getDocs as jest.Mock).mockResolvedValue({
+            size: 2,
+            docs: [
+                {
+                    data: () => ({
+                        distance: 100,
+                    }),
+                },
+                {
+                    data: () => ({
+                        distance: 250,
+                    }),
+                },
+            ],
+        });
+
+        const promise = getMonthlyDistanceAndCount("user123");
+        await jest.runAllTimersAsync();
+
+        await expect(promise).resolves.toEqual({
+            distance: 350,
+            count: 2,
+        });
+    });
+
     test("rethrows firestore error", async () => {
         (getAggregateFromServer as jest.Mock).mockRejectedValue(
             new Error("Firestore failed")
@@ -507,6 +700,11 @@ describe("getMonthlyDistanceAndCount()", () => {
 describe("getTotalDistanceAndCountAndAverageSpeedAndElevation()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     test("returns ride statistics", async () => {
@@ -543,6 +741,42 @@ describe("getTotalDistanceAndCountAndAverageSpeedAndElevation()", () => {
             count: 0,
             averageSpeed: 0,
             elevation: 0,
+        });
+    });
+
+    test("falls back to cached rides when the server is unavailable", async () => {
+        (getAggregateFromServer as jest.Mock).mockRejectedValue(
+            new Error("network unavailable")
+        );
+
+        (getDocs as jest.Mock).mockResolvedValue({
+            size: 2,
+            docs: [
+                {
+                    data: () => ({
+                        distance: 100,
+                        elevationGain: 20,
+                        averageSpeed: 20,
+                    }),
+                },
+                {
+                    data: () => ({
+                        distance: 300,
+                        elevationGain: 40,
+                        averageSpeed: 30,
+                    }),
+                },
+            ],
+        });
+
+        const promise =getTotalDistanceAndCountAndAverageSpeedAndElevation("user123");
+        await jest.runAllTimersAsync();
+
+        await expect(promise).resolves.toEqual({
+            distance: 400,
+            count: 2,
+            averageSpeed: 25,
+            elevation: 60,
         });
     });
 
@@ -750,42 +984,45 @@ describe("saveRide()", () => {
         expect(batch.commit).toHaveBeenCalled();
     });
 
-    test("stores GPX upload flag", async () => {
+
+
+    test("saves generated routes with flattened route points", async () => {
         await saveRide({
             ...baseRide,
-            isGPXUpload: true,
+            generatedRoutes: [
+                {
+                    routeId: "route1",
+                    rideId: "oldRideId",
+                    type: "Initial Route",
+                    routePoints: [
+                        [120.9842, 14.5995],
+                        [120.9850, 14.6000],
+                    ],
+                    sequence: 0,
+                    generatedAt: 123456,
+                    remainingTravelTimeOriginal: null,
+                    remainingTravelTimeNew: 300,
+                    remainingDistanceOriginal: null,
+                    remainingDistanceNew: 5000,
+                },
+            ],
         } as any);
 
         expect(batch.set).toHaveBeenCalledWith(
             expect.anything(),
             expect.objectContaining({
-                isGPXUpload: true,
-            })
-        );
-    });
-
-    test("stores fromWeb flag", async () => {
-        await saveRide({
-            ...baseRide,
-            fromWeb: true,
-        } as any);
-
-        expect(batch.set).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                fromWeb: true,
-            })
-        );
-    });
-
-    test("defaults GPX and fromWeb flags to false", async () => {
-        await saveRide(baseRide as any);
-
-        expect(batch.set).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                isGPXUpload: false,
-                fromWeb: false,
+                routeId: "route1",
+                rideId: "doc-0",
+                routePoints: [
+                    {
+                        lng: 120.9842,
+                        lat: 14.5995,
+                    },
+                    {
+                        lng: 120.985,
+                        lat: 14.6,
+                    },
+                ],
             })
         );
     });
@@ -916,5 +1153,63 @@ describe("deleteRide()", () => {
                 annotations: [],
             } as any)
         ).rejects.toThrow("Firestore failed");
+    });
+});
+
+// isTransientFirestoreError() testing
+describe("isTransientFirestoreError()", () => {
+    test("returns false for non-Error values", () => {
+        expect(isTransientFirestoreError(null)).toBe(false);
+        expect(isTransientFirestoreError("network unavailable")).toBe(false);
+    });
+
+    test("recognizes transient network errors", () => {
+        expect(
+            isTransientFirestoreError(new Error("Network request failed"))
+        ).toBe(true);
+
+        expect(
+            isTransientFirestoreError(new Error("Device is offline"))
+        ).toBe(true);
+
+        expect(
+            isTransientFirestoreError(new Error("Request deadline exceeded"))
+        ).toBe(true);
+    });
+
+    test("recognizes Firestore unavailable errors", () => {
+        expect(
+            isTransientFirestoreError(new Error("Firestore unavailable"))
+        ).toBe(true);
+
+        expect(
+            isTransientFirestoreError(
+                new Error("Failed to get document from Firestore")
+            )
+        ).toBe(true);
+    });
+
+    test("recognizes React Native Firebase malformed code errors", () => {
+        expect(
+            isTransientFirestoreError(
+                new Error("Cannot read property 'code' of undefined")
+            )
+        ).toBe(true);
+
+        expect(
+            isTransientFirestoreError(
+                new Error("Cannot read properties of undefined (reading 'code')")
+            )
+        ).toBe(true);
+    });
+
+    test("returns false for non-transient errors", () => {
+        expect(
+            isTransientFirestoreError(new Error("Permission denied"))
+        ).toBe(false);
+
+        expect(
+            isTransientFirestoreError(new Error("Invalid query"))
+        ).toBe(false);
     });
 });

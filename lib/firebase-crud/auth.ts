@@ -70,12 +70,14 @@ export async function signInWithPhone(phone: string) {
 }
 
 export interface OnboardingProfileData {
-    fullName: string;
+    preferredName: string;
     gender: string;
     ageRange: string;
     city: string;
     yearsExperience: string;
+    deliveryPlatform: string;
     phone: string;
+    riderCode: string;
     acceptedPolicies: boolean;
 }
 
@@ -87,13 +89,13 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
     await setDoc(
         userRef,
         {
-            // keep `username` populated so existing home/profile screens work
-            username: data.fullName,
-            fullName: data.fullName,
+            preferredName: data.preferredName,
+            riderCode: data.riderCode,
             gender: data.gender,
             ageRange: data.ageRange,
             city: data.city,
             yearsExperience: data.yearsExperience,
+            deliveryPlatform: data.deliveryPlatform,
             phone: data.phone,
             acceptedPolicies: data.acceptedPolicies,
             updatedAt: new Date().toISOString(),
@@ -104,46 +106,18 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
 
     return {
         success: true,
-        data: { id: uid, ...data, username: data.fullName },
+        data: { id: uid, ...data },
     };
 }
 
-export async function createUserProfile(uid: string, email: string, username: string, imageUri: string | null) {
+export async function createUserProfile(uid: string, preferredName: string) {
     try {
-        let avatarUrl = null;
-
-        // Upload image if provided
-        if (imageUri) {
-            // Create storage reference with user's UID
-            const storageRef = storage().ref(`profile-images/${uid}`);
-
-            // Fetch image and convert to blob
-            // const response = await fetch(imageUri);
-            // const blob = await response.blob();
-
-            // Upload blob to Firebase Storage
-            // await uploadBytes(storageRef, blob);
-
-            // Get download URL
-            // avatarUrl = await getDownloadURL(storageRef);
-            const task = storageRef.putFile(imageUri);
-
-            task.on('state_changed', snapshot => {
-                console.log('Upload is ' + snapshot.bytesTransferred);
-            });
-
-            await task;
-            avatarUrl = await storageRef.getDownloadURL();
-        }
-
         // Create/update user document
         const userRef = doc(firestore, 'users', uid);
         await setDoc(
             userRef,
             {
-                username,
-                avatarUrl,
-                email,
+                preferredName,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             },
@@ -154,9 +128,7 @@ export async function createUserProfile(uid: string, email: string, username: st
             success: true,
             data: {
                 id: uid,
-                username,
-                avatarUrl,
-                email,
+                preferredName,
             },
         };
     } catch (error) {
@@ -182,7 +154,11 @@ export async function getUserProfile(uid: string) {
             };
         }
     } catch (error) {
-        console.error('Error getting user profile:', error);
+        // Offline / transient Firestore failures are expected on flaky networks and
+        // are handled by callers (local-profile fallback in resolveAuthenticatedSession,
+        // and a guarded catch in edit-profile). Log as a warning instead of a red error
+        // so an expected offline state doesn't look like a crash.
+        console.warn('Getting user profile failed (will fall back if possible):', error);
         throw error;
     }
 }
@@ -199,10 +175,7 @@ function profileFromLocalAccount(user: FirebaseAuthTypes.User, local: Awaited<Re
 
     return {
         id: user.uid,
-        username: local.fullName,
-        fullName: local.fullName,
-        avatarUrl: null,
-        email: user.email,
+        preferredName: local.preferredName,
         phone: local.phone,
         gender: local.gender,
         ageRange: local.ageRange,
@@ -222,7 +195,7 @@ export async function resolveAuthenticatedSession(user: FirebaseAuthTypes.User):
 }> {
     try {
         const userDoc = await getUserProfile(user.uid);
-        if (userDoc.data?.username || userDoc.data?.fullName) {
+        if (userDoc.data?.preferredName) {
             return { destination: '/main/(tabs)/home', profile: userDoc.data ?? null };
         }
     } catch (error) {
@@ -230,7 +203,7 @@ export async function resolveAuthenticatedSession(user: FirebaseAuthTypes.User):
     }
 
     const persisted = useUser.getState().user;
-    if (persisted?.id === user.uid && (persisted.username || persisted.fullName)) {
+    if (persisted?.id === user.uid && persisted.preferredName) {
         return { destination: '/main/(tabs)/home', profile: persisted };
     }
 
@@ -247,40 +220,14 @@ export async function resolveAuthenticatedSession(user: FirebaseAuthTypes.User):
     return { destination: '/create-profile', profile: null };
 }
 
-export async function updateUserProfile(uid: string, username: string, imageUri: string | null) {
+export async function updateUserProfile(uid: string, preferredName: string) {
     try {
-        let avatarUrl = null;
-
-        // Upload image if provided
-        if (imageUri) {
-            // Create storage reference with user's UID
-            const storageRef = storage().ref(`profile-images/${uid}`);
-            // const storageRef = ref(storage, `profile-images/${uid}`);
-
-            // // Fetch image and convert to blob
-            // const response = await fetch(imageUri);
-            // const blob = await response.blob();
-
-            // // Upload blob to Firebase Storage
-            // await uploadBytes(storageRef, blob);
-            const task = storageRef.putFile(imageUri);
-
-            task.on('state_changed', snapshot => {
-                console.log('Upload is ' + snapshot.bytesTransferred);
-            });
-
-            await task;
-            // Get download URL
-            avatarUrl = await storageRef.getDownloadURL();
-        }
-
         // Update user document
         const userRef = doc(firestore, 'users', uid);
         await setDoc(
             userRef,
             {
-                username,
-                ...(imageUri ? { avatarUrl } : {}),
+                preferredName,
                 updatedAt: new Date().toISOString(),
             },
             { merge: true }
@@ -289,8 +236,7 @@ export async function updateUserProfile(uid: string, username: string, imageUri:
         return {
             success: true,
             data: {
-                username,
-                avatarUrl,
+                preferredName,
             },
         };
     } catch (error) {

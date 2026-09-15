@@ -49,7 +49,7 @@ export const predefinedAnnotations: PredefinedAnnotation[] = [
         name: 'Unsafe Road Access',
         shortDescription: 'Unsafe or limited access.',
         description:
-            'A section of road with limited space, poor access, or conditions that may force a deviation.',
+            'A section of road with limited space, poor access, or conditions that may force a route change.',
         icon: 'road',
         color: '#D32F2F', // Darker red
         type: 'segment',
