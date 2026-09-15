@@ -34,5 +34,4 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          profile: Pixel_6
           script: adb devices
