@@ -1,6 +1,9 @@
 name: Maestro E2E Tests
 
 on:
+  push:
+    branches:
+      - test/e2e
   workflow_dispatch:
 
 jobs:
