@@ -324,10 +324,7 @@ describe("parseGpx()", () => {
         expect(result.elevationGain).toBe(10);
     });
 
-    test("sets ride visibility to private", async () => {
-		const result = await parseFixture(sampleGpx);
-        expect(result.isPublic).toBe(false);
-    });
+
 
     test("creates an empty annotations array", async () => {
         const result = await parseFixture(sampleGpx);

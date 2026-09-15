@@ -10,7 +10,7 @@ export type PaymentMethod = 'gcash' | 'maya' | 'gotyme';
 
 export interface StudyParticipation {
     userId: string;
-    eventId: string;
+    studyId: string;
     acceptedTerms: boolean;
     acceptedPrivacy: boolean;
     acceptedDataUsage?: boolean;
@@ -58,7 +58,7 @@ export const getStudyParticipation = async (userId?: string): Promise<StudyParti
     return participantDoc.data() as StudyParticipation;
 };
 
-export const joinStudy = async (data: { acceptedTerms: boolean; acceptedPrivacy: boolean; eventId?: string }) => {
+export const joinStudy = async (data: { acceptedTerms: boolean; acceptedPrivacy: boolean; studyId?: string; eventId?: string }) => {
     const user = getCurrentUser();
 
     if (!data.acceptedTerms || !data.acceptedPrivacy) {
@@ -67,7 +67,7 @@ export const joinStudy = async (data: { acceptedTerms: boolean; acceptedPrivacy:
 
     const participant: StudyParticipation = {
         userId: user.uid,
-        eventId: data.eventId || 'devia-route-study',
+        studyId: data.studyId || data.eventId || 'devia-route-study',
         acceptedTerms: data.acceptedTerms,
         acceptedPrivacy: data.acceptedPrivacy,
         status: 'joined',
@@ -98,7 +98,7 @@ export const enrollInStudy = async (consent: StudyConsentData) => {
 
     const participant: StudyParticipation = {
         userId: user.uid,
-        eventId: 'devia-route-study',
+        studyId: 'devia-route-study',
         acceptedTerms: consent.acceptedParticipationTerms,
         acceptedPrivacy: consent.acceptedPrivacyPolicy,
         acceptedDataUsage: consent.acceptedDataUsage,

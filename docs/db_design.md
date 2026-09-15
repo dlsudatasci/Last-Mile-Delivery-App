@@ -22,28 +22,36 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 ---
 
 ## 2. Entity-Relationship Diagram (ERD) 
-Last changed: 30/07/2026
+Last changed: 15/09/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
 erDiagram
     users {
-        string userId PK "Firebase Auth UID"  
+        string userId PK "Document ID (Auth UID)"  
         string riderCode
         string preferredName  ""    
-        varchar phoneNum UK "varchar(10)"  
+        varchar phone UK "varchar(10)"  
         enum gender  "Male, Female, Prefer not to Say"  
         enum ageRange  "---"  
         enum city  "---"  
         enum yearsExperience  ""  
         string deliveryPlatform  "Grab, Foodpanda, Lalamove"    
         boolean acceptedPolicies  ""  
-        number createdAt  "Unix Timestamp ms" 
-        number updatedAt  "Unix Timestamp ms" 
+        string createdAt  "ISO 8601 string" 
+        string updatedAt  "ISO 8601 string" 
+    }
+
+    riderCodes {
+        string codeId PK "Document ID (6-digit code)"
+        boolean isClaimed
+        string claimedBy FK "Points to users document ID"
+        varchar phone
+        number claimedAt "Unix Timestamp ms"
     }
 
     rides {
-        string rideId PK "Auto-generated UUID (also stored as field)"
+        string id PK "Auto-generated UUID (also stored as field)"
         string userId FK "Points to users document ID"
         string rideName
         number startTime "Unix Timestamp ms"
@@ -96,8 +104,8 @@ erDiagram
         string routeId FK "Points to generatedRoutes document ID"
         string rideId FK "Points to rides document ID"
         string userId FK "Points to users document ID"
-        int index
-        number dateTime "Unix Timestamp ms"
+        boolean isFaster
+        string dateTime "ISO 8601 string"
         string gpsLocation
         string originalRouteEdge
         string deviatedEdge
@@ -109,35 +117,22 @@ erDiagram
         number createdAt "Unix Timestamp ms"
     }
 
-    studies {
-        string studyId PK "Auto-generated UUID (document ID)"
-        string studyName
-        string studyDescription
-        number studyDate "Unix Timestamp ms"
-        array studyMedia "Optional Storage URL list"
-        string studyLocation
-        string studyOrganizer
-        string studyOrganizerEmail
-        string studyOrganizerPhone
-        number createdAt "Unix Timestamp ms"
-    }
-
     studyParticipants {
         string userId PK "Firebase Auth UID (document ID)"
-        string eventId FK "Points to events document ID"
+        string studyId "Hardcoded static string"
         boolean acceptedTerms  ""  
         boolean acceptedPrivacy  ""  
         boolean acceptedDataUsage ""
-        enum status  "(In Progress, Finished, Removed)"  
+        enum status  "joined, removed"  
         number joinedAt "Unix Timestamp ms"
         number updatedAt "Unix Timestamp ms"
     }
 
     tickets {
-        String ticketId PK "Auto-generated UUID"
-        String userId FK
-        String subject
-        String description
+        string ticketId PK "Auto-generated UUID (document ID)"
+        string userId FK "Points to users document ID"
+        string subject
+        string description
         enum status "pending, resolved"
         number createdAt "Unix Timestamp ms"
     }
@@ -191,9 +186,9 @@ erDiagram
     }
 
     users ||--o{ rides : "records"
-    users ||--o{ studyParticipants : "enrolls as"
+    users ||--o| riderCodes : "claims"
+    users ||--o| studyParticipants : "enrolls as"
     users ||--o{ tickets : "creates"
-    studies ||--o{ studyParticipants : "rider joins via"
     rides ||--|| map_points : "stores GPS in"
     rides ||--o{ generatedRoutes : "generates routes during trip"
     generatedRoutes ||--o{ deviations : "contains deviation markers"
@@ -213,21 +208,21 @@ erDiagram
 * **Document ID:** Firebase Auth UID. The document ID acts as the primary key; a separate `id` field is **not** stored in the Firestore document itself.
 * **Purpose:** Stores profile details and onboarding survey information of the rider.
 
-Last changed: 29/07/2026
+Last changed: 15/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `userId` | String | Yes | Firebase Auth UID |
+| `userId` | String | (Doc ID) | Firebase Auth UID. Not stored as field. |
 | `riderCode` | String | Yes | Unique rider code assigned to the participant for the study |
 | `preferredName` | String | Yes | Rider's preferred display name shown within the application |
-| `phoneNum` | Varchar | Yes | Philippine mobile number, format: `09xxxxxxxxx` |
+| `phone` | Varchar | Yes | Philippine mobile number, format: `09xxxxxxxxx` |
 | `gender` | Enum | Yes | Gender identity selected during onboarding |
 | `ageRange` | Enum | Yes | Age range category (e.g., "18-24", "25-34") |
 | `city` | Enum |  Yes | Municipality/City where the rider primarily performs deliveries |
 | `yearsExperience` | Enum | Yes | Experience range (e.g., "<1 year", "1-2 years") |
 | `deliveryPlatform` | String | Yes | Primary delivery platform used (e.g., Grab, Foodpanda, Lalamove) |
 | `acceptedPolicies` | Boolean | Yes | Must be `true`; agreed to Terms of Service & Privacy Policy|
-| `createdAt` | Number | Yes | Unix timestamp (ms) when the user account was created |
-| `updatedAt` | Number | Yes | Unix timestamp (ms) when the profile was last updated |
+| `createdAt` | String | Yes | ISO 8601 string when the user account was created |
+| `updatedAt` | String | Yes | ISO 8601 string when the profile was last updated |
 ---
 
 ### 3.2. Collection: `rides`
@@ -235,10 +230,10 @@ Last changed: 29/07/2026
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores summary stats of a completed delivery trip.
 
-Last changed: 30/07/2026
+Last changed: 15/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `rideId` | String | Yes | Same as the document ID |
+| `id` | String | Yes | Same as the document ID |
 | `userId` | String | Yes | Foreign key — the Firebase Auth UID of the rider |
 | `rideName` | String | Yes | Name given to the trip |
 | `startTime` | Number | Yes | Unix timestamp (ms) when the ride started |
@@ -288,9 +283,9 @@ RidePoint Object
 
 ---
 
-### 3.4. Subcollection: `generatedRoutes` (Under `rides`)
-* **Path:** `/rides/{rideId}/generatedRoutes/{routeId}`
-* **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
+### 3.4. Collection: `generatedRoutes`
+* **Path:** `/generatedRoutes/{routeId}`
+* **Document ID:** Auto-generated UUID. The `routeId` field is also written into the document body.
 * **Purpose:** Stores each generated route during a trip. A new route is generated every time a rider deviates from the previous one — multiple generated routes are expected per trip (e.g., initial route → deviation → route 2 → deviation → route 3, and so on).
 
 Last changed: 22/07/2026
@@ -308,9 +303,9 @@ Last changed: 22/07/2026
 | `remainingDistanceNew` | Number | Yes | in meters |
 ---
 
-### 3.5. Sub-subcollection: `deviations` (Under `generatedRoutes`)
-* **Path:** `/rides/{rideId}/generatedRoutes/{routeId}/deviations/{deviationId}`
-* **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
+### 3.5. Collection: `deviations`
+* **Path:** `/deviations/{deviationId}`
+* **Document ID:** Auto-generated UUID. The `deviationId` field is also written into the document body.
 * **Purpose:** Stores each deviation marker the rider tagged during or after the trip, linked to the specific generated route that was active when the deviation occurred.
 
 Last changed: 30/07/2026
@@ -320,8 +315,8 @@ Last changed: 30/07/2026
 | `routeId` | String | Yes | Parent route document ID (foreign key referencing generatedRoutes.routeId) |
 | `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
 | `userId` | String | Yes | Foreign key referencing users.userId (Firebase Auth UID of the rider) |
-| `index` | Int | Yes | Sequential order of the deviation within the ride |
-| `dateTime` | Number | Yes | Unix timestamp (ms) when the deviation occurred |
+| `isFaster` | Boolean | Yes | Indicates if the deviation resulted in a faster route |
+| `dateTime` | String | Yes | ISO 8601 string indicating when the deviation occurred |
 | `gpsLocation` | String | Yes | GPS coordinate where the rider first deviated from the generated route |
 | `originalRouteEdge` | String | Yes | |
 | `deviatedEdge` | String | Yes | |
@@ -333,12 +328,12 @@ Last changed: 30/07/2026
 | `createdAt` | Number | Yes | Unix Timestamp ms |
 ---
 
-### 3.X. Sub-subcollection: `deviationResponses` (Under `deviations`)
-* **Path:** `/rides/{rideId}/generatedRoutes/{routeId}/deviations/{deviationId}/deviationResponses/{responseId}`
-* **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
+### 3.6. Collection: `deviationResponses`
+* **Path:** `/deviationResponses/{responseId}`
+* **Document ID:** Auto-generated UUID. The `responseId` field is also written into the document body.
 * **Purpose:** Stores the rider's questionnaire responses describing the reason and circumstances for a recorded route deviation.
 
-Last changed: 22/07/2026
+Last changed: 15/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `responseId` | String | Yes | Same as the document ID |
@@ -347,32 +342,29 @@ Last changed: 22/07/2026
 | `primaryReason` | Enum | Yes | Primary reason selected by the rider for deviating from the generated route |
 | `primaryReasonOther` | String | No | User-specified primary reason when "Other" is selected in primaryReason |
 | `trafficSeverity` | Enum | No | Reported traffic severity; applicable when the deviation is traffic-related |
-| `rushHourCause` | String | No | Optional explanation of why the rider believes rush hour contributed to the deviation |
-| `rushHour` | Enum | No | Whether the rider believes the traffic was caused by rush hour (Yes, No, Unsure) |
-| `chooseDuringNonRush` | String | No | Optional explanation of whether the rider would choose the same route during non-rush-hour conditions |
-| `wouldUseNonRushHour` | Enum | No | Whether the rider would use the same route during non-rush-hour conditions (Yes, No, Unsure) |
-| `blockageReason` | String | No | Optional explanation of the road blockage or hazard encountered |
-| `blockageType` | Enum | No | Type of road blockage or hazard (Flood, Accident, Road Closure, Illegal Parking, Others) |
+| `rushHourCause` | String | No | Explanation of why the rider believes rush hour contributed to the deviation |
+| `chooseDuringNonRush` | String | No | Explanation of whether the rider would choose the same route during non-rush-hour conditions |
+| `blockageReason` | String | No | Explanation of the road blockage or hazard encountered |
+| `blockageReasonOther` | String | No | User-specified explanation of the blockage when "Other" is selected |
 | `personalStopReason` | Array | No | One or more reasons for making a personal stop |
-| `personalStopType` | Enum | No | Primary type of personal stop (Break, Meal, Restroom, Refuel, Took a Call, Accident/Repair, Others) |
+| `personalStopOther` | String | No | User-specified reason for the personal stop when "Other" is selected |
 | `stopDuration` | Enum | No | Approximate duration of the personal stop |
 | `deviateAgain` | Enum | Yes | Likelihood of deviating again under similar circumstances (Always, Often, Sometimes, Rarely, Never) |
 | `avoidRoadFrequency` | Enum | Yes | Frequency with which the rider usually avoids the road |
 | `language` | String | Yes | Language version of the questionnaire completed by the rider (e.g., English or Tagalog) |
-| `otherDeviateReason` | String | No | Additional comments or secondary reasons from the rider explaining the deviation |
 | `submittedAt` | Number| Yes | Unix timestamp (ms) when the questionnaire was submitted |
 | `createdAt` | Number| Yes | Unix timestamp (ms) when the response record was created |
 ---
 
-### 3.X. Sub-subcollection: `postTripQuestionnaire_response` (Under `rides`)
-* **Path:** `/rides/{rideId}//postTripQuestionnaire_response/{rideId}`
-* **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
+### 3.7. Collection: `postTripQuestionnaire_response`
+* **Path:** `/postTripQuestionnaire_response/{rideId}`
+* **Document ID:** The parent `rideId` is used as the document ID.
 * **Purpose:** Stores the rider's responses to the post-trip questionnaire completed after finishing a ride.
 
-Last changed: 24/07/2026
+Last changed: 15/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `rideId` | String | Yes | Auto-generated UUID |
+| `rideId` | String | Yes | Foreign key referencing rides.rideId (also acts as document ID) |
 | `arrival` | String | Yes | Rider's perceived arrival status (Early, On Time, Late) |
 | `etaRating` | Number | Yes | Rider's rating of the estimated arrival time (ETA) |
 | `stressRating` | Number | Yes | Rider's self-reported stress level during the trip |
@@ -383,16 +375,17 @@ Last changed: 24/07/2026
 ### 3.6. Collection: `studyParticipants`
 * **Path:** `/studyParticipants/{userId}`
 * **Document ID:** Firebase Auth UID. A rider can only enroll in 1 study (document ID matches user ID).
-* **Purpose:** Tracks which riders have consented to and enrolled in the research study through a specific event.
+* **Purpose:** Tracks which riders have consented to and enrolled in the research study.
 
+Last changed: 15/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `userId` | String | Yes | Firebase Auth UID (document ID) |
-| `eventId` | String | Yes | Foreign key — the `events` document ID of the event the rider joined through |
+| `studyId` | String | Yes | Hardcoded static string (e.g., 'devia-route-study' or 'devia-route') |
 | `acceptedTerms` | Boolean | Yes |  |
 | `acceptedPrivacy` | Boolean | Yes |  |
 | `acceptedDataUsage` | Boolean | No |  |
-| `status` | String | Yes | `In Progress, Finished, Removed` |
+| `status` | String | Yes | Enum: `'joined'`, `'removed'` |
 | `joinedAt` | Number | Yes | Unix Timestamp ms |
 | `updatedAt` | Number | Yes | Unix Timestamp ms |
 
@@ -404,8 +397,10 @@ Last changed: 24/07/2026
 * **Purpose:** Stores helpdesk/support requests submitted by riders from the in-app support screen.
 * **Note:** The document ID is not saved as a field inside the document body.
 
+Last changed: 15/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
+| `ticketId` | String | (Doc ID) | Auto-generated UUID. Not stored as field. |
 | `userId` | String | Yes | Firebase Auth UID of the submitter |
 | `subject` | String | Yes | Brief summary of the support issue |
 | `description` | String | Yes | Full description of the problem |
@@ -471,7 +466,7 @@ Rules are defined in [firestore.rules](../firestore.rules) and follow the princi
 | `rides/{rideId}` | Owner only (`resource.data.userId == auth.uid`) | Create: authenticated + userId matches; Update/Delete: owner only |
 | `rides/{rideId}/generatedRoutes` | Owner only (via ride parent ownership check) | Owner only |
 | `rides/{rideId}/generatedRoutes/{routeId}/deviations` | Owner only (via ride parent ownership check) | Owner only |
-| `studyParticipants/{participantId}` | Owner only (`resource.data.userId == auth.uid`) | Authenticated users |
+| `studyParticipants/{userId}` | Owner only (`auth.uid == userId`) | Owner only (`auth.uid == userId`) |
 | `tickets/{ticketId}` | Owner only (`resource.data.userId == auth.uid`) | Authenticated users |
 | `adminNotifications/{id}` | **Nobody** (`allow read: if false`) | Authenticated users (app writes only) |
 | `events/{eventId}` | Any authenticated user | **Nobody** (`allow write: if false`) |

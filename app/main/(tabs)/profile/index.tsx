@@ -78,8 +78,8 @@ export default function Profile() {
         <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View style={styles.profileHeader}>
                 <View style={styles.profileInfo}>
-                    <Text style={styles.username} numberOfLines={1} adjustsFontSizeToFit>
-                        {user?.username}
+                    <Text style={styles.preferredName} numberOfLines={1} adjustsFontSizeToFit>
+                        {user?.preferredName}
                     </Text>
                     <Text style={styles.email}>{user?.phone}</Text>
                 </View>
@@ -256,7 +256,7 @@ const getStyles = (theme: MD3Theme) =>
             alignItems: 'center',
             marginTop: sizes.medium,
         },
-        username: {
+        preferredName: {
             fontSize: fontSizes.regular,
             fontFamily: 'LGEIHeadline-Bold',
             marginBottom: sizes.tiny,

@@ -328,7 +328,6 @@ describe("signInWithPhone()", () => {
 // saveOnboardingProfile() testing
 describe("saveOnboardingProfile()", () => {
     const profile = {
-        fullName: "Juan Dela Cruz",
         preferredName: "Juan Dela Cruz",
         gender: "Male",
         ageRange: "25-34",
@@ -355,20 +354,19 @@ describe("saveOnboardingProfile()", () => {
         expect(result.data).toEqual({
             id: "user123",
             ...profile,
-            username: profile.fullName,
+            preferredName: profile.preferredName,
         });
 
         expect(setDoc).toHaveBeenCalledTimes(1);
     });
 
-    test("stores username using the full name", async () => {
+    test("stores preferredName properly", async () => {
         await saveOnboardingProfile("user123", profile);
 
         expect(setDoc).toHaveBeenCalledWith(
             "user-doc",
             expect.objectContaining({
-                username: "Juan Dela Cruz",
-                fullName: "Juan Dela Cruz",
+                preferredName: "Juan Dela Cruz",
             }),
             { merge: true }
         );
@@ -408,7 +406,7 @@ describe("getUserProfile()", () => {
         (getDoc as jest.Mock).mockResolvedValue({
             exists: () => true,
             data: () => ({
-                username: "Juan",
+                preferredName: "Juan",
                 email: "juan@test.com",
             }),
         });
@@ -419,7 +417,7 @@ describe("getUserProfile()", () => {
             success: true,
             data: {
                 id: "user123",
-                username: "Juan",
+                preferredName: "Juan",
                 email: "juan@test.com",
             },
         });
@@ -481,7 +479,7 @@ describe("updateUserProfile()", () => {
         expect(setDoc).toHaveBeenCalledWith(
             "user-doc",
             expect.objectContaining({
-                username: "Juan Dela Cruz",
+                preferredName: "Juan Dela Cruz",
             }),
             { merge: true }
         );
@@ -489,7 +487,7 @@ describe("updateUserProfile()", () => {
         expect(result).toEqual({
             success: true,
             data: {
-                username: "Juan Dela Cruz",
+                preferredName: "Juan Dela Cruz",
             },
         });
     });
@@ -538,15 +536,14 @@ describe("resolveAuthenticatedSession()", () => {
         (getDoc as jest.Mock).mockResolvedValue({
             exists: () => true,
             data: () => ({
-                username: "Juan",
-                fullName: "Juan Dela Cruz",
+                preferredName: "Juan Dela Cruz",
             }),
         });
 
         const result = await resolveAuthenticatedSession(user as any);
 
         expect(result.destination).toBe("/main/(tabs)/home");
-        expect(result.profile?.username).toBe("Juan");
+        expect(result.profile?.preferredName).toBe("Juan");
     });
 
     test("uses the persisted profile when Firestore lookup fails", async () => {
@@ -557,7 +554,7 @@ describe("resolveAuthenticatedSession()", () => {
         (useUser.getState as jest.Mock).mockReturnValue({
             user: {
                 id: "user123",
-                username: "Persisted User",
+                preferredName: "Persisted User",
             },
             setUser: jest.fn(),
         });
@@ -565,7 +562,7 @@ describe("resolveAuthenticatedSession()", () => {
         const result = await resolveAuthenticatedSession(user as any);
 
         expect(result.destination).toBe("/main/(tabs)/home");
-        expect(result.profile?.username).toBe("Persisted User");
+        expect(result.profile?.preferredName).toBe("Persisted User");
     });
 
     test("restores a profile from local storage", async () => {
@@ -582,7 +579,7 @@ describe("resolveAuthenticatedSession()", () => {
 
         (getLocalAccount as jest.Mock).mockResolvedValue({
             phone: "09171234567",
-            fullName: "Juan Dela Cruz",
+            preferredName: "Juan Dela Cruz",
             gender: "Male",
             ageRange: "25-34",
             city: "Pasig",
@@ -596,7 +593,7 @@ describe("resolveAuthenticatedSession()", () => {
 
         expect(setUser).toHaveBeenCalled();
 
-        expect(result.profile?.fullName).toBe("Juan Dela Cruz");
+        expect(result.profile?.preferredName).toBe("Juan Dela Cruz");
     });
 
     test("routes to create-profile when no profile exists", async () => {
@@ -619,7 +616,7 @@ describe("resolveAuthenticatedSession()", () => {
         });
     });
 
-    test("falls back when Firestore profile has no username or fullName", async () => {
+    test("falls back when Firestore profile has no preferredName", async () => {
         (getDoc as jest.Mock).mockResolvedValue({
             exists: () => true,
             data: () => ({}),
@@ -670,7 +667,7 @@ describe("resolveAuthenticatedSession()", () => {
         (useUser.getState as jest.Mock).mockReturnValue({
             user: {
                 id: "user999",
-                username: "Wrong User",
+                preferredName: "Wrong User",
             },
             setUser,
         });
@@ -706,7 +703,7 @@ describe("createUserProfile()", () => {
         expect(setDoc).toHaveBeenCalledWith(
             "user-doc",
             expect.objectContaining({
-                username: "Juan",
+                preferredName: "Juan",
             }),
             { merge: true }
         );
@@ -715,7 +712,7 @@ describe("createUserProfile()", () => {
             success: true,
             data: {
                 id: "user123",
-                username: "Juan",
+                preferredName: "Juan",
             },
         });
     });

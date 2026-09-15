@@ -1159,7 +1159,7 @@ describe("useRideStore", () => {
                 points: expect.any(Array),
                 annotations: [],
                 rideName: "Metro Manila Trip",
-                isPublic: false,
+                deviationCount: 0,
             })
         );
     });

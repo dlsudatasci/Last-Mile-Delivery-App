@@ -300,6 +300,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 suggestedRouteDurationSec,
                 suggestedRouteDistanceM,
                 generatedRoutes,
+                deviationEvents,
             } = get();
             let pointsForSave = points;
             if (pointsForSave.length === 0) {
@@ -321,9 +322,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 rideName: tripName?.trim() || 'Metro Manila Trip',
                 annotations,
                 generatedRoutes,
-                isPublic: false,
-                isGPXUpload: false,
-                fromWeb: false,
+                deviationCount: deviationEvents.length,
             };
 
             const rideId = await saveRide(rideData);

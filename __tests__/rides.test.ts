@@ -13,8 +13,7 @@ import {
     getWeeklyRideCount,
     isTransientFirestoreError,
     saveRide,
-    updateRideName,
-    updateVisibilitySettings
+    updateRideName
 } from "../lib/firebase-crud/rides";
 
 import {
@@ -48,8 +47,7 @@ const baseRide = {
     averageSpeed: 25,
     maxSpeed: 40,
     elevationGain: 100,
-
-    isPublic: true,
+    deviationCount: 0,
 
     points: [
         {
@@ -165,26 +163,6 @@ describe("getRides()", () => {
         expect(getDoc).toHaveBeenCalled();
 
         expect(startAfter).not.toHaveBeenCalled();
-    });
-
-    test("fetches public rides when community mode is enabled", async () => {
-        (getDocs as jest.Mock).mockResolvedValue({
-            docs: [],
-        });
-
-        await getRides(
-            "user123",
-            {
-                limit: 10,
-            },
-            true
-        );
-
-        expect(where).toHaveBeenCalledWith(
-            "isPublic",
-            "==",
-            true
-        );
     });
 
     test("rethrows firestore errors", async () => {
@@ -539,36 +517,7 @@ describe("updateRideName()", () => {
 
 });
 
-// updatevisibilitySettings() testing
-describe("updateVisibilitySettings()", () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-    });
 
-    test("updates ride visibility", async () => {
-        (updateDoc as jest.Mock).mockResolvedValue(undefined);
-
-        await updateVisibilitySettings(
-            "ride123",
-            true
-        );
-
-        expect(updateDoc).toHaveBeenCalled();
-    });
-
-    test("rethrows firestore error", async () => {
-        (updateDoc as jest.Mock).mockRejectedValue(
-            new Error("Firestore failed")
-        );
-
-        await expect(
-            updateVisibilitySettings(
-                "ride123",
-                true
-            )
-        ).rejects.toThrow("Firestore failed");
-    });
-});
 
 // getTotalRideCount() testing
 describe("getTotalRideCount()", () => {
@@ -1035,45 +984,7 @@ describe("saveRide()", () => {
         expect(batch.commit).toHaveBeenCalled();
     });
 
-    test("stores GPX upload flag", async () => {
-        await saveRide({
-            ...baseRide,
-            isGPXUpload: true,
-        } as any);
 
-        expect(batch.set).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                isGPXUpload: true,
-            })
-        );
-    });
-
-    test("stores fromWeb flag", async () => {
-        await saveRide({
-            ...baseRide,
-            fromWeb: true,
-        } as any);
-
-        expect(batch.set).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                fromWeb: true,
-            })
-        );
-    });
-
-    test("defaults GPX and fromWeb flags to false", async () => {
-        await saveRide(baseRide as any);
-
-        expect(batch.set).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                isGPXUpload: false,
-                fromWeb: false,
-            })
-        );
-    });
 
     test("saves generated routes with flattened route points", async () => {
         await saveRide({

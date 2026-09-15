@@ -99,7 +99,7 @@ describe("getStudyParticipation()", () => {
 
     test("returns participant data when document exists", async () => {
         const participant = {
-            eventId: "devia-route-study",
+            studyId: "devia-route-study",
             acceptedTerms: true,
             acceptedPrivacy: true,
             status: "joined",
@@ -239,18 +239,18 @@ describe("joinStudy()", () => {
 
         expect(result).toMatchObject({
             userId: "user123",
-            eventId: "devia-route-study",
+            studyId: "devia-route-study",
             status: "joined",
         });
     });
 
-        test("uses the supplied eventId", async () => {
+        test("uses the supplied studyId", async () => {
         const result = await joinStudy({
             ...validData,
-            eventId: "custom-study",
+            studyId: "custom-study",
         });
 
-        expect(result.eventId).toBe("custom-study");
+        expect(result.studyId).toBe("custom-study");
 
         expect(setDoc).toHaveBeenCalledTimes(1);
     });
@@ -323,7 +323,7 @@ describe("enrollInStudy()", () => {
             acceptedDataUsage: true,
             acceptedPrivacy: true,
             acceptedTerms: true,
-            eventId: "devia-route-study",
+            studyId: "devia-route-study",
             status: "joined",
         });
     });

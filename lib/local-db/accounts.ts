@@ -15,7 +15,7 @@ const MIGRATION_KEY_PREFIX = 'devia-local-accounts-migrated';
 export interface LocalAccount {
     riderCode?: string;
     phone: string;
-    fullName: string;
+    preferredName: string;
     gender: string;
     ageRange: string;
     city: string;
@@ -46,12 +46,12 @@ async function migrateLegacyAccounts(): Promise<void> {
     for (const account of Object.values(accounts)) {
         await db.runAsync(
             `INSERT OR IGNORE INTO local_accounts
-                (phone, rider_code, full_name, gender, age_range, city, years_experience, accepted_policies, created_at)
+                (phone, rider_code, preferred_name, gender, age_range, city, years_experience, accepted_policies, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 account.phone,
                 account.riderCode ?? null,
-                account.fullName,
+                account.preferredName,
                 account.gender,
                 account.ageRange,
                 account.city,
@@ -69,12 +69,12 @@ export async function saveLocalAccount(account: LocalAccount): Promise<void> {
     const db = await getLocalDb();
     await db.runAsync(
         `INSERT OR REPLACE INTO local_accounts
-            (phone, rider_code, full_name, gender, age_range, city, years_experience, accepted_policies, created_at)
+            (phone, rider_code, preferred_name, gender, age_range, city, years_experience, accepted_policies, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             account.phone,
             account.riderCode ?? null,
-            account.fullName,
+            account.preferredName,
             account.gender,
             account.ageRange,
             account.city,
@@ -91,7 +91,7 @@ export async function getLocalAccount(phone: string): Promise<LocalAccount | nul
     const row = await db.getFirstAsync<{
         phone: string;
         rider_code: string | null;
-        full_name: string;
+        preferred_name: string;
         gender: string;
         age_range: string;
         city: string;
@@ -104,7 +104,7 @@ export async function getLocalAccount(phone: string): Promise<LocalAccount | nul
     return {
         phone: row.phone,
         riderCode: row.rider_code ?? undefined,
-        fullName: row.full_name,
+        preferredName: row.preferred_name,
         gender: row.gender,
         ageRange: row.age_range,
         city: row.city,

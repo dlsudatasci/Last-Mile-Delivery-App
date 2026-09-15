@@ -11,7 +11,7 @@ import { useUser } from '@/stores/useUser';
 export default function EditProfile() {
     const theme = useTheme();
     const { user, setUser } = useUser();
-    const [username, setUsername] = useState(user?.username || '');
+    const [preferredName, setPreferredName] = useState(user?.preferredName || '');
     const [isLoading, setIsLoading] = useState(false);
 
     const styles = getStyles(theme);
@@ -19,7 +19,7 @@ export default function EditProfile() {
     const handleSave = async () => {
         setIsLoading(true);
         try {
-            if (!username.trim()) {
+            if (!preferredName.trim()) {
                 Alert.alert('Missing name', 'Please enter your name.');
                 return;
             }
@@ -30,7 +30,7 @@ export default function EditProfile() {
                 throw new Error('User not found');
             }
 
-            await updateUserProfile(currentUser.uid, username.trim());
+            await updateUserProfile(currentUser.uid, preferredName.trim());
             const userProfile = await getUserProfile(currentUser.uid);
 
             if (userProfile.success && userProfile.data) {
@@ -66,8 +66,8 @@ export default function EditProfile() {
                 <TextInput
                     mode="outlined"
                     label="Full Name"
-                    value={username}
-                    onChangeText={setUsername}
+                    value={preferredName}
+                    onChangeText={setPreferredName}
                     style={{ marginTop: sizes.medium }}
                 />
                 <Button
@@ -117,7 +117,7 @@ const getStyles = (theme: MD3Theme) =>
             alignItems: 'center',
             marginTop: sizes.medium,
         },
-        username: {
+        preferredName: {
             fontSize: fontSizes.large,
             fontFamily: 'LGEIHeadline-Bold',
             marginBottom: sizes.tiny,

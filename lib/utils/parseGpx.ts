@@ -155,7 +155,7 @@ export const parseGpx = async (gpxUrl: string): Promise<RideData> => {
             averageSpeed,
             maxSpeed,
             elevationGain,
-            isPublic: false,
+            deviationCount: 0,
             annotations: [],
         };
     } catch (error) {

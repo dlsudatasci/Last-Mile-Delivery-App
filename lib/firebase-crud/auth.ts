@@ -70,7 +70,6 @@ export async function signInWithPhone(phone: string) {
 }
 
 export interface OnboardingProfileData {
-    fullName: string;
     preferredName: string;
     gender: string;
     ageRange: string;
@@ -90,9 +89,6 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
     await setDoc(
         userRef,
         {
-            // keep `username` populated so existing home/profile screens work
-            username: data.fullName,
-            fullName: data.fullName,
             preferredName: data.preferredName,
             riderCode: data.riderCode,
             gender: data.gender,
@@ -110,18 +106,18 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
 
     return {
         success: true,
-        data: { id: uid, ...data, username: data.fullName },
+        data: { id: uid, ...data },
     };
 }
 
-export async function createUserProfile(uid: string, username: string) {
+export async function createUserProfile(uid: string, preferredName: string) {
     try {
         // Create/update user document
         const userRef = doc(firestore, 'users', uid);
         await setDoc(
             userRef,
             {
-                username,
+                preferredName,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             },
@@ -132,7 +128,7 @@ export async function createUserProfile(uid: string, username: string) {
             success: true,
             data: {
                 id: uid,
-                username,
+                preferredName,
             },
         };
     } catch (error) {
@@ -179,8 +175,7 @@ function profileFromLocalAccount(user: FirebaseAuthTypes.User, local: Awaited<Re
 
     return {
         id: user.uid,
-        username: local.fullName,
-        fullName: local.fullName,
+        preferredName: local.preferredName,
         phone: local.phone,
         gender: local.gender,
         ageRange: local.ageRange,
@@ -200,7 +195,7 @@ export async function resolveAuthenticatedSession(user: FirebaseAuthTypes.User):
 }> {
     try {
         const userDoc = await getUserProfile(user.uid);
-        if (userDoc.data?.username || userDoc.data?.fullName) {
+        if (userDoc.data?.preferredName) {
             return { destination: '/main/(tabs)/home', profile: userDoc.data ?? null };
         }
     } catch (error) {
@@ -208,7 +203,7 @@ export async function resolveAuthenticatedSession(user: FirebaseAuthTypes.User):
     }
 
     const persisted = useUser.getState().user;
-    if (persisted?.id === user.uid && (persisted.username || persisted.fullName)) {
+    if (persisted?.id === user.uid && persisted.preferredName) {
         return { destination: '/main/(tabs)/home', profile: persisted };
     }
 
@@ -225,14 +220,14 @@ export async function resolveAuthenticatedSession(user: FirebaseAuthTypes.User):
     return { destination: '/create-profile', profile: null };
 }
 
-export async function updateUserProfile(uid: string, username: string) {
+export async function updateUserProfile(uid: string, preferredName: string) {
     try {
         // Update user document
         const userRef = doc(firestore, 'users', uid);
         await setDoc(
             userRef,
             {
-                username,
+                preferredName,
                 updatedAt: new Date().toISOString(),
             },
             { merge: true }
@@ -241,7 +236,7 @@ export async function updateUserProfile(uid: string, username: string) {
         return {
             success: true,
             data: {
-                username,
+                preferredName,
             },
         };
     } catch (error) {

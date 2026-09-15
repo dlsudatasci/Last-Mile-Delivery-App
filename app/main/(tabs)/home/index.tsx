@@ -104,7 +104,7 @@ export default function Home() {
     };
 
     // --- Derived display values ----------------------------------------------
-    const firstName = (user?.fullName || user?.username || 'there').split(' ')[0];
+    const firstName = (user?.preferredName || 'there').split(' ')[0];
     const stats = useMemo(() => {
         const weekStart = startOfWeekMs();
         const weeklyRides = rides.filter(ride => rideTimestamp(ride) >= weekStart);

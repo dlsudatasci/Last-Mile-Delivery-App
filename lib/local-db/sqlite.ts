@@ -66,7 +66,7 @@ function createFallbackDb(): LocalDb {
                 tables.local_accounts[phone] = {
                     phone,
                     rider_code: params[1] ?? null,
-                    full_name: params[2],
+                    preferred_name: params[2],
                     gender: params[3],
                     age_range: params[4],
                     city: params[5],
@@ -220,7 +220,7 @@ export async function initLocalDb() {
             CREATE TABLE IF NOT EXISTS local_accounts (
                 phone TEXT PRIMARY KEY NOT NULL,
                 rider_code TEXT,
-                full_name TEXT NOT NULL,
+                preferred_name TEXT NOT NULL,
                 gender TEXT NOT NULL,
                 age_range TEXT NOT NULL,
                 city TEXT NOT NULL,

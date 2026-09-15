@@ -38,7 +38,7 @@ export default function CreateProfile() {
     const { riderCode, phone, acceptedPolicies, reset } = useOnboarding();
     const { setUser } = useUser();
 
-    const [fullName, setFullName] = useState('');
+    const [preferredName, setPreferredName] = useState('');
     const [gender, setGender] = useState('');
     const [ageRange, setAgeRange] = useState('');
     const [city, setCity] = useState('');
@@ -61,7 +61,7 @@ export default function CreateProfile() {
         if (isLoading) return;
         setSubmitted(true);
 
-        if (!fullName.trim() || !gender || !ageRange || !city || !yearsExperience || !deliveryPlatform) {
+        if (!preferredName.trim() || !gender || !ageRange || !city || !yearsExperience || !deliveryPlatform) {
             showError('Please complete all fields to continue.');
             return;
         }
@@ -77,9 +77,8 @@ export default function CreateProfile() {
             return;
         }
 
-        const trimmedName = fullName.trim();
+        const trimmedName = preferredName.trim();
         const profile = {
-            fullName: trimmedName,
             preferredName: trimmedName,
             gender,
             ageRange,
@@ -122,8 +121,7 @@ export default function CreateProfile() {
 
             setUser({
                 id: user.uid,
-                username: trimmedName,
-                fullName: trimmedName,
+                preferredName: trimmedName,
                 phone,
                 gender,
                 ageRange,
@@ -157,14 +155,14 @@ export default function CreateProfile() {
                         <Text style={styles.fieldLabel}>Preferred Name</Text>
                         <TextInput
                             mode="outlined"
-                            value={fullName}
-                            onChangeText={setFullName}
+                            value={preferredName}
+                            onChangeText={setPreferredName}
                             placeholder="What should we call you?"
                             style={styles.input}
                             contentStyle={styles.inputText}
                             outlineStyle={{ borderRadius: sizes.small }}
                             activeOutlineColor={TEAL}
-                            error={submitted && !fullName.trim()}
+                            error={submitted && !preferredName.trim()}
                         />
                     </View>
 
