@@ -24,3 +24,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Start Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_6
+          script: adb devices
