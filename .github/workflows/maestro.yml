@@ -42,4 +42,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           force-avd-creation: true
-          script: adb devices
+            script: |
+              adb devices
+              cd android
+              ./gradlew assembleDebug
