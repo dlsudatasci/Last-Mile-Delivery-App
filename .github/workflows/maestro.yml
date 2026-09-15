@@ -59,3 +59,4 @@ jobs:
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell monkey -p com.samg.devia 1
             maestro test .maestro/onboarding/launch.yaml
+            maestro test .maestro/onboarding/invalidRiderCode.yaml
