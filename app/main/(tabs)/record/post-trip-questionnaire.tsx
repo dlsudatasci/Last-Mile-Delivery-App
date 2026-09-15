@@ -1,13 +1,13 @@
-import { showRequiredReviewNotice, useRequiredTripReview } from '@/lib/hooks/useRequiredTripReview';
 import HeaderBackButton from '@/components/common/HeaderBackButton';
-import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme, ActivityIndicator } from 'react-native-paper';
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { LANGUAGE_LABELS, QuestionnaireLanguage } from '@/lib/deviation-questionnaire';
-import { useTripReviews } from '@/lib/store/useTripReviews';
 import { submitTripReview } from '@/lib/firebase-crud/reviews';
+import { showRequiredReviewNotice, useRequiredTripReview } from '@/lib/hooks/useRequiredTripReview';
+import { useTripReviews } from '@/lib/store/useTripReviews';
+import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme } from 'react-native-paper';
 
 const arrivalOptions = ['Early', 'On time', 'Late'];
 const ratingOptions = [1, 2, 3, 4, 5];
@@ -114,6 +114,7 @@ export default function PostTripQuestionnaire() {
                         {arrivalOptions.map(option => (
                             <Button
                                 key={option}
+                                testID={`arrival-${option.toLowerCase().replace(' ', '-')}`}
                                 mode={arrival === option ? 'contained' : 'outlined'}
                                 onPress={() => setArrival(option)}
                                 style={styles.optionButton}
@@ -128,6 +129,7 @@ export default function PostTripQuestionnaire() {
                         {ratingOptions.map(value => (
                             <Button
                                 key={value}
+                                testID={`eta-rating-${value}`}
                                 mode={etaRating === value ? 'contained' : 'outlined'}
                                 onPress={() => setEtaRating(value)}
                                 style={styles.optionButton}
@@ -142,6 +144,7 @@ export default function PostTripQuestionnaire() {
                         {ratingOptions.map(value => (
                             <Button
                                 key={value}
+                                testID={`stress-rating-${value}`}
                                 mode={stressRating === value ? 'contained' : 'outlined'}
                                 onPress={() => setStressRating(value)}
                                 style={styles.optionButton}
@@ -156,6 +159,7 @@ export default function PostTripQuestionnaire() {
                             {postTripText.back[language]}
                         </Button>
                         <Button
+                            testID="post-trip-next"
                             mode="contained"
                             onPress={handleNext}
                             style={styles.navButton}

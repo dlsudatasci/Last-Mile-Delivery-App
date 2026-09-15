@@ -23,7 +23,7 @@ export default function StudyOverviewModal({ visible, onJoin, onClose, loading }
     return (
         <Portal>
             <Modal visible={visible} onDismiss={onClose} contentContainerStyle={styles.modal}>
-                <IconButton icon="close" size={sizes.medium} onPress={onClose} style={styles.close} />
+                <IconButton icon="close" size={sizes.medium} onPress={onClose} style={styles.close} testID={"study-popup-close"}/>
 
                 <View style={styles.illustration}>
                     <Icon source="motorbike" size={sizes.size64} color={TEAL} />
