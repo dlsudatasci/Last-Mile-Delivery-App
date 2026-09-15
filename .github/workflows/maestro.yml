@@ -47,4 +47,4 @@ jobs:
           force-avd-creation: true
           script: |
             adb devices
-            ./android/gradlew assembleDebug
+            cd android && ./gradlew assembleDebug
