@@ -152,7 +152,7 @@ erDiagram
         string personalStopOther
         enum stopDuration "optional enum"
         enum deviateAgain "Always, Often, Sometimes, Rarely, Never"
-        string avoidRoadFrequency "Always, Often, Sometimes, Rarely, Never, I don't usually pass here"
+        enum avoidRoadFrequency "Always, Often, Sometimes, Rarely, Never, I don't usually pass here"
         string language
         number submittedAt "Unix Timestamp ms"
         number createdAt "Unix Timestamp ms"
@@ -230,7 +230,7 @@ Last changed: 15/09/2026
 * **Document ID:** Auto-generated UUID. The `id` field is also written into the document body.
 * **Purpose:** Stores summary stats of a completed delivery trip.
 
-Last changed: 15/09/2026
+Last changed: 16/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `id` | String | Yes | Same as the document ID |
@@ -240,11 +240,11 @@ Last changed: 15/09/2026
 | `endTime` | Number | Yes | Unix timestamp (ms) when the ride ended |
 | `duration` | Int | Yes | Total ride time in seconds |
 | `distance` | Number | Yes | Total distance traveled in meters |
+| `suggestedRouteDistanceM` | Number | Yes | Suggested route distance in meters |
+| `suggestedRouteDurationSec` | Number | Yes | Suggested route duration in seconds |
 | `averageSpeed` | Number | Yes | Average speed in m/s |
 | `maxSpeed` | Number | Yes | Peak speed in m/s |
 | `elevationGain` | Number | Yes | Total elevation gain in meters |
-| `suggestedRouteDistanceM` | Number | Yes | Suggested route distance in meters |
-| `suggestedRouteDurationSec` | Number | Yes | Suggested route duration in seconds |
 | `deviationCount` | Int | Yes | Total number of deviations detected during the ride |
 | `createdAt` | Number | Yes | Unix timestamp (ms) of when the ride record was created |
 ---
@@ -409,40 +409,52 @@ Last changed: 15/09/2026
 
 ---
 
-### 3.9. Collection: `studies`
-* **Path:** `/studies/{studyId}`
-* **Document ID:** Auto-generated UUID (document ID).
-* **Purpose:** Community studies pushed by admins.
+### 3.9. Collection: `local_accounts`
+* **Path:** `...`
+* **Document ID:** User's phone number. The phone field acts as the primary key.
+* **Purpose:** Stores the local account and onboarding information of riders.
 
+Last changed: 16/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `studyId` | String | Yes | Auto-generated UUID |
-| `studyName` | String | Yes | Title of the study |
-| `studyDescription` | String | Yes | Full body text of the study |
-| `studyDate` | Number | Yes | Unix Timestamp ms |
-| `studyMedia` | Array (String) | No | Optional Storage URL list |
-| `studyLocation` | String | Yes | Venue or location description |
-| `studyOrganizer` | String | Yes | Name of organizing group or person |
-| `studyOrganizerEmail` | String | Yes | Organizer contact email |
-| `studyOrganizerPhone` | String | Yes | Organizer contact phone |
-| `createdAt` | Number | Yes | Unix Timestamp ms |
-
+| `phone` | String | Yes | Philippine mobile phone number used to identify the rider |
+| `rider_code` | String | Yes | Unique rider code assigned to the participant for the study |
+| `full_name` | String | Yes |  Rider's full display name shown within the application |
+| `gender` | String | Yes | Gender identity selected during onboarding |
+| `age_range` | String | Yes | Age range category (e.g., "18-24", "25-34") |
+| `city` | String | Yes | Municipality/City where the rider primarily performs deliveries |
+| `years_experience` | String | Yes | Experience range (e.g., "<1 year", "1-2 years") |
+| `accepted_policies` | Number | Yes | Must be `true`; agreed to Terms of Service & Privacy Policy |
+| `created_at` | String | Yes | ISO 8601 string when the user account was created |
 ---
 
-### 3.10. Collection: `adminNotifications`
-* **Path:** `/adminNotifications/{notificationId}`
-* **Document ID:** Fixed key `quota-{userId}` (for quota-reached alerts, to prevent duplicates).
-* **Purpose:** Internal notification feed for the research team. Created automatically by the app when a rider hits 10 rides. Only admins can read this collection (Firestore rules block all user reads).
+### 3.10. Collection: `rider_code_registrations`
+* **Path:** `...`
+* **Document ID:** Rider registration code. The code field acts as the primary key.
+* **Purpose:** Stores registered rider codes and associates each code with the corresponding local rider account.
 
+Last changed: 16/09/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
-| `type` | String | Yes | `'quota_reached_ready_for_cross_check'` |
-| `userId` | String | Yes | Firebase Auth UID of the triggering rider |
-| `email` | String/null | Yes | Rider email for admin reference |
-| `status` | String | Yes | Always `'unread'` on creation |
-| `recordedSubmissions` | Number | No | Ride count at trigger time (for quota alerts) |
-| `requiredSubmissions` | Number | No | Threshold value `10` (for quota alerts) |
-| `createdAt` | Timestamp | Yes | Firestore `serverTimestamp()` — NOT a Unix number |
+| `code` | String | Yes | Unique rider registration code |
+| `phone` | String | Yes | Phone number of the associated rider. References local_accounts.phone |
+| `registered_at` | String | Yes | ISO 8601 timestamp indicating when the rider code was registered |
+---
+
+### 3.11. Collection: `recent_destinations`
+* **Path:** `...`
+* **Document ID:** A generated destination identifier, unless your implementation uses the composite key directly.
+* **Purpose:** Stores destinations recently searched for or selected by a rider, including their geographic coordinates and address information.
+
+Last changed: 16/09/2026
+| Field Name | Data Type | Required | Description / Constraints |
+| :--- | :--- | :--- | :--- |
+| `user_id` | String | Yes | Identifier of the user who owns the recent destination record |
+| `name` | String | Yes | Name or label of the destination |
+| `longitude` | Number | Yes | Geographic longitude of the destination |
+| `latitude` | Number | Yes | Geographic latitude of the destination |
+| `full_address` | String | Yes | Complete formatted address of the destination |
+| `updated_at` | String | Yes | ISO 8601 timestamp indicating when the destination record was last updated |
 
 ---
 
