@@ -6,7 +6,6 @@
 appId: com.samg.devia
 
 ---
-- launchApp
 - extendedWaitUntil:
     visible: "Get Started"
     timeout: 60000
