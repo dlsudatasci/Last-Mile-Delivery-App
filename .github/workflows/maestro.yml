@@ -66,6 +66,7 @@ jobs:
             sleep 5
             cat /tmp/expo.log
             adb shell dumpsys activity activities | grep -E "mResumedActivity|mCurrentFocus"
+            adb logcat -d -t 500 | grep -iE "com.samg.devia|ReactNative|Expo|ReactHost|Metro|bundle|localhost|8081|error|exception"
             maestro test .maestro/onboarding/invalidRiderCode.yaml
 
       - name: Upload Maestro debug artifacts
