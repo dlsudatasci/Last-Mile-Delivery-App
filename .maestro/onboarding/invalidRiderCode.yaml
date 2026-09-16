@@ -6,6 +6,7 @@
 appId: com.samg.devia
 
 ---
+- tapOn: "Continue"
 - extendedWaitUntil:
     visible: "Get Started"
     timeout: 60000
