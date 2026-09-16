@@ -61,6 +61,7 @@ jobs:
             npx expo start --dev-client --host lan > /tmp/expo.log 2>&1 &
             sleep 10
             cat /tmp/expo.log
+            adb reverse tcp:8081 tcp:8081
             adb shell monkey -p com.samg.devia 1
             maestro test .maestro/onboarding/invalidRiderCode.yaml
 
