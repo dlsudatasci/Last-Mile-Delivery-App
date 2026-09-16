@@ -63,6 +63,7 @@ jobs:
             cat /tmp/expo.log
             adb reverse tcp:8081 tcp:8081
             adb shell am start -a android.intent.action.VIEW -d "com.samg.devia://expo-development-client/?url=http://127.0.0.1:8081"
+            adb shell dumpsys activity activities | grep -E "mResumedActivity|mCurrentFocus"
             maestro test .maestro/onboarding/invalidRiderCode.yaml
 
       - name: Upload Maestro debug artifacts
