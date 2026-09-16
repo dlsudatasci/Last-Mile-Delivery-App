@@ -7,6 +7,7 @@ import {
     getRideAnnotations,
     getRidePoints,
     getRides,
+    getTotalRideCount,
 } from "../lib/firebase-crud/rides";
 
 import { deleteAnnotation } from "../lib/firebase-crud/annotations";
@@ -25,6 +26,7 @@ jest.mock("../lib/firebase-crud/rides", () => ({
     getRide: jest.fn(),
     getRidePoints: jest.fn(),
     getRideAnnotations: jest.fn(),
+    getTotalRideCount: jest.fn(),
     deleteRide: jest.fn(),
 }));
 
@@ -37,6 +39,7 @@ const mockedGetRides = getRides as jest.Mock;
 const mockedGetRide = getRide as jest.Mock;
 const mockedGetRidePoints = getRidePoints as jest.Mock;
 const mockedGetRideAnnotations = getRideAnnotations as jest.Mock;
+const mockedGetTotalRideCount = getTotalRideCount as jest.Mock;
 const mockedDeleteRide = deleteRide as jest.Mock;
 const mockedDeleteAnnotation = deleteAnnotation as jest.Mock;
 
@@ -50,6 +53,7 @@ describe("useRidesStore", () => {
             rides: [],
             selectedRide: null,
             selectedRidePoints: null,
+            totalRideCount: 0,
 
             isLoading: false,
             isRefreshing: false,
@@ -62,6 +66,7 @@ describe("useRidesStore", () => {
                 hasMore: true,
             },
         });
+        mockedGetTotalRideCount.mockResolvedValue(0);
     });
 
     // #1 clearRides
@@ -277,17 +282,37 @@ describe("useRidesStore", () => {
                     annotations: [],
                 } as any,
             ],
+            totalRideCount: 5,
+        });
+
+        await useRidesStore.getState().removeRide(ride);
+        expect(mockedDeleteRide).toHaveBeenCalledWith(ride);
+        expect(useRidesStore.getState().rides).toHaveLength(1);
+        expect(useRidesStore.getState().rides[0].id).toBe("ride2");
+        expect(useRidesStore.getState().totalRideCount).toBe(4);
+    });
+
+    // #9
+    test("removeRide does not make totalRideCount negative", async () => {
+        mockedDeleteRide.mockResolvedValue(undefined);
+
+        const ride = {
+            id: "ride1",
+            rideName: "Morning Ride",
+            annotations: [],
+        } as any;
+
+        useRidesStore.setState({
+            rides: [ride],
+            totalRideCount: 0,
         });
 
         await useRidesStore.getState().removeRide(ride);
 
-        expect(mockedDeleteRide).toHaveBeenCalledWith(ride);
-
-        expect(useRidesStore.getState().rides).toHaveLength(1);
-        expect(useRidesStore.getState().rides[0].id).toBe("ride2");
+        expect(useRidesStore.getState().totalRideCount).toBe(0);
     });
 
-    // #9 fetchRide
+    // #10 fetchRide
     test("fetchRides loads rides into store", async () => {
         mockedGetRides.mockResolvedValue({
             items: [
@@ -319,7 +344,7 @@ describe("useRidesStore", () => {
         expect(useRidesStore.getState().error).toBeNull();
     });
 
-    // #10
+    // #11
     test("fetchRides refresh replaces existing rides", async () => {
         useRidesStore.setState({
             rides: [
@@ -354,7 +379,7 @@ describe("useRidesStore", () => {
         expect(useRidesStore.getState().rides[0].id).toBe("newRide");
     });
 
-    // #11
+    // #12
     test("fetchRides without refresh appends rides", async () => {
         useRidesStore.setState({
             rides: [
@@ -385,7 +410,7 @@ describe("useRidesStore", () => {
         expect(useRidesStore.getState().rides[1].id).toBe("ride2");
     });
 
-    // #12
+    // #13
     test("fetchRides stores error when fetch fails", async () => {
         mockedGetRides.mockRejectedValue(
             new Error("Firestore failed")
@@ -400,7 +425,7 @@ describe("useRidesStore", () => {
         expect(useRidesStore.getState().isRefreshing).toBe(false);
     });
 
-    // #13
+    // #14
     test("fetchRides sets error when user is not authenticated", async () => {
         const firebaseConfig = require("../lib/utils/firebaseConfig");
 
@@ -416,7 +441,7 @@ describe("useRidesStore", () => {
         };
     });
 
-    // #14
+    // #15
     test("fetchRides resets loading flags after success", async () => {
         mockedGetRides.mockResolvedValue({
             items: [],
@@ -430,7 +455,23 @@ describe("useRidesStore", () => {
         expect(useRidesStore.getState().isRefreshing).toBe(false);
     });
 
-    // #15 fetchMoreRides
+    // #16
+    test("fetchRides stores total ride count", async () => {
+        mockedGetRides.mockResolvedValue({
+            items: [],
+            lastDocId: null,
+            hasMore: false,
+        });
+
+        mockedGetTotalRideCount.mockResolvedValue(12);
+
+        await useRidesStore.getState().fetchRides();
+
+        expect(mockedGetTotalRideCount).toHaveBeenCalledWith("user123");
+        expect(useRidesStore.getState().totalRideCount).toBe(12);
+    });
+
+    // #17 fetchMoreRides
     test("fetchMoreRides appends next page of rides", async () => {
         useRidesStore.setState({
             rides: [
@@ -473,7 +514,7 @@ describe("useRidesStore", () => {
             .toBe("ride2");
     });
 
-    // #16 
+    // #18 
     test("fetchMoreRides does nothing when hasMore is false", async () => {
         useRidesStore.setState({
             pagination: {
@@ -487,7 +528,7 @@ describe("useRidesStore", () => {
         expect(mockedGetRides).not.toHaveBeenCalled();
     });
 
-    // #17
+    // #19
     test("fetchMoreRides does nothing while already fetching", async () => {
         useRidesStore.setState({
             isFetchingMore: true,
@@ -502,7 +543,7 @@ describe("useRidesStore", () => {
         expect(mockedGetRides).not.toHaveBeenCalled();
     });
 
-    // #18
+    // #20
     test("fetchMoreRides does nothing when lastDocId is null", async () => {
         useRidesStore.setState({
             pagination: {
@@ -516,7 +557,7 @@ describe("useRidesStore", () => {
         expect(mockedGetRides).not.toHaveBeenCalled();
     });
 
-    // #19
+    // #21
     test("fetchMoreRides stores error when user is not authenticated", async () => {
         const firebaseConfig = require("../lib/utils/firebaseConfig");
 
@@ -539,7 +580,7 @@ describe("useRidesStore", () => {
         };
     });
 
-    // #20
+    // #22
     test("fetchMoreRides stores error when Firestore throws", async () => {
         useRidesStore.setState({
             pagination: {
@@ -558,7 +599,7 @@ describe("useRidesStore", () => {
             .toBe("Firestore failed");
     });
 
-    // #21
+    // #23
     test("fetchMoreRides resets fetching flag after success", async () => {
         useRidesStore.setState({
             pagination: {
@@ -579,7 +620,7 @@ describe("useRidesStore", () => {
             .toBe(false);
     });
 
-    // #22
+    // #24
     test("fetchMoreRides resets fetching flag after error", async () => {
         useRidesStore.setState({
             pagination: {
@@ -598,7 +639,7 @@ describe("useRidesStore", () => {
             .toBe(false);
     });
 
-    // #23 selectRide
+    // #25 selectRide
     test("selectRide loads points and annotations for existing ride", async () => {
         const ride = {
             id: "ride1",
@@ -639,7 +680,7 @@ describe("useRidesStore", () => {
         expect(result?.annotations).toHaveLength(1);
     });
 
-    // #24
+    // #26
     test("selectRide fetches ride when not already in store", async () => {
         mockedGetRide.mockResolvedValue({
             id: "ride1",
@@ -661,7 +702,7 @@ describe("useRidesStore", () => {
         expect(ride?.id).toBe("ride1");
     });
 
-    // #25
+    // #27
     test("selectRide updates ride inside rides array", async () => {
         const ride = {
             id: "ride1",
@@ -698,17 +739,17 @@ describe("useRidesStore", () => {
             .toHaveLength(1);
     });
 
-    // #26
+    // #28
     test("selectRide stores error when ride is not found", async () => {
         mockedGetRide.mockResolvedValue(undefined);
 
         await useRidesStore.getState().selectRide("ride1");
 
         expect(useRidesStore.getState().error)
-            .toBe("Ride not found");
+            .toBe("Trip not found");
     });
 
-    // #27
+    // #29
     test("selectRide stores Firestore error", async () => {
         mockedGetRide.mockRejectedValue(
             new Error("Firestore failed")
@@ -720,7 +761,7 @@ describe("useRidesStore", () => {
             .toBe("Firestore failed");
     });
 
-    // #28
+    // #30
     test("selectRide stores error when user is not authenticated", async () => {
         const firebaseConfig = require("../lib/utils/firebaseConfig");
 
@@ -736,7 +777,7 @@ describe("useRidesStore", () => {
         };
     });
 
-    // #29
+    // #31
     test("selectRide resets loading flag after success", async () => {
         mockedGetRide.mockResolvedValue({
             id: "ride1",
@@ -753,7 +794,7 @@ describe("useRidesStore", () => {
             .toBe(false);
     });
 
-    // #30
+    // #32
     test("selectRide resets loading flag after failure", async () => {
         mockedGetRide.mockRejectedValue(
             new Error("Firestore failed")

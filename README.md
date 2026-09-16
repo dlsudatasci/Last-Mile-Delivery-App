@@ -180,7 +180,7 @@ For academic thesis specifications, logical schemas, and relational maps, consul
 ### Security & Access Control (`firestore.rules`)
 Client-side database access from the mobile app is strictly governed by `firestore.rules`:
 * **Riders (`users/{userId}`)**: Can only read/write their own user profile, recorded trips, annotations, and claims.
-* **Public Trips**: Rides marked `isPublic == true` can be read by all authenticated riders for community comparison.
+
 * **Admin Bypass**: The research dashboard connects from its own standalone repository using the **Firebase Admin SDK (Service Account)**, completely bypassing client rules to allow full administrative oversight.
 
 ---

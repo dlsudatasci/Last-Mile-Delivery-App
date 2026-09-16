@@ -84,7 +84,7 @@ const POLICIES: Record<PolicyKey, Policy> = {
         blocks: [
             {
                 type: 'paragraph',
-                text: 'The information collected through DEVIA is used to support transportation, mobility, navigation, and route deviation research.',
+                text: 'The information collected through DEVIA is used to support transportation, mobility, navigation, and route change research.',
             },
             { type: 'heading', text: 'Route recordings may include:' },
             {
@@ -93,7 +93,7 @@ const POLICIES: Record<PolicyKey, Policy> = {
                     'GPS coordinates',
                     'Distance traveled',
                     'Route geometry',
-                    'Route deviations',
+                    'Route changes',
                     'Trip duration',
                     'Survey responses',
                 ],
@@ -104,7 +104,7 @@ const POLICIES: Record<PolicyKey, Policy> = {
                 items: [
                     'Common route choices',
                     'Traffic avoidance strategies',
-                    'Deviation patterns',
+                    'Route change patterns',
                     'Transportation efficiency trends',
                     'Navigation behavior',
                 ],

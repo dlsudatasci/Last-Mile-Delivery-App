@@ -21,6 +21,7 @@ interface PolygonProps {
     onPress?: (event: any) => void;
     filterAnnotationIds?: string[];
     onAnnotationPress?: (annotations: Annotation[]) => void;
+    showEndpointMarkers?: boolean;
 }
 
 export const Polygon = ({
@@ -34,6 +35,7 @@ export const Polygon = ({
     onPress,
     filterAnnotationIds,
     onAnnotationPress,
+    showEndpointMarkers = true,
 }: PolygonProps) => {
     const lineLayerStyle = style;
     const theme = useTheme();
@@ -229,9 +231,10 @@ export const Polygon = ({
                 id={startPointId}
                 filter={['==', ['get', 'type'], 'start']}
                 style={{
-                    circleRadius: 8,
+                    circleRadius: showEndpointMarkers ? 8 : 0,
+                    circleOpacity: showEndpointMarkers ? 1 : 0,
                     circleColor: '#1CAF50',
-                    circleStrokeWidth: 2,
+                    circleStrokeWidth: showEndpointMarkers ? 2 : 0,
                     circleStrokeColor: '#ffffff',
                 }}
             />
@@ -239,13 +242,13 @@ export const Polygon = ({
                 id={endPointId}
                 filter={['==', ['get', 'type'], 'end']}
                 style={{
-                    circleRadius: 8,
+                    circleRadius: showEndpointMarkers ? 8 : 0,
+                    circleOpacity: showEndpointMarkers ? 1 : 0,
                     circleColor: '#cd5c5c',
-                    circleStrokeWidth: 2,
+                    circleStrokeWidth: showEndpointMarkers ? 2 : 0,
                     circleStrokeColor: '#ffffff',
                 }}
             />
-            {/* Segment Annotations */}
             <LineLayer
                 id="segment-annotations"
                 filter={['==', ['get', 'type'], 'segment-annotation']}
@@ -257,7 +260,6 @@ export const Polygon = ({
                     lineCap: 'round',
                 }}
             />
-            {/* Segment Start Points */}
             <CircleLayer
                 id="segment-start-points"
                 filter={['==', ['get', 'type'], 'segment-start']}
@@ -268,7 +270,6 @@ export const Polygon = ({
                     circleStrokeColor: '#ffffff',
                 }}
             />
-            {/* Segment End Points */}
             <CircleLayer
                 id="segment-end-points"
                 filter={['==', ['get', 'type'], 'segment-end']}
@@ -279,7 +280,6 @@ export const Polygon = ({
                     circleStrokeColor: '#ffffff',
                 }}
             />
-            {/* Point Annotations */}
             <CircleLayer
                 id="point-annotations"
                 filter={['==', ['get', 'type'], 'point-annotation']}
