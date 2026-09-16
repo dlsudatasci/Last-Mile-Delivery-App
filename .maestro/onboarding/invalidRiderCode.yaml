@@ -8,7 +8,7 @@ appId: com.samg.devia
 ---
 - launchApp
 - extendedWaitUntil:
-    visible: "Get Started"
+    visible: "Track routes." #temp
     timeout: 30000
 - assertVisible: "Track routes."
 - tapOn: "Get Started"
