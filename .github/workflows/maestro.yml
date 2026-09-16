@@ -31,6 +31,13 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android
 
+      - name: Verify Firebase Android config
+        run: |
+          echo "Root Firebase config:"
+          ls -l google-services.json
+          echo "Generated Android Firebase config:"
+          ls -l android/app/google-services.json
+
       - name: Install Maestro
         run: |
           curl -Ls "https://get.maestro.mobile.dev" | bash
@@ -68,7 +75,7 @@ jobs:
             sleep 5
             curl -I http://localhost:8081
             cat /tmp/expo.log
-            
+
             adb shell dumpsys activity activities | grep -E "mResumedActivity|mCurrentFocus"
             adb logcat -d -t 500 | grep -iE "com.samg.devia|ReactNative|Expo|ReactHost|Metro|bundle|localhost|8081|error|exception"
             maestro test .maestro/onboarding/invalidRiderCode.yaml
