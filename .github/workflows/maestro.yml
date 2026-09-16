@@ -33,10 +33,14 @@ jobs:
 
       - name: Verify Firebase Android config
         run: |
-          echo "Root Firebase config:"
+          echo "=== Root Firebase config ==="
           ls -l google-services.json
-          echo "Generated Android Firebase config:"
+
+          echo "=== Generated Android Firebase config ==="
           ls -l android/app/google-services.json
+
+          echo "=== Generated Google Services resources ==="
+          find android/app/build/generated/res/google-services -type f 2>/dev/null || true
 
       - name: Install Maestro
         run: |
