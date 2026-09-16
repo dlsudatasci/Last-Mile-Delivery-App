@@ -62,9 +62,13 @@ jobs:
             sleep 10
             cat /tmp/expo.log
             adb reverse tcp:8081 tcp:8081
+            curl -I http://localhost:8081
+
             adb shell am start -W -a android.intent.action.VIEW -d "com.samg.devia://expo-development-client/?url=http://127.0.0.1:8081"
             sleep 5
+            curl -I http://localhost:8081
             cat /tmp/expo.log
+            
             adb shell dumpsys activity activities | grep -E "mResumedActivity|mCurrentFocus"
             adb logcat -d -t 500 | grep -iE "com.samg.devia|ReactNative|Expo|ReactHost|Metro|bundle|localhost|8081|error|exception"
             maestro test .maestro/onboarding/invalidRiderCode.yaml
