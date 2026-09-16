@@ -65,9 +65,10 @@ jobs:
             adb devices
             cd android && ./gradlew assembleDebug
 
-            echo "=== Firebase-related generated files ==="
-            find android/app/build -type f \( -name "google_app_id.xml" -o -name "values.xml" \) -print
-            
+            echo "=== Generated Firebase config ==="
+            test -f android/app/build/generated/res/processDebugGoogleServices/values/values.xml
+            echo "Firebase Google Services resources generated successfully"
+
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             cd ..
             npx expo start --dev-client --host lan > /tmp/expo.log 2>&1 &
