@@ -10,26 +10,26 @@ export interface IncompleteFeedback {
 export const INCOMPLETE_QUESTIONS: { key: keyof IncompleteFeedback; title: string; options: string[] }[] = [
     {
         key: 'reason',
-        title: 'Bakit natapos ang biyahe bago marating ang destinasyon?',
+        title: 'Bakit nahinto ang trip bago makarating sa destination?',
         options: [
             'Naubusan ng oras',
             'Nakansela ang order / booking',
-            'May problema sa sasakyan',
-            'Saradong / hindi madaanang kalsada',
+            'May problema sa motor / sasakyan',
+            'Sarado o hindi madaanan ang kalsada',
             'Naligaw',
-            'Hindi ligtas na kondisyon',
+            'Hindi safe ang daan o lugar',
             'Personal na dahilan',
             'Iba pa',
         ],
     },
     {
         key: 'distanceReached',
-        title: 'Gaano ka kalayo nakarating bago huminto?',
+        title: 'Gaano ka na kalapit sa destination bago huminto?',
         options: ['Malapit na sa destinasyon', 'Lampas kalahati', 'Mga kalahati', 'Wala pang kalahati', 'Kakasimula pa lang'],
     },
     {
         key: 'willRetry',
-        title: 'Susubukan mo bang ulitin ang biyaheng ito?',
+        title: 'Susubukan mo bang ituloy o ulitin ang trip na ito?',
         options: ['Oo', 'Siguro', 'Hindi'],
     },
 ];

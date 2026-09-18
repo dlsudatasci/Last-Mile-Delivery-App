@@ -46,3 +46,7 @@ app-example
 android/
 ios/
 coverage/
+
+# vim swap files
+*.swp
+*.swo
