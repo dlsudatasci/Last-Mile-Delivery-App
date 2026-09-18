@@ -71,14 +71,14 @@ export default function RiderCode() {
             const claimedBy = data?.claimedBy;
             const phone = data?.phone;
 
-            if (!phone && !claimedBy) {
-                showError('This code is claimed but missing user data.');
+            if (!phone) {
+                showError('This code is claimed but missing phone data. Please contact the research team.');
                 setIsLoading(false);
                 return;
             }
 
             setRiderCode(riderCode);
-            router.push({ pathname: '/enter-phone', params: { loginOnly: 'true' } } as any);
+            router.push({ pathname: '/enter-phone', params: { loginOnly: 'true', expectedPhone: phone || '' } } as any);
         } catch (error) {
             if (isTransientFirestoreError(error)) {
                 showError('You appear to be offline. Please connect to the internet to verify your code.');

@@ -25,7 +25,7 @@ const toLocalPhone = (raw: string) => {
 export default function EnterPhone() {
     const setOnboardingPhone = useOnboarding(state => state.setPhone);
     const setUser = useUser(state => state.setUser);
-    const { loginOnly } = useLocalSearchParams<{ loginOnly: string }>();
+    const { loginOnly, expectedPhone } = useLocalSearchParams<{ loginOnly: string; expectedPhone?: string }>();
 
     const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -52,6 +52,11 @@ export default function EnterPhone() {
         const localPhone = toLocalPhone(phone);
         if (!isValidPhilippineMobileNumber(localPhone)) {
             showError('Enter a valid Philippine mobile number (e.g. 912 345 6789).');
+            return;
+        }
+
+        if (loginOnly === 'true' && expectedPhone && localPhone !== expectedPhone) {
+            showError('This phone number does not match the one registered with the provided rider code.');
             return;
         }
 

@@ -1,6 +1,8 @@
 import { resolveAuthenticatedSession } from '@/lib/firebase-crud/auth';
 import { auth } from '@/lib/utils/firebaseConfig';
 import { useUser } from '@/stores/useUser';
+import { useTripReviews } from '@/lib/store/useTripReviews';
+import { getRide } from '@/lib/firebase-crud/rides';
 
 import { sizes } from '@/lib/utils/responsive-sizing';
 import { onAuthStateChanged } from '@react-native-firebase/auth';
@@ -13,6 +15,19 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { Button, Dialog, Portal, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+/** Wait for the persisted trip-reviews store to finish loading from AsyncStorage. */
+const waitForTripReviewsHydration = () =>
+    new Promise<void>(resolve => {
+        if (useTripReviews.persist.hasHydrated()) {
+            resolve();
+        } else {
+            const unsub = useTripReviews.persist.onFinishHydration(() => {
+                unsub();
+                resolve();
+            });
+        }
+    });
 
 export default function App() {
     const theme = useTheme();
@@ -80,7 +95,30 @@ export default function App() {
                     if (profile) {
                         useUser.getState().setUser(profile);
                     }
-                    router.replace(destination);
+                    // If heading to home, check for any pending post-trip review first.
+                    // The user may have closed the app before completing the questionnaire.
+                    if (destination === '/main/(tabs)/home') {
+                        await waitForTripReviewsHydration();
+                        const reviews = useTripReviews.getState().reviews;
+                        const pendingEntry = Object.entries(reviews).find(([, r]) => r.status === 'pending');
+                        if (pendingEntry) {
+                            const [pendingRideId] = pendingEntry;
+                            try {
+                                const ride = await getRide(user.uid, pendingRideId);
+                                router.replace(
+                                    `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(pendingRideId)}&deviationCount=${ride.deviationCount ?? 0}`
+                                );
+                            } catch {
+                                // Ride deleted or inaccessible — clear the stale pending review
+                                useTripReviews.getState().markReviewed(pendingRideId);
+                                router.replace(destination);
+                            }
+                        } else {
+                            router.replace(destination);
+                        }
+                    } else {
+                        router.replace(destination);
+                    }
                 }
             } catch (error) {
                 console.error('Startup auth/profile check failed:', error);

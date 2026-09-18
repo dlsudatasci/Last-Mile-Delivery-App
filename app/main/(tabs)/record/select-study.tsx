@@ -1,7 +1,8 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
-import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { useRidesStore } from '@/lib/store/useRidesStore';
+import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { useUser } from '@/stores/useUser';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
@@ -14,8 +15,10 @@ const TEAL = '#0E6E73';
 export default function SelectStudy() {
     const theme = useTheme();
     const styles = getStyles(theme);
+    const { user } = useUser();
     const { rides, totalRideCount, fetchRides } = useRidesStore();
-    const study = getJoinedDeviaRouteStudy(Math.max(totalRideCount, rides.length));
+    // Fix: pass enrollment status so the joined flag is correct instead of defaulting to false
+    const study = getJoinedDeviaRouteStudy(Math.max(totalRideCount, rides.length), user?.isEnrolled ?? false);
 
     useFocusEffect(
         useCallback(() => {

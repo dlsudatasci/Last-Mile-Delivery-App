@@ -4,13 +4,13 @@ import { formatRideRouteTitle } from '@/lib/trip-record-display';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Icon, MD3Theme, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 export default function TripsList() {
     const theme = useTheme();
     const styles = getStyles(theme);
-    const { rides, isLoading, isRefreshing, error, fetchRides } = useRidesStore();
+    const { rides, isLoading, isRefreshing, isFetchingMore, pagination, error, fetchRides, fetchMoreRides } = useRidesStore();
 
     useFocusEffect(
         useCallback(() => {
@@ -20,31 +20,39 @@ export default function TripsList() {
 
     return (
         <View style={styles.container}>
-            <ScrollView
+            <FlatList
                 contentContainerStyle={styles.list}
                 showsVerticalScrollIndicator={false}
+                data={rides}
+                keyExtractor={item => item.id}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => fetchRides(true)} />}
-            >
-                {isLoading && rides.length === 0 && (
-                    <View style={styles.emptyCard}>
-                        <ActivityIndicator color={theme.colors.primary} />
-                        <Text style={styles.empty}>Loading trips...</Text>
-                    </View>
+                onEndReached={() => {
+                    if (pagination.hasMore && !isFetchingMore) {
+                        fetchMoreRides();
+                    }
+                }}
+                onEndReachedThreshold={0.5}
+                ListEmptyComponent={() => (
+                    <>
+                        {isLoading && rides.length === 0 && (
+                            <View style={styles.emptyCard}>
+                                <ActivityIndicator color={theme.colors.primary} />
+                                <Text style={styles.empty}>Loading trips...</Text>
+                            </View>
+                        )}
+                        {!isLoading && rides.length === 0 && (
+                            <View style={styles.emptyCard}>
+                                <Icon source="map-marker-path" size={sizes.size48} color={theme.colors.primary} />
+                                <Text style={styles.emptyTitle}>No trips recorded yet</Text>
+                                <Text style={styles.empty}>{error || 'Your completed trips will appear here after recording.'}</Text>
+                            </View>
+                        )}
+                    </>
                 )}
-
-                {!isLoading && rides.length === 0 && (
-                    <View style={styles.emptyCard}>
-                        <Icon source="map-marker-path" size={sizes.size48} color={theme.colors.primary} />
-                        <Text style={styles.emptyTitle}>No trips recorded yet</Text>
-                        <Text style={styles.empty}>{error || 'Your completed trips will appear here after recording.'}</Text>
-                    </View>
-                )}
-
-                {rides.map(ride => {
+                renderItem={({ item: ride }) => {
                     const date = new Date(ride.createdAt || ride.endTime || ride.startTime);
                     return (
                         <TouchableRipple
-                            key={ride.id}
                             style={styles.tripCard}
                             borderless
                             onPress={() =>
@@ -73,8 +81,15 @@ export default function TripsList() {
                             </View>
                         </TouchableRipple>
                     );
-                })}
-            </ScrollView>
+                }}
+                ListFooterComponent={() => 
+                    isFetchingMore ? (
+                        <View style={{ padding: sizes.medium, alignItems: 'center' }}>
+                            <ActivityIndicator color={theme.colors.primary} />
+                        </View>
+                    ) : null
+                }
+            />
         </View>
     );
 }

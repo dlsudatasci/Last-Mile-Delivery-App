@@ -1,7 +1,7 @@
-import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { useRidesStore } from '@/lib/store/useRidesStore';
-import { useUser } from '@/stores/useUser';
+import { getJoinedDeviaRouteStudy } from '@/lib/studies';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
+import { useUser } from '@/stores/useUser';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useMemo } from 'react';

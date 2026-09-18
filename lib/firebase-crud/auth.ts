@@ -90,6 +90,8 @@ export async function saveOnboardingProfile(uid: string, data: OnboardingProfile
         userRef,
         {
             preferredName: data.preferredName,
+            fullName: data.preferredName, // Backwards compatibility for Web App
+            username: data.preferredName, // Backwards compatibility for Web App
             riderCode: data.riderCode,
             gender: data.gender,
             ageRange: data.ageRange,
@@ -118,6 +120,8 @@ export async function createUserProfile(uid: string, preferredName: string) {
             userRef,
             {
                 preferredName,
+                fullName: preferredName, // Backwards compatibility for Web App
+                username: preferredName, // Backwards compatibility for Web App
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             },
@@ -228,6 +232,8 @@ export async function updateUserProfile(uid: string, preferredName: string) {
             userRef,
             {
                 preferredName,
+                fullName: preferredName, // Backwards compatibility for Web App
+                username: preferredName, // Backwards compatibility for Web App
                 updatedAt: new Date().toISOString(),
             },
             { merge: true }

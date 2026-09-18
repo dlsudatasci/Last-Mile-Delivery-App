@@ -1,6 +1,6 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
-import { DEVIA_ROUTE_STUDY, getStudyProgress } from '@/lib/studies';
 import { useRidesStore } from '@/lib/store/useRidesStore';
+import { DEVIA_ROUTE_STUDY, getStudyProgress } from '@/lib/studies';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -34,6 +34,8 @@ export default function StudyDetails() {
     const tripsRequired = Number(params.tripsRequired ?? DEVIA_ROUTE_STUDY.tripsRequired) || DEVIA_ROUTE_STUDY.tripsRequired;
     const reward = Number(params.reward ?? DEVIA_ROUTE_STUDY.reward);
     const dates = params.dates || DEVIA_ROUTE_STUDY.dates;
+    // Fix: read the joined param instead of hardcoding the badge to "Joined"
+    const joined = params.joined === '1';
     const { creditedTrips, overLimitTrips, progress } = getStudyProgress(tripsDone, tripsRequired);
 
     const whatYoullDo = [
@@ -57,8 +59,10 @@ export default function StudyDetails() {
                 {/* Banner */}
                 <View style={styles.banner}>
                     <Icon source="motorbike" size={sizes.size64} color={theme.colors.primary} />
-                    <View style={[styles.badge, styles.badgeJoined]}>
-                        <Text style={[styles.badgeText, styles.badgeTextJoined]}>Joined</Text>
+                    <View style={[styles.badge, joined ? styles.badgeJoined : styles.badgeNotJoined]}>
+                        <Text style={[styles.badgeText, joined ? styles.badgeTextJoined : styles.badgeTextNotJoined]}>
+                            {joined ? 'Joined' : 'Not Joined'}
+                        </Text>
                     </View>
                 </View>
 
@@ -182,8 +186,10 @@ const getStyles = (theme: MD3Theme) =>
             borderRadius: sizes.size32,
         },
         badgeJoined: { backgroundColor: '#DCFCE7' },
+        badgeNotJoined: { backgroundColor: theme.colors.surfaceVariant },
         badgeText: { fontFamily: 'LGEIText-SemiBold', fontSize: fontSizes.tiny },
         badgeTextJoined: { color: '#16A34A' },
+        badgeTextNotJoined: { color: theme.colors.onSurfaceVariant },
         factRow: {
             flexDirection: 'row',
             alignItems: 'center',
