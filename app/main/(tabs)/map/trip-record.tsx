@@ -20,10 +20,10 @@ import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { getAuth } from '@react-native-firebase/auth';
 import Mapbox from '@rnmapbox/maps';
-import { Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
-import { Divider, Icon, MD3Theme, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Divider, Icon, MD3Theme, Surface, Text, useTheme } from 'react-native-paper';
 
 type DetailTab = 'overview' | 'map' | 'deviations' | 'responses';
 type TripRecord = FetchRideData;
@@ -281,7 +281,29 @@ export default function TripRecordDetails() {
                             {postTripRows.length > 0 ? (
                                 postTripRows.map(row => <ResponseRow key={row.label} row={row} />)
                             ) : (
-                                <Text style={styles.emptyText}>No post-trip answers saved yet.</Text>
+                                <View>
+                                    <View style={styles.addResponsesBanner}>
+                                        <Icon source="clipboard-text-outline" size={sizes.size32} color={theme.colors.primary} />
+                                        <Text style={styles.addResponsesText}>
+                                            You haven't completed the post-trip questionnaire for this trip yet.
+                                        </Text>
+                                    </View>
+                                    <Button
+                                        mode="contained"
+                                        icon="pencil-plus-outline"
+                                        onPress={() =>
+                                            trip &&
+                                            router.push(
+                                                `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
+                                                    trip.id
+                                                )}&deviationCount=${trip.deviationCount ?? 0}&fromTripRecord=1`
+                                            )
+                                        }
+                                        style={styles.answerButton}
+                                    >
+                                        Add Responses
+                                    </Button>
+                                </View>
                             )}
                         </Surface>
 
@@ -1028,6 +1050,18 @@ const getStyles = (theme: MD3Theme) =>
         answerButton: {
             marginTop: sizes.medium,
             borderRadius: sizes.small,
+        },
+        addResponsesBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: sizes.medium,
+            marginBottom: sizes.small,
+        },
+        addResponsesText: {
+            flex: 1,
+            fontFamily: 'LGEIText-Regular',
+            fontSize: fontSizes.tinyPlus,
+            color: theme.colors.onSurfaceVariant,
         },
         detailDivider: {
             marginVertical: sizes.medium,

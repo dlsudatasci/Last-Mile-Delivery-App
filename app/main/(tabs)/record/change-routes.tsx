@@ -55,10 +55,11 @@ function buildChangeRoutes(count: number, events: RideDeviationEvent[]): ChangeR
 export default function ChangeRoutes() {
     const theme = useTheme();
     const styles = getStyles(theme);
-    const { rideId, deviationCount, language: languageParam } = useLocalSearchParams<{
+    const { rideId, deviationCount, language: languageParam, fromTripRecord } = useLocalSearchParams<{
         rideId?: string;
         deviationCount?: string;
         language?: QuestionnaireLanguage;
+        fromTripRecord?: string;
     }>();
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
     const deviationEvents = useRideStore(state => state.deviationEvents);
@@ -73,7 +74,7 @@ export default function ChangeRoutes() {
         router.push(
             `/main/(tabs)/record/reason-for-deviation?rideId=${encodeURIComponent(
                 rideId
-            )}&deviationIndex=0&deviationCount=${totalChangeRoutes}&language=${language}`
+            )}&deviationIndex=0&deviationCount=${totalChangeRoutes}&language=${language}${fromTripRecord === '1' ? '&fromTripRecord=1' : ''}`
         );
     };
 

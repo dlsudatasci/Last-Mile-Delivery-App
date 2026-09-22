@@ -4,7 +4,8 @@ import { getRecentDestinations, RecentDestination, saveRecentDestination } from 
 import { auth } from '@/lib/utils/firebaseConfig';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import * as Location from 'expo-location';
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
+import { CommonActions } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, MD3Theme, Text, TextInput, TouchableRipple, useTheme } from 'react-native-paper';
@@ -143,11 +144,22 @@ export default function Destination() {
 
     // Show search results when actively searching, otherwise show recents
     const showResults = destination.trim().length > 0 && (results.length > 0 || isSearching || hasSearched);
+    const navigation = useNavigation();
 
     return (
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <View style={styles.header}>
-                <HeaderBackButton onPress={() => router.back()} />
+                <HeaderBackButton onPress={() => {
+                    // Reset the record stack so it doesn't accumulate multiple destination screens
+                    navigation.dispatch(
+                        CommonActions.reset({
+                            index: 0,
+                            routes: [{ name: 'index' }],
+                        })
+                    );
+                    // Cancel and return to Home tab
+                    router.navigate('/main/(tabs)/home');
+                }} />
                 <Text style={styles.headerTitle}>New Trip</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>

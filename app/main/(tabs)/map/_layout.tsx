@@ -29,7 +29,7 @@ export default function Layout() {
         <Stack
             screenOptions={{
                 ...commonScreenOptions,
-                headerLeft: () => <HeaderBackButton onPress={() => router.dismiss()} />,
+                headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
             }}
         >
             <Stack.Screen name="index" options={{ headerShown: false, title: 'Trips' }} />

@@ -24,7 +24,8 @@ import { DeviationMetadata, useTripReviews } from '@/lib/store/useTripReviews';
 import { formatRouteInstructionSummary } from '@/lib/trip-record-display';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router';
+import { CommonActions } from '@react-navigation/native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { ActivityIndicator, Button, Checkbox, MD3Theme, RadioButton, SegmentedButtons, Surface, Text, TextInput, useTheme } from 'react-native-paper';
@@ -103,19 +104,40 @@ export default function ReasonForDeviation() {
     const colorScheme = useColorScheme();
     const mapboxStyle =
         colorScheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
-    const { rideId, deviationIndex, deviationCount, language: languageParam } = useLocalSearchParams<{
+    const { rideId, deviationIndex, deviationCount, language: languageParam, fromTripRecord } = useLocalSearchParams<{
         rideId?: string;
         deviationIndex?: string;
         deviationCount?: string;
         language?: QuestionnaireLanguage;
+        fromTripRecord?: string;
     }>();
+    const isFromTripRecord = fromTripRecord === '1';
+    const navigation = useNavigation();
     const saveDeviation = useTripReviews(state => state.saveDeviation);
     const inFlight = useRef(false);
     const [submitted, setSubmitted] = useState(false);
     const reviewed = useTripReviews(state => !!rideId && state.reviews[rideId]?.status === 'reviewed');
     useEffect(() => {
-        if (submitted && reviewed) router.replace('/main/(tabs)/map');
-    }, [submitted, reviewed]);
+        if (submitted) {
+            // Reset the record tab's stack so this questionnaire doesn't linger
+            navigation.dispatch(
+                CommonActions.reset({
+                    index: 0,
+                    routes: [{ name: 'index' }],
+                })
+            );
+            
+            if (isFromTripRecord) {
+                // Return to the trip record screen so the user sees their new responses.
+                router.navigate({
+                    pathname: '/main/(tabs)/map/trip-record' as never,
+                    params: { id: rideId },
+                });
+            } else if (reviewed) {
+                router.navigate('/main/(tabs)/map');
+            }
+        }
+    }, [submitted, reviewed, navigation, isFromTripRecord, rideId]);
     const markReviewed = useTripReviews(state => state.markReviewed);
     const deviationEvents = useRideStore(state => state.deviationEvents);
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
@@ -154,7 +176,7 @@ export default function ReasonForDeviation() {
     };
 
     const handleNext = async () => {
-        if (inFlight.current || reviewed || !rideId || !canContinue) return;
+        if (inFlight.current || (!isFromTripRecord && reviewed) || !rideId || !canContinue) return;
         const deviationId = `dev-${rideId}-${currentDeviationIndex}`;
 
         saveDeviation(rideId, deviationId, {
@@ -170,7 +192,7 @@ export default function ReasonForDeviation() {
             router.replace(
                 `/main/(tabs)/record/reason-for-deviation?rideId=${encodeURIComponent(
                     rideId
-                )}&deviationIndex=${nextDeviationIndex}&deviationCount=${totalDeviationCount}&language=${language}`
+                )}&deviationIndex=${nextDeviationIndex}&deviationCount=${totalDeviationCount}&language=${language}${isFromTripRecord ? '&fromTripRecord=1' : ''}`
             );
             return;
         }

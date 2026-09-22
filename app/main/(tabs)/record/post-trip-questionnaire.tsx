@@ -2,7 +2,8 @@ import { showRequiredReviewNotice, useRequiredTripReview } from '@/lib/hooks/use
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+import { Stack, useLocalSearchParams, router, useNavigation } from 'expo-router';
+import { CommonActions } from '@react-navigation/native';
 import { Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme, ActivityIndicator } from 'react-native-paper';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { LANGUAGE_LABELS, QuestionnaireLanguage } from '@/lib/deviation-questionnaire';
@@ -33,13 +34,35 @@ const arrivalLabels: Record<string, Record<QuestionnaireLanguage, string>> = {
 };
 
 export default function PostTripQuestionnaire() {
-    const { rideId, deviationCount } = useLocalSearchParams<{ rideId?: string; deviationCount?: string }>();
-    const reviewed = useRequiredTripReview(rideId);
+    const { rideId, deviationCount, fromTripRecord } = useLocalSearchParams<{ rideId?: string; deviationCount?: string; fromTripRecord?: string }>();
+    const isFromTripRecord = fromTripRecord === '1';
+    const navigation = useNavigation();
+    // Only enforce the navigation guard during the normal end-of-trip flow.
+    // When the user voluntarily reopens from the Trips tab, let them go back freely.
+    const reviewed = isFromTripRecord ? false : useRequiredTripReview(rideId);
     const inFlight = useRef(false);
     const [submitted, setSubmitted] = useState(false);
     useEffect(() => {
-        if (submitted && reviewed) router.replace('/main/(tabs)/map');
-    }, [submitted, reviewed]);
+        if (submitted) {
+            // Reset the record tab's stack so this questionnaire doesn't linger
+            navigation.dispatch(
+                CommonActions.reset({
+                    index: 0,
+                    routes: [{ name: 'index' }],
+                })
+            );
+            
+            if (isFromTripRecord) {
+                // Return to the trip record screen so the user sees their new responses.
+                router.navigate({
+                    pathname: '/main/(tabs)/map/trip-record' as never,
+                    params: { id: rideId },
+                });
+            } else if (reviewed) {
+                router.navigate('/main/(tabs)/map');
+            }
+        }
+    }, [submitted, reviewed, navigation, isFromTripRecord, rideId]);
     const [arrival, setArrival] = useState<string>('');
     const [etaRating, setEtaRating] = useState<number>(0);
     const [stressRating, setStressRating] = useState<number>(0);
@@ -49,11 +72,19 @@ export default function PostTripQuestionnaire() {
     const styles = getStyles(theme);
     const savePostTrip = useTripReviews(state => state.savePostTrip);
     const markReviewed = useTripReviews(state => state.markReviewed);
-    const handleBack = () => reviewed ? router.back() : showRequiredReviewNotice();
+    const handleBack = () => {
+        if (isFromTripRecord) {
+            router.back();
+        } else if (reviewed) {
+            router.back();
+        } else {
+            showRequiredReviewNotice();
+        }
+    };
     const totalDeviationCount = Math.max(0, Number(deviationCount || 0));
 
     const handleNext = async () => {
-        if (inFlight.current || reviewed || !rideId || !arrival || etaRating === 0 || stressRating === 0) return;
+        if (inFlight.current || (!isFromTripRecord && reviewed) || !rideId || !arrival || etaRating === 0 || stressRating === 0) return;
 
         savePostTrip(rideId, { arrival, etaRating, stressRating, language });
 
@@ -76,9 +107,10 @@ export default function PostTripQuestionnaire() {
 
         router.push({
             pathname: '/main/(tabs)/record/change-routes' as never,
-            params: { rideId, deviationCount: String(totalDeviationCount), language },
+            params: { rideId, deviationCount: String(totalDeviationCount), language, fromTripRecord: isFromTripRecord ? '1' : undefined },
         });
     };
+
 
     return (
         <KeyboardAvoidingView

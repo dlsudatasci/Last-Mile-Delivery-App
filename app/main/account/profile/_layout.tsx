@@ -25,7 +25,7 @@ export default function Layout() {
         <Stack
             screenOptions={{
                 ...commonScreenOptions,
-                headerLeft: () => <HeaderBackButton onPress={() => router.dismiss()} />,
+                headerLeft: () => <HeaderBackButton />,
                 headerTitleAlign: 'center',
             }}
         >

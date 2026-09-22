@@ -247,11 +247,14 @@ export default function Record() {
             autoStartedRef.current = true;
             void recoverRecordingSession().then(() => {
                 const state = useRideStore.getState();
-                if (mounted && !state.isRecording && state.startTime === null) void handleStart();
+                const hasDestination = !!destLng && !!destLat;
+                if (mounted && !state.isRecording && state.startTime === null && hasDestination) {
+                    void handleStart();
+                }
             }).catch(error => console.warn('Unable to recover recording session:', error));
         }
         return () => { mounted = false; };
-    }, []);
+    }, [destLng, destLat]);
 
     const finishRideProcess = async () => {
         const messages = [
