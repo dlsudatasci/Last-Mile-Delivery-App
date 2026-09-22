@@ -7,18 +7,19 @@ export function showRequiredReviewNotice() {
     Alert.alert('Complete Trip Review', 'Please complete and submit the post-trip questionnaire before leaving.');
 }
 
-export function useRequiredTripReview(rideId?: string) {
+export function useRequiredTripReview(rideId?: string, skip?: boolean) {
     const reviewed = useTripReviews(state => !!rideId && state.reviews[rideId]?.status === 'reviewed');
+    const isEnforced = !skip && !reviewed;
     // Remains mounted beneath the deviation pages: pushes/back within the review
     // are allowed, but removing its root (including via a parent) is not.
-    usePreventRemove(!reviewed, showRequiredReviewNotice);
+    usePreventRemove(isEnforced, showRequiredReviewNotice);
     useFocusEffect(useCallback(() => {
-        if (reviewed) return;
+        if (!isEnforced) return;
         const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
             showRequiredReviewNotice();
             return true;
         });
         return () => subscription.remove();
-    }, [reviewed]));
+    }, [isEnforced]));
     return reviewed;
 }

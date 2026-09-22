@@ -39,7 +39,7 @@ export default function PostTripQuestionnaire() {
     const navigation = useNavigation();
     // Only enforce the navigation guard during the normal end-of-trip flow.
     // When the user voluntarily reopens from the Trips tab, let them go back freely.
-    const reviewed = isFromTripRecord ? false : useRequiredTripReview(rideId);
+    const reviewed = useRequiredTripReview(rideId, isFromTripRecord);
     const inFlight = useRef(false);
     const [submitted, setSubmitted] = useState(false);
     useEffect(() => {
