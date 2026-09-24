@@ -27,10 +27,20 @@ export default function Layout() {
     };
     return (
         <Stack
-            screenOptions={{
+            screenOptions={({ navigation }) => ({
                 ...commonScreenOptions,
-                headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
-            }}
+                headerLeft: () => (
+                    <HeaderBackButton
+                        onPress={() => {
+                            if (navigation.canGoBack()) {
+                                navigation.goBack();
+                            } else {
+                                router.replace('/main/(tabs)/map');
+                            }
+                        }}
+                    />
+                ),
+            })}
         >
             <Stack.Screen name="index" options={{ headerShown: false, title: 'Trips' }} />
             <Stack.Screen name="trip-record" options={{ headerShown: true, title: 'Trip Record' }} />

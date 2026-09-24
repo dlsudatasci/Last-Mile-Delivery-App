@@ -23,11 +23,21 @@ export default function Layout() {
     };
     return (
         <Stack
-            screenOptions={{
+            screenOptions={({ navigation }) => ({
                 ...commonScreenOptions,
-                headerLeft: () => <HeaderBackButton />,
+                headerLeft: () => (
+                    <HeaderBackButton
+                        onPress={() => {
+                            if (navigation.canGoBack()) {
+                                navigation.goBack();
+                            } else {
+                                router.replace('/main/(tabs)/profile');
+                            }
+                        }}
+                    />
+                ),
                 headerTitleAlign: 'center',
-            }}
+            })}
         >
             <Stack.Screen
                 name="edit-profile"
