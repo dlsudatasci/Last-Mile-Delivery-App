@@ -1,5 +1,5 @@
 # Use Node.js 20 base image (Debian-based)
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
 # Set environment variables for non-interactive installs
 ENV DEBIAN_FRONTEND=noninteractive

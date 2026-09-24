@@ -1,9 +1,10 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { SelectField } from '@/components/onboarding/FormFields';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, IconButton, MD3Theme, Text, useTheme } from 'react-native-paper';
+import { Button, MD3Theme, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TEAL = '#0E6E73';
@@ -28,7 +29,7 @@ export default function StudyInformation() {
     return (
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <View style={styles.header}>
-                <IconButton icon="chevron-left" size={sizes.size32} onPress={() => router.back()} />
+                <HeaderBackButton onPress={() => router.back()} />
                 <Text style={styles.headerTitle}>Study Information</Text>
                 <View style={{ width: sizes.size48 }} />
             </View>

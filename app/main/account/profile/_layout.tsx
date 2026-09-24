@@ -1,8 +1,8 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { router, Stack } from 'expo-router';
-import { Icon, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { TouchableOpacity } from 'react-native';
+import { fontSizes } from '@/lib/utils/responsive-sizing';
 
 export default function Layout() {
     const theme = useTheme();
@@ -23,15 +23,21 @@ export default function Layout() {
     };
     return (
         <Stack
-            screenOptions={{
+            screenOptions={({ navigation }) => ({
                 ...commonScreenOptions,
                 headerLeft: () => (
-                    <TouchableOpacity onPress={() => router.dismiss()}>
-                        <Icon source={'chevron-left'} size={sizes.size32} />
-                    </TouchableOpacity>
+                    <HeaderBackButton
+                        onPress={() => {
+                            if (navigation.canGoBack()) {
+                                navigation.goBack();
+                            } else {
+                                router.replace('/main/(tabs)/profile');
+                            }
+                        }}
+                    />
                 ),
                 headerTitleAlign: 'center',
-            }}
+            })}
         >
             <Stack.Screen
                 name="edit-profile"
