@@ -160,13 +160,13 @@ describe("useRideStore", () => {
         });
         point(14, 1000);
         expect(request).toHaveBeenCalledTimes(1);
-        point(14.001, 2000);
-        point(14.002, 3000);
+        point(14.001, 6000);
+        point(14.002, 11000);
         expect(request).toHaveBeenCalledTimes(1);
         // Unrelated renders/store updates must not count as another GPS fix.
         useRideStore.getState().increaseDuration();
         expect(request).toHaveBeenCalledTimes(1);
-        point(14.003, 4000);
+        point(14.003, 16000);
         expect(request).toHaveBeenCalledTimes(2);
         expect(request).toHaveBeenLastCalledWith([121, 14.003], destination);
         expect(useRideStore.getState().routeUpdateStatus).toBe('rerouting');
@@ -195,7 +195,7 @@ describe("useRideStore", () => {
         const request = jest.fn(() => new Promise<any>(r => { resolve = r; }));
         const stop = subscribeLiveRouteUpdates(request);
         for (let i = 1; i <= 3; i++) useRideStore.getState().addPoint({
-            coords: { latitude: 14.001 + i * 0.001, longitude: 121, altitude: 0, accuracy: 5, altitudeAccuracy: 0, heading: 0, speed: 5 }, timestamp: i * 1000,
+            coords: { latitude: 14.001 + i * 0.001, longitude: 121, altitude: 0, accuracy: 5, altitudeAccuracy: 0, heading: 0, speed: 5 }, timestamp: 1000 + (i - 1) * 5000,
         });
         expect(request).toHaveBeenCalledTimes(1);
         if (action === 'cancel') await useRideStore.getState().resetRide();
@@ -551,7 +551,7 @@ describe("useRideStore", () => {
                 longitude: 2.0001,
                 altitude: 0,
             },
-            timestamp: 2,
+            timestamp: 2000,
         } as any);
 
         const state = useRideStore.getState();
@@ -589,7 +589,7 @@ describe("useRideStore", () => {
         expect(snapped).toBeNull();
     });
 
-    test("addPoint keeps raw GPS but only moves display trace when near the active route", () => {
+    test("addPoint keeps a plausible off-route GPS point but only moves display trace when near the active route", () => {
         useRideStore.setState({
             activeRouteCoordinates: [
                 [121.0, 14.0],
@@ -610,18 +610,33 @@ describe("useRideStore", () => {
 
         addPoint({
             coords: {
-                latitude: 14.01,
+                latitude: 14.00065,
                 longitude: 121.002,
                 altitude: 0,
                 accuracy: 10,
             },
-            timestamp: 3000,
+            timestamp: 7000,
         } as any);
 
         const state = useRideStore.getState();
         expect(state.points).toHaveLength(2);
         expect(state.displayPoints).toHaveLength(1);
         expect(state.displayPoints[0].coordinate.latitude).toBeCloseTo(14.0, 4);
+    });
+
+    test("addPoint drops an implausible GPS jump before it reaches the saved path", () => {
+        const { addPoint } = useRideStore.getState();
+
+        addPoint({
+            coords: { latitude: 14, longitude: 121, altitude: 0, accuracy: 10 },
+            timestamp: 1000,
+        } as any);
+        addPoint({
+            coords: { latitude: 14.1, longitude: 121.1, altitude: 0, accuracy: 10 },
+            timestamp: 3000,
+        } as any);
+
+        expect(useRideStore.getState().points).toHaveLength(1);
     });
 
     test("display trace remains still when a raw GPS point is far off-route", () => {

@@ -23,21 +23,16 @@ export default function Layout() {
     };
     return (
         <Stack
-            screenOptions={({ navigation }) => ({
+            screenOptions={{
                 ...commonScreenOptions,
+                // This navigator does not contain the Profile tab. Navigate to
+                // the known destination rather than attempting to pop a nested
+                // Android stack that may have been restored without history.
                 headerLeft: () => (
-                    <HeaderBackButton
-                        onPress={() => {
-                            if (navigation.canGoBack()) {
-                                navigation.goBack();
-                            } else {
-                                router.replace('/main/(tabs)/profile');
-                            }
-                        }}
-                    />
+                    <HeaderBackButton onPress={() => router.replace('/main/(tabs)/profile')} />
                 ),
                 headerTitleAlign: 'center',
-            })}
+            }}
         >
             <Stack.Screen
                 name="edit-profile"

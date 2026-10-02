@@ -45,7 +45,7 @@ export const Polygon = ({
         }
 
         // Sort points by timestamp and ensure valid coordinates
-        const validPoints = points
+        const validPoints = points.slice()
             .sort((a, b) => a.timestamp - b.timestamp)
             .filter(
                 point =>
@@ -310,7 +310,7 @@ export const PolygonWhileAnnotating = ({
         }
 
         // Sort points by timestamp and ensure valid coordinates
-        const validPoints = points
+        const validPoints = points.slice()
             .sort((a, b) => a.timestamp - b.timestamp)
             .filter(
                 point =>
@@ -466,7 +466,7 @@ export const PolygonRecording = ({
         }
 
         // Sort points by timestamp and ensure valid coordinates
-        const validPoints = points
+        const validPoints = points.slice()
             .sort((a, b) => a.timestamp - b.timestamp)
             .filter(
                 point =>
@@ -612,7 +612,7 @@ export const PolygonSegment = ({
         }
 
         // Sort points by timestamp and ensure valid coordinates
-        const validPoints = points
+        const validPoints = points.slice()
             .sort((a, b) => a.timestamp - b.timestamp)
             .filter(
                 point =>
@@ -701,7 +701,7 @@ export const PolygonSegmentWithPoints = ({
         }
 
         // Sort points by timestamp and ensure valid coordinates
-        const validPoints = points
+        const validPoints = points.slice()
             .sort((a, b) => a.timestamp - b.timestamp)
             .filter(
                 point =>

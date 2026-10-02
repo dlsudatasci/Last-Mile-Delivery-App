@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { Annotation } from '../firebase-crud/annotations';
 import { isTransientFirestoreError, NewRideData, saveRide } from '../firebase-crud/rides';
 import { getDistanceToRouteM, getRoute, LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
+import { sanitizeRidePoints, shouldRecordRidePoint } from '../utils/gpsPath';
 import { snapLngLatToRoute } from '../utils/routeSnapping';
 
 const setAsyncFlag = async (key: string, value: boolean) => {
@@ -34,6 +35,7 @@ export interface RidePoint {
     timestamp: number;
     elevation?: number;
     heading?: number;
+    accuracy?: number;
 }
 
 export interface RideReport {
@@ -138,15 +140,22 @@ const calculateElevationGain = (currentElevation: number, newElevation: number):
     return 0;
 };
 
-const locationToRidePoint = (location: LocationObject): RidePoint => ({
-    coordinate: {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-    },
-    timestamp: location.timestamp,
-    elevation: location.coords.altitude || 0,
-    heading: location.coords.heading || 0,
-});
+const locationToRidePoint = (location: LocationObject): RidePoint => {
+    const accuracy = typeof location.coords.accuracy === 'number' && Number.isFinite(location.coords.accuracy)
+        ? location.coords.accuracy
+        : undefined;
+    return {
+        coordinate: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+        },
+        timestamp: location.timestamp,
+        elevation: location.coords.altitude || 0,
+        heading: location.coords.heading || 0,
+        // Firestore does not accept fields with undefined values.
+        ...(accuracy === undefined ? {} : { accuracy }),
+    };
+};
 
 export const useRideStore = create<RideState>((set, get) => ({
     // Initial state
@@ -307,6 +316,11 @@ export const useRideStore = create<RideState>((set, get) => ({
                 const location = await Location.getCurrentPositionAsync({});
                 pointsForSave = [locationToRidePoint(location)];
             }
+            pointsForSave = sanitizeRidePoints(pointsForSave);
+
+            if (pointsForSave.length === 0) {
+                throw new Error('No valid GPS points recorded');
+            }
 
             const rideData: NewRideData = {
                 points: pointsForSave,
@@ -366,6 +380,11 @@ export const useRideStore = create<RideState>((set, get) => ({
         const { points, displayPoints, currentElevation, totalElevationGain, totalDistance, maxSpeed, activeRouteCoordinates } = get();
 
         const newPoint = locationToRidePoint(location);
+        const lastPoint = points[points.length - 1];
+        if (!shouldRecordRidePoint(lastPoint, newPoint)) {
+            console.warn('Discarded stale, inaccurate, or implausible GPS point');
+            return;
+        }
 
         // Calculate new metrics
         let newTotalDistance = totalDistance;
@@ -375,7 +394,6 @@ export const useRideStore = create<RideState>((set, get) => ({
         let newHeading = location.coords.heading || 0;
 
         if (points.length > 0) {
-            const lastPoint = points[points.length - 1];
             const distance = haversineDistance(lastPoint, newPoint);
             const timeDiff = (newPoint.timestamp - lastPoint.timestamp) / 1000; // Convert to seconds
             const movementDistance = filterGpsNoiseDistance(distance, timeDiff, location.coords.accuracy);

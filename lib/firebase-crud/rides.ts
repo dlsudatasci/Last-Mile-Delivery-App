@@ -1,5 +1,6 @@
-import { GeneratedRoute, RidePoint } from '@/lib/store/useRideStore';
+import type { GeneratedRoute, RidePoint } from '@/lib/store/useRideStore';
 import { LngLat } from '@/lib/utils/directions';
+import { sanitizeRidePoints } from '@/lib/utils/gpsPath';
 import { firestore } from '@/lib/utils/firebaseConfig';
 import { getAuth } from '@react-native-firebase/auth';
 import {
@@ -143,7 +144,7 @@ export const getRidePoints = async (userId: string, rideId: string): Promise<Rid
         }
 
         const data = pointsDoc.data() as { items?: RidePoint[] };
-        return data.items ?? [];
+        return sanitizeRidePoints(data.items ?? []);
     } catch (error) {
         console.error('Error fetching ride points:', error);
         throw error;

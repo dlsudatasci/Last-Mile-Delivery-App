@@ -27,20 +27,15 @@ export default function Layout() {
     };
     return (
         <Stack
-            screenOptions={({ navigation }) => ({
+            screenOptions={{
                 ...commonScreenOptions,
+                // The Trip Record page always returns to the Trips list. Do not
+                // depend on the native stack history: Android can restore this
+                // screen without its previous entry after an APK launch.
                 headerLeft: () => (
-                    <HeaderBackButton
-                        onPress={() => {
-                            if (navigation.canGoBack()) {
-                                navigation.goBack();
-                            } else {
-                                router.replace('/main/(tabs)/map');
-                            }
-                        }}
-                    />
+                    <HeaderBackButton onPress={() => router.replace('/main/(tabs)/map')} />
                 ),
-            })}
+            }}
         >
             <Stack.Screen name="index" options={{ headerShown: false, title: 'Trips' }} />
             <Stack.Screen name="trip-record" options={{ headerShown: true, title: 'Trip Record' }} />

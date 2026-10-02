@@ -265,8 +265,8 @@ describe("getRidePoints()", () => {
     test("returns ride points", async () => {
         const points = [
             {
-                latitude: 1,
-                longitude: 2,
+                coordinate: { latitude: 1, longitude: 2 },
+                timestamp: 1000,
             },
         ];
 
