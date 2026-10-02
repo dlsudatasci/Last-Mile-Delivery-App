@@ -1,7 +1,7 @@
+import { DeviationMetadata, PostTripAnswers, TripReview, useTripReviews } from '@/lib/store/useTripReviews';
 import { firestore } from '@/lib/utils/firebaseConfig';
 import { getAuth } from '@react-native-firebase/auth';
 import { collection, doc, getDoc, getDocs, query, where, writeBatch } from '@react-native-firebase/firestore';
-import { DeviationAnswers, DeviationMetadata, PostTripAnswers, TripReview, useTripReviews } from '@/lib/store/useTripReviews';
 
 export const submitTripReview = async (rideId: string) => {
     try {
@@ -16,6 +16,19 @@ export const submitTripReview = async (rideId: string) => {
         }
 
         const batch = writeBatch(firestore);
+        const existingResponseRefs = new Map<string, ReturnType<typeof doc>>();
+
+        if (Object.keys(review.answers ?? {}).length > 0) {
+            const responsesQuery = query(
+                collection(firestore, 'deviationResponses'),
+                where('rideId', '==', rideId)
+            );
+            const existingResponses = await getDocs(responsesQuery);
+            existingResponses.forEach((responseSnap: any) => {
+                const deviationId = responseSnap.data().deviationId;
+                if (deviationId) existingResponseRefs.set(deviationId, responseSnap.ref);
+            });
+        }
 
         // 1. Submit Post-Trip Questionnaire Response
         if (review.postTrip) {
@@ -65,7 +78,8 @@ export const submitTripReview = async (rideId: string) => {
 
                 // B. Save the route change questionnaire response.
                 if (answer.questionnaire) {
-                    const deviationResponseRef = doc(collection(firestore, 'deviationResponses'));
+                    const deviationResponseRef = existingResponseRefs.get(deviationId)
+                        ?? doc(collection(firestore, 'deviationResponses'));
                     batch.set(deviationResponseRef, {
                         responseId: deviationResponseRef.id,
                         deviationId: deviationId,

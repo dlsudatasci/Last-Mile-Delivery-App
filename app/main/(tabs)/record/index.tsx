@@ -298,7 +298,7 @@ export default function Record() {
             router.replace(
                 `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
                     result.rideId as string
-                )}&deviationCount=${deviationEvents.length}`
+                )}&deviationCount=${result.deviationCount ?? 0}`
             );
             setIsSaving(false);
         } else {

@@ -49,6 +49,7 @@ jest.mock("@/lib/store/useTripReviews", () => ({
 describe("submitTripReview()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        (getDocs as jest.Mock).mockResolvedValue({ forEach: () => undefined });
     });
 
     test("throws an error when the user is not authenticated", async () => {
@@ -293,6 +294,40 @@ describe("submitTripReview()", () => {
         );
 
         expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+    });
+
+    test("reuses an existing deviation response document when retrying a review", async () => {
+        const existingResponseRef = { id: "existing-response" };
+        (getAuth as jest.Mock).mockReturnValue({ currentUser: { uid: "user123" } });
+        (useTripReviews.getState as jest.Mock).mockReturnValue({
+            reviews: {
+                ride123: {
+                    status: "pending",
+                    answers: {
+                        deviation123: {
+                            whyRoute: "Traffic Congestion",
+                            affect: "Often",
+                            questionnaire: { primaryReason: "Traffic Congestion" },
+                        },
+                    },
+                },
+            },
+        });
+        (getDocs as jest.Mock).mockResolvedValue({
+            forEach: (callback: (snapshot: unknown) => void) => callback({
+                ref: existingResponseRef,
+                data: () => ({ deviationId: "deviation123" }),
+            }),
+        });
+        (writeBatch as jest.Mock).mockReturnValue(mockBatch);
+        mockBatch.commit.mockResolvedValue(undefined);
+
+        await submitTripReview("ride123");
+
+        expect(mockBatch.set).toHaveBeenCalledWith(
+            existingResponseRef,
+            expect.objectContaining({ responseId: "existing-response", deviationId: "deviation123" })
+        );
     });
 
     test("uses default values for missing optional questionnaire fields", async () => {
