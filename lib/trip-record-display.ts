@@ -1,7 +1,6 @@
 import {
     AVOID_ROAD_FREQUENCY_OPTIONS,
     BLOCKAGE_OPTIONS,
-    DeviationQuestionnaireAnswers,
     FREQUENCY_OPTIONS,
     LANGUAGE_LABELS,
     LocalizedOption,
@@ -12,9 +11,10 @@ import {
     STOP_DURATION_OPTIONS,
     TRAFFIC_SEVERITY_OPTIONS,
     YES_NO_UNSURE_OPTIONS,
+    isDeviationQuestionnaireComplete,
     shouldAskBlockageFollowUp,
     shouldAskPersonalStopFollowUps,
-    shouldAskTrafficFollowUps,
+    shouldAskTrafficFollowUps
 } from './deviation-questionnaire';
 import { FetchRideData } from './firebase-crud/rides';
 import { DeviationAnswers, PostTripAnswers, TripReview } from './store/useTripReviews';
@@ -43,8 +43,27 @@ export function getReviewStatusLabel(review?: TripReview) {
     return 'Pending Questions';
 }
 
-export function getChangeRouteCount(review?: TripReview) {
-    return review ? Object.keys(review.answers ?? {}).length : 0;
+export function getChangeRouteCount(review?: TripReview, detectedCount: number = 0) {
+    // Detected changes are saved on the ride before the rider completes the
+    // questionnaire. Do not make the UI report zero simply because the separate
+    // deviation-response documents have not been written yet.
+    const submittedCount = review ? Object.keys(review.answers ?? {}).length : 0;
+    return Math.max(submittedCount, Number.isFinite(detectedCount) ? Math.max(0, detectedCount) : 0);
+}
+
+export function hasCompleteTripReview(review?: TripReview, detectedCount: number = 0) {
+    const postTrip = review?.postTrip;
+    if (!postTrip?.arrival?.trim() || !Number.isFinite(postTrip.etaRating) || !Number.isFinite(postTrip.stressRating)) {
+        return false;
+    }
+
+    const requiredDeviationCount = Number.isFinite(detectedCount) ? Math.max(0, Math.floor(detectedCount)) : 0;
+    const deviationAnswers = Object.values(review?.answers ?? {});
+    if (deviationAnswers.length < requiredDeviationCount) return false;
+
+    return deviationAnswers.slice(0, requiredDeviationCount).every(answer =>
+        !!answer.questionnaire && isDeviationQuestionnaireComplete(answer.questionnaire)
+    );
 }
 
 export function formatPoint(point?: { latitude: number; longitude: number } | null) {

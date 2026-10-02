@@ -83,6 +83,14 @@ export interface RideDeviationEvent {
     activeRouteId?: string;
 }
 
+export interface FinishRideResult {
+    success: boolean;
+    rideId?: string;
+    /** The count written to the ride document for this completed trip. */
+    deviationCount?: number;
+    error?: unknown;
+}
+
 interface RideState {
     // Ride recording state
     isRecording: boolean;
@@ -118,7 +126,7 @@ interface RideState {
 
     // Actions
     startRide: () => Promise<boolean>;
-    finishRide: (tripName?: string) => Promise<{ success: boolean; rideId?: string; error?: any }>;
+    finishRide: (tripName?: string) => Promise<FinishRideResult>;
     increaseDuration: () => void;
     syncDurationFromClock: () => void;
     addPoint: (location: LocationObject) => void;
@@ -347,7 +355,10 @@ export const useRideStore = create<RideState>((set, get) => ({
             });
             await setAsyncFlag('isPaused', false);
             await setAsyncFlag('isRecording', false);
-            return { success: true, rideId };
+            // Return the same snapshot used for the persisted ride. The recording
+            // screen can otherwise continue with an older render whose
+            // `deviationEvents` value predates a late reroute.
+            return { success: true, rideId, deviationCount: deviationEvents.length };
         } catch (error) {
             // The record screen shows a retry state on failure and the ride data stays
             // in this store, so an offline/transient failure is expected, not a crash.

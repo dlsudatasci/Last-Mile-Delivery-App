@@ -7,6 +7,7 @@ import {
     getDeviationRows,
     getPostTripRows,
     getReviewStatusLabel,
+    hasCompleteTripReview,
     summarizeDeviation,
 } from "../lib/trip-record-display";
 
@@ -139,6 +140,41 @@ describe("getChangeRouteCount()", () => {
                 },
             } as any)
         ).toBe(2);
+    });
+
+    test("keeps the persisted detected count when responses are missing", () => {
+        expect(getChangeRouteCount(undefined, 5)).toBe(5);
+        expect(getChangeRouteCount({ answers: { first: "value" } } as any, 5)).toBe(5);
+    });
+});
+
+describe("hasCompleteTripReview()", () => {
+    const postTrip = { arrival: "On time", etaRating: 4, stressRating: 2 };
+
+    test("accepts a complete review with no route changes", () => {
+        expect(hasCompleteTripReview({ status: "pending", answers: {}, postTrip }, 0)).toBe(true);
+    });
+
+    test("requires complete answers for each detected route change", () => {
+        expect(hasCompleteTripReview({ status: "pending", answers: {}, postTrip }, 1)).toBe(false);
+        expect(hasCompleteTripReview({
+            status: "pending",
+            postTrip,
+            answers: {
+                deviation: {
+                    whyRoute: "Traffic Congestion",
+                    affect: "Often",
+                    questionnaire: {
+                        primaryReason: "Traffic Congestion",
+                        trafficSeverity: "4 = Heavy",
+                        rushHourCause: "Yes",
+                        chooseDuringNonRush: "No",
+                        deviateAgainFrequency: "Often",
+                        avoidRoadFrequency: "Sometimes",
+                    } as any,
+                },
+            },
+        }, 1)).toBe(true);
     });
 });
 

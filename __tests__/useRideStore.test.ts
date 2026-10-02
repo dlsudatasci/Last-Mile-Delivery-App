@@ -1046,6 +1046,8 @@ describe("useRideStore", () => {
 
         expect(result.rideId).toBe("ride-123");
 
+        expect(result.deviationCount).toBe(0);
+
         expect(saveRide).toHaveBeenCalledTimes(1);
 
         expect(useRideStore.getState().isRecording).toBe(false);
@@ -1177,6 +1179,23 @@ describe("useRideStore", () => {
                 deviationCount: 0,
             })
         );
+    });
+
+    test("finishRide returns the deviation count from the snapshot it saves", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
+        (saveRide as jest.Mock).mockResolvedValue("ride-123");
+        useRideStore.setState({
+            points: [{ coordinate: { latitude: 1, longitude: 2 }, timestamp: 1 }],
+            deviationEvents: [
+                { timestamp: 1, location: [121, 14], offRouteDistanceM: 40 },
+                { timestamp: 2, location: [121.01, 14.01], offRouteDistanceM: 42 },
+            ],
+        });
+
+        const result = await useRideStore.getState().finishRide();
+
+        expect(result).toMatchObject({ success: true, rideId: "ride-123", deviationCount: 2 });
+        expect(saveRide).toHaveBeenCalledWith(expect.objectContaining({ deviationCount: 2 }));
     });
 
     test("finishRide uses provided trip route title", async () => {

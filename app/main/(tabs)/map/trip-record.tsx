@@ -1,6 +1,6 @@
 import SpinningWheel from '@/components/common/SpinningWheel';
 import { formatDuration } from '@/lib/common/formulas';
-import { fetchTripReview } from '@/lib/firebase-crud/reviews';
+import { fetchTripReview, submitTripReview } from '@/lib/firebase-crud/reviews';
 import { FetchedGeneratedRoute, FetchRideData, getGeneratedRoutesByRideId, getRidePoints } from '@/lib/firebase-crud/rides';
 import { useRidesStore } from '@/lib/store/useRidesStore';
 import { RidePoint } from '@/lib/store/useRideStore';
@@ -14,15 +14,16 @@ import {
     getDeviationRows,
     getPostTripRows,
     getReviewStatusLabel,
+    hasCompleteTripReview,
 } from '@/lib/trip-record-display';
 import { LngLat } from '@/lib/utils/directions';
 import { configureMapboxAccessToken } from '@/lib/utils/mapbox';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { getAuth } from '@react-native-firebase/auth';
 import Mapbox from '@rnmapbox/maps';
-import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { Button, Divider, Icon, MD3Theme, Surface, Text, useTheme } from 'react-native-paper';
 
 type DetailTab = 'overview' | 'map' | 'deviations' | 'responses';
@@ -72,6 +73,7 @@ export default function TripRecordDetails() {
     const { id } = useLocalSearchParams<{ id?: string }>();
     const { selectRide } = useRidesStore();
     const reviews = useTripReviews(state => state.reviews);
+    const markReviewed = useTripReviews(state => state.markReviewed);
     const [trip, setTrip] = useState<TripRecord | null>(null);
     const [activeTab, setActiveTab] = useState<DetailTab>('overview');
     const [selectedDeviationId, setSelectedDeviationId] = useState<string | null>(null);
@@ -79,6 +81,7 @@ export default function TripRecordDetails() {
     const [gpsPoints, setGpsPoints] = useState<RidePoint[]>([]);
     const [remoteReview, setRemoteReview] = useState<TripReview | null>(null);
     const [mapDataLoading, setMapDataLoading] = useState(false);
+    const [isRetryingReview, setIsRetryingReview] = useState(false);
     const [showSuggested, setShowSuggested] = useState(true);
     const [showActual, setShowActual] = useState(true);
     const [showRerouted, setShowRerouted] = useState(true);
@@ -142,7 +145,35 @@ export default function TripRecordDetails() {
     const tripDate = new Date(trip.createdAt || trip.endTime || trip.startTime);
     const actualDistanceM = trip.distance || 0;
     const actualDurationSec = trip.duration || 0;
-    const deviationCount = getChangeRouteCount(review);
+    const detectedDeviationCount = trip.deviationCount ?? Object.keys(localReview?.answers ?? {}).length;
+    const deviationCount = getChangeRouteCount(review, detectedDeviationCount);
+    const canRetryLocalReview = hasCompleteTripReview(localReview, detectedDeviationCount);
+    const reviewStatus = remoteReview
+        ? getReviewStatusLabel(remoteReview)
+        : localReview
+            ? 'Saved on device'
+            : getReviewStatusLabel(undefined);
+
+    const openQuestionnaire = () => router.push(
+        `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
+            trip.id
+        )}&deviationCount=${detectedDeviationCount}&fromTripRecord=1`
+    );
+
+    const retryLocalReview = async () => {
+        if (!canRetryLocalReview || isRetryingReview) return;
+        setIsRetryingReview(true);
+        try {
+            await submitTripReview(trip.id);
+            markReviewed(trip.id);
+            setRemoteReview({ ...localReview!, status: 'reviewed' });
+        } catch (error) {
+            console.error('Failed to retry trip review submission:', error);
+            Alert.alert('Sync failed', 'Your saved responses could not be submitted. Please try again when you have a connection.');
+        } finally {
+            setIsRetryingReview(false);
+        }
+    };
     const suggestedDistanceM = trip.suggestedRouteDistanceM;
     const suggestedDurationSec = trip.suggestedRouteDurationSec;
     const distanceDiffKm =
@@ -159,7 +190,7 @@ export default function TripRecordDetails() {
                         <Text style={styles.headerDate}>
                             {formatDate(tripDate.getTime())} · {formatClock(tripDate.getTime())}
                         </Text>
-                        <Text style={styles.statusBadge}>{getReviewStatusLabel(review)}</Text>
+                        <Text style={styles.statusBadge}>{reviewStatus}</Text>
                     </View>
                     <Text style={styles.routeTitle}>{routeTitle}</Text>
                     <Text style={styles.studyLine}>Study Trip · DEVIA Route Study</Text>
@@ -244,7 +275,13 @@ export default function TripRecordDetails() {
 
                 {activeTab === 'deviations' && (
                     <View style={styles.tabContent}>
-                        {deviations.length === 0 ? (
+                        {deviations.length === 0 && deviationCount > 0 ? (
+                            <Surface style={styles.card}>
+                                <Text style={styles.emptyText}>
+                                    {deviationCount} {deviationCount === 1 ? 'route change was' : 'route changes were'} detected for this trip, but the route-change questionnaire has not been submitted yet.
+                                </Text>
+                            </Surface>
+                        ) : deviations.length === 0 ? (
                             <Surface style={styles.card}>
                                 <Text style={styles.emptyText}>No route changes were detected for this trip.</Text>
                             </Surface>
@@ -288,20 +325,25 @@ export default function TripRecordDetails() {
                                             You haven't completed the post-trip questionnaire for this trip yet.
                                         </Text>
                                     </View>
+                                    <Button mode="contained" icon="pencil-plus-outline" onPress={openQuestionnaire} style={styles.answerButton}>
+                                        Add Responses
+                                    </Button>
+                                </View>
+                            )}
+                            {!mapDataLoading && !remoteReview && localReview?.postTrip && (
+                                <View>
+                                    <Text style={styles.emptyText}>
+                                        These responses are saved on this device and can be submitted again.
+                                    </Text>
                                     <Button
-                                        mode="contained"
-                                        icon="pencil-plus-outline"
-                                        onPress={() =>
-                                            trip &&
-                                            router.push(
-                                                `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
-                                                    trip.id
-                                                )}&deviationCount=${trip.deviationCount ?? 0}&fromTripRecord=1`
-                                            )
-                                        }
+                                        mode="outlined"
+                                        icon={canRetryLocalReview ? 'cloud-upload-outline' : 'pencil-outline'}
+                                        loading={isRetryingReview}
+                                        disabled={isRetryingReview}
+                                        onPress={canRetryLocalReview ? retryLocalReview : openQuestionnaire}
                                         style={styles.answerButton}
                                     >
-                                        Add Responses
+                                        {canRetryLocalReview ? 'Retry Sync' : 'Complete Responses'}
                                     </Button>
                                 </View>
                             )}
