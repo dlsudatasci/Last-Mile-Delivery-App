@@ -431,7 +431,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 newHeading = calculatedBearing >= 0 ? calculatedBearing : 360 + calculatedBearing;
             }
         }
-        
+
         newPoint.heading = newHeading;
 
         const newPoints = [...points, newPoint];
@@ -560,7 +560,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         const state = get();
         const shouldRefreshSuggestedRoute =
             !state.isRecording || state.suggestedRouteDistanceM <= 0 || state.suggestedRouteDurationSec <= 0;
-            
+
         let newGeneratedRoutes = state.generatedRoutes;
         let newActiveGeneratedRouteId = state.activeGeneratedRouteId;
 
@@ -568,7 +568,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         if (state.isRecording) {
             const sequence = state.generatedRoutes.length + 1;
             const routeId = `route-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-            
+
             const newGeneratedRoute: GeneratedRoute = {
                 routeId,
                 rideId: '', // Will be populated in saveRide
@@ -581,7 +581,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 remainingDistanceOriginal: sequence === 1 ? null : state.activeRouteDistanceM,
                 remainingDistanceNew: route.distanceM,
             };
-            
+
             newGeneratedRoutes = [...state.generatedRoutes, newGeneratedRoute];
             newActiveGeneratedRouteId = routeId;
         }
@@ -608,7 +608,6 @@ export const useRideStore = create<RideState>((set, get) => ({
         set(state => ({ deviationEvents: [...state.deviationEvents, { ...event, activeRouteId }] }));
     },
 }));
-
 // Only recover a cold session. A storage read must never overwrite a trip that
 // started, paused, finished, or was cancelled while that read was pending.
 export async function recoverRecordingSession() {
@@ -639,13 +638,12 @@ export function subscribeLiveRouteUpdates(
     let offRouteCount = 0;
     let lastRerouteAt = 0;
     let lastTrafficAt = 0;
-    let pending: { state: RideState; kind: 'traffic' | 'rerouting' } | null = null;
+    let pending: { state: RideState; kind: 'traffic' | 'rerouting'; startTime: number | null } | null = null;
 
     const update = () => {
         const state = useRideStore.getState();
         if (pending && (!state.isRecording || state.isPaused ||
-            state.startTime !== pending.state.startTime ||
-            state.activeRouteCoordinates !== pending.state.activeRouteCoordinates ||
+            state.startTime !== pending.startTime ||
             state.activeRouteDestination !== pending.state.activeRouteDestination)) {
             pending = null;
             state.setRouteUpdateStatus('idle');
@@ -665,37 +663,62 @@ export function subscribeLiveRouteUpdates(
         const from: LngLat = [point.coordinate.longitude, point.coordinate.latitude];
         const distance = getDistanceToRouteM(from, state.activeRouteCoordinates);
         const now = Date.now();
-        offRouteCount = distance >= 35 ? offRouteCount + 1 : 0;
-        const deviation = offRouteCount >= 3 && now - lastRerouteAt >= 45000;
-        // Traffic must not replace the route before the existing deviation
-        // criteria have been met, or block a confirmed deviation behind it.
-        if (!deviation && (pending || distance >= 35 || now - (lastTrafficAt || state.activeRouteUpdatedAt || 0) < 180000)) return;
+        // Smooth out GPS noise by decrementing the counter instead of hard resetting it.
+        if (distance >= 35) {
+            offRouteCount += 1;
+        } else if (offRouteCount > 0) {
+            offRouteCount = Math.max(0, offRouteCount - 1);
+        }
+        // Reroute immediately if far off-route (>100m). Otherwise, wait for 2 consecutive off-route fixes.
+        const isFarOffRoute = distance >= 100 && offRouteCount >= 1;
+        const isModerateDeviation = offRouteCount >= 2;
+        const deviation = (isFarOffRoute || isModerateDeviation) && now - lastRerouteAt >= 15000;
+        // Traffic must not replace the route before the existing deviation criteria have been met.
+        if (!deviation && (pending || now - (lastTrafficAt || state.activeRouteUpdatedAt || 0) < 180000)) return;
         if (deviation) { lastRerouteAt = now; offRouteCount = 0; }
         else lastTrafficAt = now;
-        const request = { state, kind: deviation ? 'rerouting' as const : 'traffic' as const };
+        const request = { state, kind: deviation ? 'rerouting' as const : 'traffic' as const, startTime: state.startTime };
         pending = request;
         const previousEtaSec = getRemainingEta();
         state.setRouteUpdateStatus(request.kind);
         const destination = state.activeRouteDestination;
-        void requestRoute(from, destination).then(route => {
-            const latest = useRideStore.getState();
-            if (disposed || pending !== request || !route || !latest.isRecording || latest.isPaused ||
-                latest.startTime !== state.startTime || latest.activeRouteCoordinates !== state.activeRouteCoordinates ||
-                latest.activeRouteDestination !== destination) return;
-            pending = null;
-            latest.setActiveRoute(route, destination, deviation ? 'Regenerated Route' : 'Traffic Update');
-            if (deviation) latest.addDeviationEvent({
+        // Record the deviation immediately to ensure post-trip questions appear even if the network fails.
+        if (deviation) {
+            state.addDeviationEvent({
                 timestamp: now,
                 location: from,
                 offRouteDistanceM: distance,
                 previousInstruction: getNextNavigationInstruction(point, state.activeRouteSteps)?.text,
-                newInstruction: route.steps[0]?.instruction,
                 previousEtaSec,
-                newEtaSec: route.durationSec,
             });
+        }
+        void requestRoute(from, destination).then(route => {
+            const latest = useRideStore.getState();
+            // Only discard the route if the trip restarted or destination changed.
+            if (disposed || pending !== request || !route || !latest.isRecording || latest.isPaused ||
+                latest.startTime !== request.startTime ||
+                latest.activeRouteDestination !== destination) return;
+            pending = null;
+            latest.setActiveRoute(route, destination, deviation ? 'Regenerated Route' : 'Traffic Update');
+            // Enrich the initial deviation event with the new route details.
+            if (deviation) {
+                const events = [...latest.deviationEvents];
+                const lastEvent = events.length > 0 ? { ...events[events.length - 1] } : null;
+                if (lastEvent && lastEvent.timestamp === now) {
+                    lastEvent.newInstruction = route.steps[0]?.instruction;
+                    lastEvent.newEtaSec = route.durationSec;
+                    events[events.length - 1] = lastEvent;
+                    useRideStore.setState({ deviationEvents: events });
+                }
+            }
             latest.setRouteUpdateStatus('idle');
         }).catch(error => {
             console.warn('Failed to update live route:', error);
+            // Retry the reroute immediately on the next GPS fix if the API call fails.
+            if (deviation) {
+                lastRerouteAt = 0;
+                offRouteCount = 2; // Keep count high for immediate re-trigger
+            }
         }).finally(() => {
             if (pending === request) {
                 pending = null;
@@ -735,10 +758,12 @@ export function getNextDisplayPoints({
         );
 
         if (!snapped) {
-            if (displayPoints.length > 0) {
+            // Show the rider at their actual GPS position so the icon doesn't freeze when off-route.
+            const lastDisplayPoint = displayPoints[displayPoints.length - 1];
+            if (lastDisplayPoint && haversineDistance(lastDisplayPoint, rawPoint) < MIN_DISPLAY_POINT_DISTANCE_M) {
                 return displayPoints;
             }
-            return [rawPoint];
+            return [...displayPoints, rawPoint];
         }
 
         const snappedPoint: RidePoint = {
