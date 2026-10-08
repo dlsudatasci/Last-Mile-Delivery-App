@@ -683,7 +683,9 @@ export function subscribeLiveRouteUpdates(
         state.setRouteUpdateStatus(request.kind);
         const destination = state.activeRouteDestination;
         // Record the deviation immediately to ensure post-trip questions appear even if the network fails.
-        if (deviation) {
+        const lastEvent = state.deviationEvents[state.deviationEvents.length - 1];
+        const isNewDeviation = !lastEvent || lastEvent.activeRouteId !== state.activeGeneratedRouteId;
+        if (deviation && isNewDeviation) {
             state.addDeviationEvent({
                 timestamp: now,
                 location: from,
@@ -697,17 +699,18 @@ export function subscribeLiveRouteUpdates(
             // Only discard the route if the trip restarted or destination changed.
             if (disposed || pending !== request || !route || !latest.isRecording || latest.isPaused ||
                 latest.startTime !== request.startTime ||
-                latest.activeRouteDestination !== destination) return;
+                latest.activeRouteDestination?.[0] !== destination?.[0] ||
+                latest.activeRouteDestination?.[1] !== destination?.[1]) return;
             pending = null;
             latest.setActiveRoute(route, destination, deviation ? 'Regenerated Route' : 'Traffic Update');
             // Enrich the initial deviation event with the new route details.
             if (deviation) {
                 const events = [...latest.deviationEvents];
-                const lastEvent = events.length > 0 ? { ...events[events.length - 1] } : null;
-                if (lastEvent && lastEvent.timestamp === now) {
-                    lastEvent.newInstruction = route.steps[0]?.instruction;
-                    lastEvent.newEtaSec = route.durationSec;
-                    events[events.length - 1] = lastEvent;
+                const lastEventToEnrich = events.length > 0 ? { ...events[events.length - 1] } : null;
+                if (lastEventToEnrich && lastEventToEnrich.activeRouteId === state.activeGeneratedRouteId) {
+                    lastEventToEnrich.newInstruction = route.steps[0]?.instruction;
+                    lastEventToEnrich.newEtaSec = route.durationSec;
+                    events[events.length - 1] = lastEventToEnrich;
                     useRideStore.setState({ deviationEvents: events });
                 }
             }

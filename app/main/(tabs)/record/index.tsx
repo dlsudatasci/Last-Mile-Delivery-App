@@ -404,11 +404,34 @@ export default function Record() {
         setShowCamera(false);
     };
 
+    const handleCloseTrip = () => {
+        Alert.alert(
+            'Trip in progress',
+            'Cancel trip? all recorded data will be lost',
+            [
+                { text: 'Continue Trip', style: 'cancel' },
+                {
+                    text: 'Cancel Trip',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await useRideStore.getState().resetRide();
+                            router.replace('/main/(tabs)/home');
+                        } catch (error) {
+                            console.error('Failed to cancel trip:', error);
+                        }
+                    },
+                },
+            ],
+            { cancelable: true }
+        );
+    };
+
     const styles = getStyles(theme);
 
     return (
         <>
-            <Stack.Screen options={{ headerLeft: () => <HeaderBackButton onPress={requestBack} />, headerRight: () => null }} />
+            <Stack.Screen options={{ headerLeft: () => <IconButton icon="close" onPress={handleCloseTrip} />, headerRight: () => null }} />
             <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
                 {/* Saving Ride UI */}
                 {isSaving && (

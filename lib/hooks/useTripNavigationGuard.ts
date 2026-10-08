@@ -18,8 +18,8 @@ export function useTripNavigationGuard() {
         busy.current = true;
         let confirmed = false;
         Alert.alert(
-            'Trip in Progress',
-            'You must cancel the current trip before navigating away. All recorded data will be lost.',
+            'Trip in progress',
+            'Cancel trip? all recorded data will be lost',
             [
                 { text: 'Continue Trip', style: 'cancel', onPress: () => { busy.current = false; } },
                 {
