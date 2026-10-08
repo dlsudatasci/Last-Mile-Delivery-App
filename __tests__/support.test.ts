@@ -34,6 +34,10 @@ describe("createSupportRequest()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
 
+        (auth as any).currentUser = {
+            uid: "test-user"
+        };
+
         (collection as jest.Mock).mockReturnValue("ticketsCollection");
         (doc as jest.Mock).mockReturnValue("ticketDoc");
         (setDoc as jest.Mock).mockResolvedValue(undefined);
@@ -67,6 +71,7 @@ describe("createSupportRequest()", () => {
                 description: "Cannot log into the application",
                 userId: "test-user",
                 status: "pending",
+                createdAt: expect.any(Number)
             })
         );
     });
@@ -83,10 +88,6 @@ describe("createSupportRequest()", () => {
 
 
     test("rethrows Firestore errors", async () => {
-        (auth as any).currentUser = {
-            uid: "test-user",
-        };
-
         (setDoc as jest.Mock).mockRejectedValue(
             new Error("Firestore failed")
         );

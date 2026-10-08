@@ -1,11 +1,12 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { router, Stack } from 'expo-router';
-import { Icon, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { TouchableOpacity } from 'react-native';
+import { fontSizes } from '@/lib/utils/responsive-sizing';
 
 export default function Layout() {
     const theme = useTheme();
+
     const headerStyle = {
         backgroundColor: theme.colors.surface,
     };
@@ -25,11 +26,7 @@ export default function Layout() {
             initialRouteName="index"
             screenOptions={{
                 ...commonScreenOptions,
-                headerLeft: () => (
-                    <TouchableOpacity onPress={() => router.back()}>
-                        <Icon source={'chevron-left'} size={sizes.size32} />
-                    </TouchableOpacity>
-                ),
+                headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
                 headerTitleAlign: 'center',
             }}
         >
@@ -38,6 +35,10 @@ export default function Layout() {
                 options={{
                     headerShown: true,
                     title: 'Trip Recording',
+                    // Removal is guarded by the recording screen, covering the
+                    // header, system Back, gestures, and parent-stack actions.
+                    headerLeft: () => <HeaderBackButton onPress={() => router.back()} />,
+                    headerRight: () => null,
                 }}
             />
             <Stack.Screen name="new-trip" options={{ headerShown: false }} />
@@ -45,7 +46,9 @@ export default function Layout() {
             <Stack.Screen name="study-information" options={{ headerShown: false }} />
             <Stack.Screen name="destination" options={{ headerShown: false }} />
             <Stack.Screen name="route-preview" options={{ headerShown: false }} />
-            <Stack.Screen name="trip-end" options={{ headerShown: false }} />
+            <Stack.Screen name="post-trip-questionnaire" options={{ headerShown: true }} />
+            <Stack.Screen name="change-routes" options={{ headerShown: true }} />
+            <Stack.Screen name="reason-for-deviation" options={{ headerShown: true }} />
         </Stack>
     );
 }

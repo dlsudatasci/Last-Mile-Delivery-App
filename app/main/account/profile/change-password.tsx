@@ -215,7 +215,7 @@ const getStyles = (theme: MD3Theme) =>
             alignItems: 'center',
             marginTop: sizes.medium,
         },
-        username: {
+        preferredName: {
             fontSize: fontSizes.large,
             fontFamily: 'LGEIHeadline-Bold',
             marginBottom: sizes.tiny,

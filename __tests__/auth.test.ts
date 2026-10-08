@@ -328,11 +328,13 @@ describe("signInWithPhone()", () => {
 // saveOnboardingProfile() testing
 describe("saveOnboardingProfile()", () => {
     const profile = {
-        fullName: "Juan Dela Cruz",
+        preferredName: "Juan Dela Cruz",
         gender: "Male",
         ageRange: "25-34",
         city: "Pasig",
         yearsExperience: "3 years",
+        deliveryPlatform: "Grab",
+        riderCode: "123456",
         phone: "09171234567",
         acceptedPolicies: true,
     };
@@ -352,20 +354,19 @@ describe("saveOnboardingProfile()", () => {
         expect(result.data).toEqual({
             id: "user123",
             ...profile,
-            username: profile.fullName,
+            preferredName: profile.preferredName,
         });
 
         expect(setDoc).toHaveBeenCalledTimes(1);
     });
 
-    test("stores username using the full name", async () => {
+    test("stores preferredName properly", async () => {
         await saveOnboardingProfile("user123", profile);
 
         expect(setDoc).toHaveBeenCalledWith(
             "user-doc",
             expect.objectContaining({
-                username: "Juan Dela Cruz",
-                fullName: "Juan Dela Cruz",
+                preferredName: "Juan Dela Cruz",
             }),
             { merge: true }
         );
@@ -405,7 +406,7 @@ describe("getUserProfile()", () => {
         (getDoc as jest.Mock).mockResolvedValue({
             exists: () => true,
             data: () => ({
-                username: "Juan",
+                preferredName: "Juan",
                 email: "juan@test.com",
             }),
         });
@@ -416,7 +417,7 @@ describe("getUserProfile()", () => {
             success: true,
             data: {
                 id: "user123",
-                username: "Juan",
+                preferredName: "Juan",
                 email: "juan@test.com",
             },
         });
@@ -469,19 +470,16 @@ describe("updateUserProfile()", () => {
         });
     });
 
-    test("updates profile without uploading an image", async () => {
+    test("updates profile successfully", async () => {
         const result = await updateUserProfile(
             "user123",
-            "Juan Dela Cruz",
-            null
+            "Juan Dela Cruz"
         );
-
-        expect(mockPutFile).not.toHaveBeenCalled();
 
         expect(setDoc).toHaveBeenCalledWith(
             "user-doc",
             expect.objectContaining({
-                username: "Juan Dela Cruz",
+                preferredName: "Juan Dela Cruz",
             }),
             { merge: true }
         );
@@ -489,8 +487,7 @@ describe("updateUserProfile()", () => {
         expect(result).toEqual({
             success: true,
             data: {
-                username: "Juan Dela Cruz",
-                avatarUrl: null,
+                preferredName: "Juan Dela Cruz",
             },
         });
     });
@@ -498,8 +495,7 @@ describe("updateUserProfile()", () => {
     test("uses merge:true when updating Firestore", async () => {
         await updateUserProfile(
             "user123",
-            "Juan",
-            null
+            "Juan"
         );
 
         expect(setDoc).toHaveBeenCalledWith(
@@ -517,67 +513,12 @@ describe("updateUserProfile()", () => {
         await expect(
             updateUserProfile(
                 "user123",
-                "Juan",
-                null
+                "Juan"
             )
         ).rejects.toThrow("Firestore failed");
     });
 
-    test("uploads a replacement profile image", async () => {
-        const uploadTask = Promise.resolve() as any;
-        uploadTask.on = jest.fn();
 
-        mockPutFile.mockReturnValue(uploadTask);
-
-        mockGetDownloadURL.mockResolvedValue(
-            "https://firebase.dev/profile.jpg"
-        );
-
-        mockRef.mockReturnValue({
-            putFile: mockPutFile,
-            getDownloadURL: mockGetDownloadURL,
-        });
-
-        await updateUserProfile(
-            "user123",
-            "Juan",
-            "/tmp/profile.jpg"
-        );
-
-        expect(mockPutFile).toHaveBeenCalledWith("/tmp/profile.jpg");
-
-        expect(mockGetDownloadURL).toHaveBeenCalled();
-    });
-
-    test("stores uploaded avatar url", async () => {
-        const uploadTask = Promise.resolve() as any;
-        uploadTask.on = jest.fn();
-
-        mockPutFile.mockReturnValue(uploadTask);
-
-        mockGetDownloadURL.mockResolvedValue(
-            "https://firebase.dev/profile.jpg"
-        );
-
-        mockRef.mockReturnValue({
-            putFile: mockPutFile,
-            getDownloadURL: mockGetDownloadURL,
-        });
-
-        await updateUserProfile(
-            "user123",
-            "Juan",
-            "/tmp/profile.jpg"
-        );
-
-        expect(setDoc).toHaveBeenCalledWith(
-            "user-doc",
-            expect.objectContaining({
-                avatarUrl: "https://firebase.dev/profile.jpg",
-            }),
-            { merge: true }
-        );
-    });
 });
 
 // resolveAuthenticatedSession() testing
@@ -595,15 +536,14 @@ describe("resolveAuthenticatedSession()", () => {
         (getDoc as jest.Mock).mockResolvedValue({
             exists: () => true,
             data: () => ({
-                username: "Juan",
-                fullName: "Juan Dela Cruz",
+                preferredName: "Juan Dela Cruz",
             }),
         });
 
         const result = await resolveAuthenticatedSession(user as any);
 
         expect(result.destination).toBe("/main/(tabs)/home");
-        expect(result.profile?.username).toBe("Juan");
+        expect(result.profile?.preferredName).toBe("Juan");
     });
 
     test("uses the persisted profile when Firestore lookup fails", async () => {
@@ -614,7 +554,7 @@ describe("resolveAuthenticatedSession()", () => {
         (useUser.getState as jest.Mock).mockReturnValue({
             user: {
                 id: "user123",
-                username: "Persisted User",
+                preferredName: "Persisted User",
             },
             setUser: jest.fn(),
         });
@@ -622,7 +562,7 @@ describe("resolveAuthenticatedSession()", () => {
         const result = await resolveAuthenticatedSession(user as any);
 
         expect(result.destination).toBe("/main/(tabs)/home");
-        expect(result.profile?.username).toBe("Persisted User");
+        expect(result.profile?.preferredName).toBe("Persisted User");
     });
 
     test("restores a profile from local storage", async () => {
@@ -639,7 +579,7 @@ describe("resolveAuthenticatedSession()", () => {
 
         (getLocalAccount as jest.Mock).mockResolvedValue({
             phone: "09171234567",
-            fullName: "Juan Dela Cruz",
+            preferredName: "Juan Dela Cruz",
             gender: "Male",
             ageRange: "25-34",
             city: "Pasig",
@@ -653,7 +593,7 @@ describe("resolveAuthenticatedSession()", () => {
 
         expect(setUser).toHaveBeenCalled();
 
-        expect(result.profile?.fullName).toBe("Juan Dela Cruz");
+        expect(result.profile?.preferredName).toBe("Juan Dela Cruz");
     });
 
     test("routes to create-profile when no profile exists", async () => {
@@ -676,7 +616,7 @@ describe("resolveAuthenticatedSession()", () => {
         });
     });
 
-    test("falls back when Firestore profile has no username or fullName", async () => {
+    test("falls back when Firestore profile has no preferredName", async () => {
         (getDoc as jest.Mock).mockResolvedValue({
             exists: () => true,
             data: () => ({}),
@@ -716,6 +656,33 @@ describe("resolveAuthenticatedSession()", () => {
 
         expect(getLocalAccount).not.toHaveBeenCalled();
     });
+
+    test("does not use a persisted profile belonging to another user", async () => {
+        (getDoc as jest.Mock).mockRejectedValue(
+            new Error("Firestore unavailable")
+        );
+
+        const setUser = jest.fn();
+
+        (useUser.getState as jest.Mock).mockReturnValue({
+            user: {
+                id: "user999",
+                preferredName: "Wrong User",
+            },
+            setUser,
+        });
+
+        (getLocalAccount as jest.Mock).mockResolvedValue(null);
+
+        const result = await resolveAuthenticatedSession({
+            uid: "user123",
+            email: "09171234567@devia.app",
+        } as any);
+
+        expect(result.destination).toBe("/create-profile");
+        expect(result.profile).toBeNull();
+        expect(setUser).not.toHaveBeenCalled();
+    });
 });
 
 // createUserProfile() testing
@@ -727,20 +694,16 @@ describe("createUserProfile()", () => {
         (setDoc as jest.Mock).mockResolvedValue(undefined);
     });
 
-    test("creates a user profile without an image", async () => {
+    test("creates a user profile", async () => {
         const result = await createUserProfile(
             "user123",
-            "juan@test.com",
-            "Juan",
-            null
+            "Juan"
         );
 
         expect(setDoc).toHaveBeenCalledWith(
             "user-doc",
             expect.objectContaining({
-                username: "Juan",
-                email: "juan@test.com",
-                avatarUrl: null,
+                preferredName: "Juan",
             }),
             { merge: true }
         );
@@ -749,9 +712,7 @@ describe("createUserProfile()", () => {
             success: true,
             data: {
                 id: "user123",
-                username: "Juan",
-                avatarUrl: null,
-                email: "juan@test.com",
+                preferredName: "Juan",
             },
         });
     });
@@ -759,9 +720,7 @@ describe("createUserProfile()", () => {
     test("uses merge:true when creating the profile", async () => {
         await createUserProfile(
             "user123",
-            "juan@test.com",
-            "Juan",
-            null
+            "Juan"
         );
 
         expect(setDoc).toHaveBeenCalledWith(
@@ -779,68 +738,10 @@ describe("createUserProfile()", () => {
         await expect(
             createUserProfile(
                 "user123",
-                "juan@test.com",
-                "Juan",
-                null
+                "Juan"
             )
         ).rejects.toThrow("Firestore failed");
     });
 
-    test("uploads a profile image", async () => {
-        const uploadTask = Promise.resolve() as any;
-        uploadTask.on = jest.fn();
 
-        mockPutFile.mockReturnValue(uploadTask);
-
-        mockGetDownloadURL.mockResolvedValue(
-            "https://firebase.dev/profile.jpg"
-        );
-
-        mockRef.mockReturnValue({
-            putFile: mockPutFile,
-            getDownloadURL: mockGetDownloadURL,
-        });
-
-        await createUserProfile(
-            "user123",
-            "juan@test.com",
-            "Juan",
-            "/tmp/profile.jpg"
-        );
-
-        expect(mockPutFile).toHaveBeenCalledWith("/tmp/profile.jpg");
-
-        expect(mockGetDownloadURL).toHaveBeenCalled();
-    });
-
-    test("stores uploaded avatar url", async () => {
-        const uploadTask = Promise.resolve() as any;
-        uploadTask.on = jest.fn();
-
-        mockPutFile.mockReturnValue(uploadTask);
-
-        mockGetDownloadURL.mockResolvedValue(
-            "https://firebase.dev/profile.jpg"
-        );
-
-        mockRef.mockReturnValue({
-            putFile: mockPutFile,
-            getDownloadURL: mockGetDownloadURL,
-        });
-
-        await createUserProfile(
-            "user123",
-            "juan@test.com",
-            "Juan",
-            "/tmp/profile.jpg"
-        );
-
-        expect(setDoc).toHaveBeenCalledWith(
-            "user-doc",
-            expect.objectContaining({
-                avatarUrl: "https://firebase.dev/profile.jpg",
-            }),
-            { merge: true }
-        );
-    });
 });

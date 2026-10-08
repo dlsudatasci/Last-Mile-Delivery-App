@@ -35,12 +35,66 @@ const TermsOfServicePage = () => {
                     </Text>
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
-                <Section title="Purpose of Data Collection">
+                <Section title="Purpose of the Study">
                     <Text>
-                        The purpose of this research is to understand last-mile delivery experiences and infrastructure needs
-                        by collecting data from riders in real-world conditions. This includes analyzing delivery corridors,
-                        road conditions, and interactions with other road users to help improve delivery route planning.
+                        The purpose of this study is to understand the practical decision-making strategies of delivery
+                        drivers, often referred to as "street smarts." While delivery platforms provide suggested routes,
+                        these may not always reflect real-world conditions. This study aims to learn from participants'
+                        on-the-ground experience and routing decisions in order to improve how delivery routes are generated.
                     </Text>
+                    <Text style={styles.marginTop}>
+                        The goal is to incorporate these real-world insights into routing systems so that they better
+                        reflect actual driving conditions rather than relying solely on map-based optimization. This study
+                        does not evaluate or monitor participants' job performance for their employers. Instead, it seeks
+                        to use participants' professional experience to develop tools that better support delivery drivers
+                        in their day-to-day operations.
+                    </Text>
+                </Section>
+                <Divider style={{ marginHorizontal: sizes.large }} />
+
+                <Section title="Study Procedures">
+                    <Text style={styles.bold}>
+                        Note: Participants may withdraw from the study at any time. Compensation is based on the number
+                        of valid submissions completed, with full incentives provided only upon meeting the required quota.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        By participating in this study, you acknowledge and agree to the following procedures:
+                    </Text>
+                    <View style={styles.dataUseList}>
+                        <Text style={styles.dataUseItem}>
+                            1. Participants will be informed of the application’s purpose, data collection process, and terms and conditions. Consent will be established once participants agree to these terms.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            2. Participants will select or be assigned a target number of delivery submissions to complete within a specified period.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            3. Participants will use the mobile crowdsourcing application during their normal delivery operations to record relevant delivery data.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            4. Before starting each delivery, participants will manually initiate data collection through the application.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            5. The application will record the platform-suggested route, including the estimated time of arrival (ETA), as provided by the delivery service.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            6. Real-time delivery data will be collected, including GPS data, timestamps, and geospatial information.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            7. The application will detect and log any deviations from the suggested route. After completing each delivery, participants may be asked brief questions regarding their routing decisions.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            8. The application will include a checklist that allows participants to determine whether their submission meets the required criteria or if additional information is needed. Final validation of all submissions will be conducted by the researchers, and only verified entries will be counted toward quota fulfillment.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            9. Participants will manually end data collection after each delivery.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            10. Participants may request compensation through the application upon completing the required quota or upon withdrawal from the study. All requests will be verified before compensation is released through online payment channels.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            11. Additional follow-up questions may be administered to gather further insights into participants’ decision-making processes.
+                        </Text>
+                    </View>
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
 
@@ -48,6 +102,41 @@ const TermsOfServicePage = () => {
                     <Text>
                         You must be at least 18 years old or have the consent of a parent or guardian to use this app.
                         By using the app, you represent and warrant that you meet these requirements.
+                    </Text>
+                </Section>
+                <Divider style={{ marginHorizontal: sizes.large }} />
+
+                <Section title="Duration">
+                    <Text>
+                        Your participation in this study will take place over a specified period, during which you will
+                        record delivery data as part of your normal delivery activities. Each submission will require
+                        only minimal additional time, as data collection will occur alongside your regular deliveries.
+                        You may also be asked to answer brief follow-up questions after each delivery.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        The total duration of your participation will depend on how quickly you complete your assigned
+                        quota of valid delivery submissions.
+                    </Text>
+                </Section>
+                <Divider style={{ marginHorizontal: sizes.large }} />
+
+                <Section title="Voluntary Participation">
+                    <Text>
+                        Your participation in this study is voluntary. It is entirely your choice whether or not you
+                        decide to take part. If you choose to participate, you will be asked to provide your consent.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        Even after giving consent, you are free to withdraw from the study at any time and without
+                        providing a reason. You may do so by discontinuing use of the application or by informing the
+                        research team.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        If you withdraw from the study, you may still receive partial compensation based on the number
+                        of valid submissions you have completed. However, full incentives will only be provided to
+                        participants who complete the required quota.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        Withdrawing from this study will not affect your relationship with the researchers in any way.
                     </Text>
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
@@ -86,6 +175,55 @@ const TermsOfServicePage = () => {
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
 
+                <Section title="Benefits">
+                    <Text>
+                        You may receive compensation based on the number of valid delivery submissions you complete,
+                        with additional incentives provided upon completion of the required quota.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        There may be no direct personal benefit beyond this. However, the findings of this study may
+                        contribute to improving delivery routing systems by incorporating real-world driver experience.
+                        This may help create more practical and effective tools for delivery operations.
+                    </Text>
+                </Section>
+                <Divider style={{ marginHorizontal: sizes.large }} />
+
+                <Section title="Withdrawal and Data Redaction">
+                    <Text>
+                        You may choose to stop participating in this study at any time via the "Request Compensation"
+                        button in the app.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        <Text style={styles.bold}>Partial Compensation: </Text>
+                        If you opt out before completing the full quota, you will be compensated only for the valid
+                        routes submitted up to that point.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        <Text style={styles.bold}>Data Redaction: </Text>
+                        You may request to have your personal data redacted or deleted. However, please note:
+                    </Text>
+                    <View style={styles.dataUseList}>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Verification Requirement: </Text>
+                            Compensation is contingent upon the research team's ability to verify your data. If you
+                            request redaction before payment is processed, we will be unable to verify your submissions,
+                            and any pending compensation will be forfeited.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Anonymization Cut-off: </Text>
+                            To protect the integrity of the research, once your data has been anonymized and aggregated
+                            into the study's final dataset (i.e., it can no longer be linked back to your identity), it
+                            can no longer be redacted or removed.
+                        </Text>
+                        <Text style={styles.dataUseItem}>
+                            <Text style={styles.bold}>• Administrative Records: </Text>
+                            Even if your research data is redacted, the research group may be legally required to retain
+                            a record of your name and payment for auditing and financial purposes.
+                        </Text>
+                    </View>
+                </Section>
+                <Divider style={{ marginHorizontal: sizes.large }} />
+
                 <Section title="License and Intellectual Property">
                     <Text>
                         All content on the platform, including software, visuals, and text, is owned or licensed by the
@@ -102,13 +240,10 @@ const TermsOfServicePage = () => {
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
                 <Section title="Limitation of Liability">
-                    <Text>You have the following rights concerning your data:</Text>
-                    <View style={styles.rightsList}>
-                        <Text style={styles.rightItem}>
-                            This platform is provided "as is" without warranties of any kind. We are not liable for any
-                            indirect, incidental, or consequential damages arising from your use of the app.
-                        </Text>
-                    </View>
+                    <Text>
+                        This platform is provided "as is" without warranties of any kind. We are not liable for any
+                        indirect, incidental, or consequential damages arising from your use of the app.
+                    </Text>
                 </Section>
                 <Divider style={{ marginHorizontal: sizes.large }} />
                 <Section title="Changes to Terms">
@@ -120,8 +255,14 @@ const TermsOfServicePage = () => {
                 <Divider style={{ marginHorizontal: sizes.large }} />
                 <Section title="Contact Us">
                     <Text>
-                        If you have any questions or concerns about these Terms, please contact us at
-                        [bien_aaron_miranda@dlsu.edu.ph].
+                        If you have any questions at any time about this study, or if you experience any non-normative
+                        sensations because of participation, or to exercise your data privacy rights, you may contact
+                        the researcher via the proper channels.
+                    </Text>
+                    <Text style={styles.marginTop}>
+                        If you have any questions regarding your rights as a research participant, or if problems arise
+                        which you do not feel you can discuss with the Principal Investigator, please contact the Chair
+                        of the DLSU Research Ethics Review Committee at chairrerc@dlsu.edu.ph (632) 524-4611 local 513.
                     </Text>
                 </Section>
             </ScrollView>

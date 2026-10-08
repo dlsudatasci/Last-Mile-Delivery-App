@@ -28,7 +28,131 @@ jest.mock(
         require("@react-native-async-storage/async-storage/jest/async-storage-mock")
 );
 
+const mockSqliteTables = new Map<string, any[]>();
+let mockSqliteRowId = 0;
+
+const ensureTable = (name: string) => {
+    if (!mockSqliteTables.has(name)) mockSqliteTables.set(name, []);
+    return mockSqliteTables.get(name)!;
+};
+
+jest.mock("expo-sqlite", () => ({
+    openDatabaseAsync: jest.fn(async () => ({
+        execAsync: jest.fn(async () => {}),
+        runAsync: jest.fn(async (sql: string, params: any[] = []) => {
+            if (sql.includes("DELETE FROM local_accounts")) {
+                const rows = ensureTable("local_accounts");
+                if (sql.includes("WHERE phone = ?")) {
+                    mockSqliteTables.set(
+                        "local_accounts",
+                        rows.filter(row => row.phone !== params[0])
+                    );
+                } else {
+                    mockSqliteTables.set("local_accounts", []);
+                }
+                return;
+            }
+            if (sql.includes("INTO local_accounts")) {
+                const rows = ensureTable("local_accounts").filter(row => row.phone !== params[0]);
+                rows.push({
+                    phone: params[0],
+                    rider_code: params[1],
+                    full_name: params[2],
+                    gender: params[3],
+                    age_range: params[4],
+                    city: params[5],
+                    years_experience: params[6],
+                    accepted_policies: params[7],
+                    created_at: params[8],
+                });
+                mockSqliteTables.set("local_accounts", rows);
+                return;
+            }
+            if (sql.includes("DELETE FROM rider_code_registrations")) {
+                const rows = ensureTable("rider_code_registrations");
+                if (sql.includes("WHERE code = ?")) {
+                    mockSqliteTables.set(
+                        "rider_code_registrations",
+                        rows.filter(row => row.code !== params[0])
+                    );
+                } else {
+                    mockSqliteTables.set("rider_code_registrations", []);
+                }
+                return;
+            }
+            if (sql.includes("INTO rider_code_registrations")) {
+                const rows = ensureTable("rider_code_registrations").filter(row => row.code !== params[0]);
+                rows.push({ code: params[0], phone: params[1], registered_at: params[2] });
+                mockSqliteTables.set("rider_code_registrations", rows);
+                return;
+            }
+            if (sql.includes("DELETE FROM recent_destinations")) {
+                const rows = ensureTable("recent_destinations");
+                if (sql.includes("WHERE user_id = ? AND name = ?")) {
+                    mockSqliteTables.set(
+                        "recent_destinations",
+                        rows.filter(
+                            row =>
+                                !(
+                                    row.user_id === params[0] &&
+                                    row.name === params[1] &&
+                                    row.longitude === params[2] &&
+                                    row.latitude === params[3]
+                                )
+                        )
+                    );
+                } else if (sql.includes("WHERE user_id = ?")) {
+                    mockSqliteTables.set(
+                        "recent_destinations",
+                        rows.filter(row => row.user_id !== params[0])
+                    );
+                } else {
+                    mockSqliteTables.set("recent_destinations", []);
+                }
+                return;
+            }
+            if (sql.includes("INTO recent_destinations")) {
+                ensureTable("recent_destinations").push({
+                    __rowid: ++mockSqliteRowId,
+                    user_id: params[0],
+                    name: params[1],
+                    full_address: params[2],
+                    longitude: params[3],
+                    latitude: params[4],
+                    updated_at: params[5],
+                });
+            }
+        }),
+        getFirstAsync: jest.fn(async (sql: string, params: any[] = []) => {
+            if (sql.includes("FROM local_accounts")) {
+                return ensureTable("local_accounts").find(row => row.phone === params[0]) ?? null;
+            }
+            if (sql.includes("FROM rider_code_registrations")) {
+                return ensureTable("rider_code_registrations").find(row => row.code === params[0]) ?? null;
+            }
+            return null;
+        }),
+        getAllAsync: jest.fn(async (sql: string, params: any[] = []) => {
+            if (sql.includes("FROM recent_destinations")) {
+                const hasOffset = sql.includes("OFFSET");
+                const offset = hasOffset && typeof params[1] === "number" ? params[1] : 0;
+                const limit = !hasOffset && typeof params[1] === "number" ? params[1] : undefined;
+                return ensureTable("recent_destinations")
+                    .filter(row => row.user_id === params[0])
+                    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at) || b.__rowid - a.__rowid)
+                    .slice(offset, limit);
+            }
+            return [];
+        }),
+    })),
+}));
+
 jest.mock("expo-location");
+
+// NetInfo — use the library's shipped mock (defaults to a connected state)
+jest.mock("@react-native-community/netinfo", () =>
+    require("@react-native-community/netinfo/jest/netinfo-mock")
+);
 
 // Firebase App
 jest.mock("@react-native-firebase/app", () => ({}));

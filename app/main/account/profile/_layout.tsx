@@ -1,8 +1,8 @@
+import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { router, Stack } from 'expo-router';
-import { Icon, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 
-import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
-import { TouchableOpacity } from 'react-native';
+import { fontSizes } from '@/lib/utils/responsive-sizing';
 
 export default function Layout() {
     const theme = useTheme();
@@ -25,10 +25,11 @@ export default function Layout() {
         <Stack
             screenOptions={{
                 ...commonScreenOptions,
+                // This navigator does not contain the Profile tab. Navigate to
+                // the known destination rather than attempting to pop a nested
+                // Android stack that may have been restored without history.
                 headerLeft: () => (
-                    <TouchableOpacity onPress={() => router.dismiss()}>
-                        <Icon source={'chevron-left'} size={sizes.size32} />
-                    </TouchableOpacity>
+                    <HeaderBackButton onPress={() => router.replace('/main/(tabs)/profile')} />
                 ),
                 headerTitleAlign: 'center',
             }}

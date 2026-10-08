@@ -3,65 +3,17 @@ import { useTripReviews } from "../lib/store/useTripReviews";
 // usetripReviews testing
 describe("useTripReviews", () => {
     beforeEach(() => {
-        // In case the mock responses in useTripReviews are removed.
         useTripReviews.setState({
-            reviews: {
-                "trip-3": {
-                    status: "reviewed",
-                    answers: {
-                        d1: {
-                            whyRoute: "Matinding trapiko",
-                            affect: "Nakatipid sa oras",
-                            confidence: "Sigurado",
-                        },
-                        d2: {
-                            whyRoute: "Mas maikling ruta",
-                            affect: "Nakaikli ng distansya",
-                            confidence: "Sobrang sigurado",
-                        },
-                    },
-                },
-                "trip-4": {
-                    status: "reviewed",
-                    answers: {},
-                    routeFeedback: {
-                        optimalRoute: "Oo, ito ang pinakamagandang ruta",
-                        whyNoDeviation: "Pinakamabilis na ang iminungkahing ruta",
-                        experience: "Maganda",
-                    },
-                },
-                "trip-7": {
-                    status: "reviewed",
-                    answers: {},
-                    incompleteFeedback: {
-                        reason: "Nakansela ang order / booking",
-                        distanceReached: "Lampas kalahati",
-                        willRetry: "Hindi",
-                    },
-                },
+            reviews: {},
             },
-        });
+        );
     });
 
-    // #1
-    test("initializes with seeded reviews", () => {
-        const reviews = useTripReviews.getState().reviews;
-
-        expect(reviews["trip-3"]).toBeDefined();
-        expect(reviews["trip-4"]).toBeDefined();
-        expect(reviews["trip-7"]).toBeDefined();
-
-        expect(reviews["trip-3"].status).toBe("reviewed");
-        expect(reviews["trip-4"].status).toBe("reviewed");
-        expect(reviews["trip-7"].status).toBe("reviewed");
-    });
-
-    // #2 saveDeviation
+    // #1 saveDeviation
     test("saveDeviation creates a new pending review", () => {
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         const review = useTripReviews.getState().reviews["trip1"];
@@ -70,18 +22,75 @@ describe("useTripReviews", () => {
         expect(review.answers["d1"].whyRoute).toBe("Traffic");
     });
 
+    // #2
+    test("saveDeviation stores questionnaire, metadata, and language", () => {
+        useTripReviews.getState().saveDeviation("trip-rich", "d1", {
+            whyRoute: "Traffic",
+            affect: "Saved time",
+            language: "tl",
+
+            questionnaire: {
+                primaryReason: "Traffic Congestion",
+                trafficSeverity: "Heavy",
+                rushHourCause: "Work commute",
+                chooseDuringNonRush: "Yes",
+                deviateAgainFrequency: "Often",
+                avoidRoadFrequency: "Sometimes",
+            },
+
+            metadata: {
+                deviationId: "deviation-1",
+                routeId: "route-1",
+                rideId: "ride-1",
+                userId: "user-1",
+                index: 2,
+                isFaster: true,
+                hour: 8,
+                dayOfWeek: "Monday",
+                dayType: "Weekday",
+                gpsLocation: {
+                    latitude: 14.5995,
+                    longitude: 120.9842,
+                },
+            },
+        });
+
+        const answer =
+            useTripReviews.getState().reviews["trip-rich"].answers["d1"];
+
+        expect(answer.whyRoute).toBe("Traffic");
+        expect(answer.affect).toBe("Saved time");
+        expect(answer.language).toBe("tl");
+
+        expect(answer.questionnaire).toEqual({
+            primaryReason: "Traffic Congestion",
+            trafficSeverity: "Heavy",
+            rushHourCause: "Work commute",
+            chooseDuringNonRush: "Yes",
+            deviateAgainFrequency: "Often",
+            avoidRoadFrequency: "Sometimes",
+        });
+
+        expect(answer.metadata?.deviationId).toBe("deviation-1");
+        expect(answer.metadata?.routeId).toBe("route-1");
+        expect(answer.metadata?.rideId).toBe("ride-1");
+        expect(answer.metadata?.isFaster).toBe(true);
+        expect(answer.metadata?.gpsLocation).toEqual({
+            latitude: 14.5995,
+            longitude: 120.9842,
+        });
+    });
+
     // #3
     test("saveDeviation adds another deviation without overwriting existing ones", () => {
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().saveDeviation("trip1", "d2", {
             whyRoute: "Construction",
             affect: "Longer trip",
-            confidence: "Medium",
         });
 
         const answers = useTripReviews.getState().reviews["trip1"].answers;
@@ -96,13 +105,11 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().saveDeviation("trip1", "d1", {
             whyRoute: "Flood",
             affect: "Delayed",
-            confidence: "Low",
         });
 
         expect(
@@ -122,6 +129,20 @@ describe("useTripReviews", () => {
 
         expect(review.status).toBe("pending");
         expect(review.routeFeedback?.experience).toBe("Good");
+    });
+
+    test("savePostTrip creates a pending review", () => {
+        useTripReviews.getState().savePostTrip("trip-post", {
+            arrival: "On time",
+            etaRating: 4,
+            stressRating: 2,
+            language: "en",
+        });
+
+        const review = useTripReviews.getState().reviews["trip-post"];
+
+        expect(review.status).toBe("pending");
+        expect(review.postTrip?.arrival).toBe("On time");
     });
 
     // #6
@@ -181,7 +202,6 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip6", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().markReviewed("trip6");
@@ -194,28 +214,50 @@ describe("useTripReviews", () => {
 
     // #10
     test("markReviewed preserves routeFeedback", () => {
+        useTripReviews.getState().saveRouteFeedback("trip-4", {
+            optimalRoute: "Yes",
+            whyNoDeviation: "Fastest",
+            experience: "Good",
+        });
+
+        useTripReviews.getState().savePostTrip("trip-4", {
+            arrival: "Late",
+            etaRating: 3,
+            stressRating: 4,
+            language: "tl",
+        });
+
         useTripReviews.getState().markReviewed("trip-4");
+        const review = useTripReviews.getState().reviews["trip-4"];
 
-        expect(
-            useTripReviews.getState().reviews["trip-4"].routeFeedback
-        ).toBeDefined();
+        expect(review.routeFeedback).toEqual({
+            optimalRoute: "Yes",
+            whyNoDeviation: "Fastest",
+            experience: "Good",
+        });
 
-        expect(
-            useTripReviews.getState().reviews["trip-4"].status
-        ).toBe("reviewed");
+        expect(review.status).toBe("reviewed");
+        expect(review.postTrip?.arrival).toBe("Late");
     });
 
     // #11
     test("markReviewed preserves incompleteFeedback", () => {
+        useTripReviews.getState().saveIncompleteFeedback("trip-7", {
+            reason: "Cancelled",
+            distanceReached: "Halfway",
+            willRetry: "No",
+        });
+
         useTripReviews.getState().markReviewed("trip-7");
+        const review = useTripReviews.getState().reviews["trip-7"];
 
-        expect(
-            useTripReviews.getState().reviews["trip-7"].incompleteFeedback
-        ).toBeDefined();
+        expect(review.incompleteFeedback).toEqual({
+            reason: "Cancelled",
+            distanceReached: "Halfway",
+            willRetry: "No",
+        });
 
-        expect(
-            useTripReviews.getState().reviews["trip-7"].status
-        ).toBe("reviewed");
+        expect(review.status).toBe("reviewed");
     });
 
     // #12 markPending
@@ -223,7 +265,6 @@ describe("useTripReviews", () => {
         useTripReviews.getState().saveDeviation("trip6", "d1", {
             whyRoute: "Traffic",
             affect: "Saved time",
-            confidence: "High",
         });
 
         useTripReviews.getState().markPending("trip6");
@@ -232,5 +273,36 @@ describe("useTripReviews", () => {
 
         expect(review.status).toBe("pending");
         expect(review.answers["d1"]).toBeDefined();
+    });
+
+    // #13
+    test("markPending preserves postTrip, routeFeedback, and incompleteFeedback", () => {
+        useTripReviews.getState().savePostTrip("trip-pending", {
+            arrival: "On time",
+            etaRating: 4,
+            stressRating: 2,
+            language: "en",
+        });
+
+        useTripReviews.getState().saveRouteFeedback("trip-pending", {
+            optimalRoute: "Yes",
+            whyNoDeviation: "Fastest",
+            experience: "Good",
+        });
+
+        useTripReviews.getState().saveIncompleteFeedback("trip-pending", {
+            reason: "Cancelled",
+            distanceReached: "Halfway",
+            willRetry: "Yes",
+        });
+
+        useTripReviews.getState().markPending("trip-pending");
+
+        const review = useTripReviews.getState().reviews["trip-pending"];
+
+        expect(review.status).toBe("pending");
+        expect(review.postTrip?.arrival).toBe("On time");
+        expect(review.routeFeedback?.experience).toBe("Good");
+        expect(review.incompleteFeedback?.reason).toBe("Cancelled");
     });
 });

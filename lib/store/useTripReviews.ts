@@ -1,8 +1,11 @@
 import { IncompleteFeedback } from '@/lib/review-questions';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { DeviationQuestionnaireAnswers } from '../deviation-questionnaire';
 
 // Tracks the response state per trip (in-memory for the session).
-//   • Trips WITH deviations -> per-deviation answers (keyed by deviation id).
+//   • Trips WITH route changes -> per-route-change answers (keyed by existing deviation id fields).
 //   • Trips WITHOUT deviations -> a single "route confirmation" feedback.
 // Skipping marks a trip 'pending' so the rider can continue later; finishing
 // marks it 'reviewed'. Answers are kept so a resumed review keeps prior input.
@@ -10,13 +13,50 @@ import { create } from 'zustand';
 export interface DeviationAnswers {
     whyRoute: string;
     affect: string;
-    confidence: string;
+    questionnaire?: DeviationQuestionnaireAnswers;
+    metadata?: DeviationMetadata;
+    language?: 'en' | 'tl';
 }
 
-// Asked when a trip had NO deviations (the rider followed the optimal route).
+export interface DeviationMetadata {
+    deviationId?: string | null;
+    routeId?: string | null;
+    rideId?: string | null;
+    userId?: string | null;
+    index?: number | null;
+    dateTime?: string | null;
+    isFaster?: boolean | null;
+    timestamp?: number | null;
+    hour?: number | null;
+    dayOfWeek?: string | null;
+    dayType?: 'Weekday' | 'Weekend' | null;
+    gpsLocation?: { latitude: number; longitude: number } | null;
+    suggestedPoint?: { latitude: number; longitude: number } | null;
+    actualPoint?: { latitude: number; longitude: number } | null;
+    originalRouteEdge?: string | null;
+    deviatedEdge?: string | null;
+    streetName?: string | null;
+    generatedInstruction?: string | null;
+    deviationInstruction?: string | null;
+    points?: { latitude: number; longitude: number }[] | null;
+    start_timestamp?: number | null;
+    end_timestamp?: number | null;
+    createdAt?: number | null;
+    mapMatchedEdge?: string | null;
+    imageUri?: string | null;
+}
+
+export interface PostTripAnswers {
+    arrival: string;
+    etaRating: number;
+    stressRating: number;
+    language?: 'en' | 'tl';
+}
+
+// Asked when a trip had NO route changes (the rider followed the optimal route).
 export interface RouteFeedback {
     optimalRoute: string; // was the suggested/optimal route suitable?
-    whyNoDeviation: string; // why no deviations were made
+    whyNoDeviation: string; // why no route changes were made
     experience: string; // overall experience with the optimal route
 }
 
@@ -24,7 +64,8 @@ export type ReviewStatus = 'pending' | 'reviewed';
 
 export interface TripReview {
     status: ReviewStatus;
-    answers: Record<string, DeviationAnswers>; // keyed by deviation id
+    answers: Record<string, DeviationAnswers>; // keyed by existing deviation id fields
+    postTrip?: PostTripAnswers;
     routeFeedback?: RouteFeedback; // for no-deviation trips
     incompleteFeedback?: IncompleteFeedback; // for trips that didn't reach the destination
 }
@@ -32,98 +73,90 @@ export interface TripReview {
 interface TripReviewsState {
     reviews: Record<string, TripReview>;
     saveDeviation: (tripId: string, deviationId: string, answers: DeviationAnswers) => void;
+    savePostTrip: (tripId: string, answers: PostTripAnswers) => void;
     saveRouteFeedback: (tripId: string, feedback: RouteFeedback) => void;
     saveIncompleteFeedback: (tripId: string, feedback: IncompleteFeedback) => void;
     markReviewed: (tripId: string) => void;
     markPending: (tripId: string) => void;
 }
 
-// Seeded mock responses so a couple of trips show as already answered + approved.
-const INITIAL_REVIEWS: Record<string, TripReview> = {
-    // trip-3: approved study trip WITH deviations and recorded responses
-    'trip-3': {
-        status: 'reviewed',
-        answers: {
-            d1: { whyRoute: 'Matinding trapiko', affect: 'Nakatipid sa oras', confidence: 'Sigurado' },
-            d2: { whyRoute: 'Mas maikling ruta', affect: 'Nakaikli ng distansya', confidence: 'Sobrang sigurado' },
-        },
-    },
-    // trip-4: approved study trip with NO deviations — route-confirmation feedback
-    'trip-4': {
-        status: 'reviewed',
-        answers: {},
-        routeFeedback: {
-            optimalRoute: 'Oo, ito ang pinakamagandang ruta',
-            whyNoDeviation: 'Pinakamabilis na ang iminungkahing ruta',
-            experience: 'Maganda',
-        },
-    },
-    // trip-7: trip that ENDED WITHOUT reaching the destination — incomplete feedback
-    'trip-7': {
-        status: 'reviewed',
-        answers: {},
-        incompleteFeedback: {
-            reason: 'Nakansela ang order / booking',
-            distanceReached: 'Lampas kalahati',
-            willRetry: 'Hindi',
-        },
-    },
-};
+const INITIAL_REVIEWS: Record<string, TripReview> = {};
 
-export const useTripReviews = create<TripReviewsState>(set => ({
-    reviews: INITIAL_REVIEWS,
-    saveDeviation: (tripId, deviationId, answers) =>
-        set(state => {
-            const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
-            return {
-                reviews: {
-                    ...state.reviews,
-                    [tripId]: { ...existing, answers: { ...existing.answers, [deviationId]: answers } },
-                },
-            };
+export const useTripReviews = create<TripReviewsState>()(
+    persist(
+        set => ({
+            reviews: INITIAL_REVIEWS,
+            saveDeviation: (tripId, deviationId, answers) =>
+                set(state => {
+                    const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
+                    return {
+                        reviews: {
+                            ...state.reviews,
+                            [tripId]: { ...existing, answers: { ...existing.answers, [deviationId]: answers } },
+                        },
+                    };
+                }),
+            savePostTrip: (tripId, answers) =>
+                set(state => {
+                    const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
+                    return {
+                        reviews: {
+                            ...state.reviews,
+                            [tripId]: { ...existing, postTrip: answers },
+                        },
+                    };
+                }),
+            saveRouteFeedback: (tripId, feedback) =>
+                set(state => {
+                    const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
+                    return {
+                        reviews: {
+                            ...state.reviews,
+                            [tripId]: { ...existing, routeFeedback: feedback },
+                        },
+                    };
+                }),
+            saveIncompleteFeedback: (tripId, feedback) =>
+                set(state => {
+                    const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
+                    return {
+                        reviews: {
+                            ...state.reviews,
+                            [tripId]: { ...existing, incompleteFeedback: feedback },
+                        },
+                    };
+                }),
+            markReviewed: tripId =>
+                set(state => ({
+                    reviews: {
+                        ...state.reviews,
+                        [tripId]: {
+                            status: 'reviewed',
+                            answers: state.reviews[tripId]?.answers ?? {},
+                            postTrip: state.reviews[tripId]?.postTrip,
+                            routeFeedback: state.reviews[tripId]?.routeFeedback,
+                            incompleteFeedback: state.reviews[tripId]?.incompleteFeedback,
+                        },
+                    },
+                })),
+            markPending: tripId =>
+                set(state => ({
+                    reviews: {
+                        ...state.reviews,
+                        [tripId]: {
+                            status: 'pending',
+                            answers: state.reviews[tripId]?.answers ?? {},
+                            postTrip: state.reviews[tripId]?.postTrip,
+                            routeFeedback: state.reviews[tripId]?.routeFeedback,
+                            incompleteFeedback: state.reviews[tripId]?.incompleteFeedback,
+                        },
+                    },
+                })),
         }),
-    saveRouteFeedback: (tripId, feedback) =>
-        set(state => {
-            const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
-            return {
-                reviews: {
-                    ...state.reviews,
-                    [tripId]: { ...existing, routeFeedback: feedback },
-                },
-            };
-        }),
-    saveIncompleteFeedback: (tripId, feedback) =>
-        set(state => {
-            const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
-            return {
-                reviews: {
-                    ...state.reviews,
-                    [tripId]: { ...existing, incompleteFeedback: feedback },
-                },
-            };
-        }),
-    markReviewed: tripId =>
-        set(state => ({
-            reviews: {
-                ...state.reviews,
-                [tripId]: {
-                    status: 'reviewed',
-                    answers: state.reviews[tripId]?.answers ?? {},
-                    routeFeedback: state.reviews[tripId]?.routeFeedback,
-                    incompleteFeedback: state.reviews[tripId]?.incompleteFeedback,
-                },
-            },
-        })),
-    markPending: tripId =>
-        set(state => ({
-            reviews: {
-                ...state.reviews,
-                [tripId]: {
-                    status: 'pending',
-                    answers: state.reviews[tripId]?.answers ?? {},
-                    routeFeedback: state.reviews[tripId]?.routeFeedback,
-                    incompleteFeedback: state.reviews[tripId]?.incompleteFeedback,
-                },
-            },
-        })),
-}));
+        {
+            name: 'devia-trip-reviews',
+            storage: createJSONStorage(() => AsyncStorage),
+            partialize: state => ({ reviews: state.reviews }),
+        }
+    )
+);
