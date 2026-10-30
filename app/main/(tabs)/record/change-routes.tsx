@@ -1,10 +1,13 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { LANGUAGE_LABELS, QuestionnaireLanguage } from '@/lib/deviation-questionnaire';
-import { RideDeviationEvent, useRideStore } from '@/lib/store/useRideStore';
-import { formatRouteInstructionSummary } from '@/lib/trip-record-display';
+import { FetchedGeneratedRoute, getGeneratedRoutesByRideId } from '@/lib/firebase-crud/rides';
+import { useRideStore } from '@/lib/store/useRideStore';
+import { useRidesStore } from '@/lib/store/useRidesStore';
+import { useTripReviews } from '@/lib/store/useTripReviews';
+import { formatRouteInstructionSummary, getDeviationTimeImpact } from '@/lib/trip-record-display';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, MD3Theme, SegmentedButtons, Surface, Text, useTheme } from 'react-native-paper';
 
@@ -20,6 +23,7 @@ interface ChangeRouteListItem {
     generatedInstruction?: string;
     deviationInstruction?: string;
     streetName?: string;
+    arrivalSummary: (language: QuestionnaireLanguage) => string | null;
 }
 
 const changeRoutesText = {
@@ -35,22 +39,10 @@ const changeRoutesText = {
     street: { en: 'Street', tl: 'Kalsada' },
     suggested: { en: 'Suggested', tl: 'Iminungkahing ruta' },
     actual: { en: 'Actual', tl: 'Aktuwal na ruta' },
+    arrivalTime: { en: 'Arrival time', tl: 'Oras ng dating' },
     detailsNotAvailable: { en: 'Details not available yet', tl: 'Wala pang available na detalye' },
     review: { en: 'Review Change Routes', tl: 'Suriin ang Mga Pagbabago ng Ruta' },
 };
-
-function buildChangeRoutes(count: number, events: RideDeviationEvent[]): ChangeRouteListItem[] {
-    return Array.from({ length: count }, (_, index) => {
-        const event = events[index];
-        return {
-            id: `change-route-${index + 1}`,
-            index,
-            time: formatTime(event?.timestamp),
-            generatedInstruction: event?.previousInstruction,
-            deviationInstruction: event?.newInstruction,
-        };
-    });
-}
 
 export default function ChangeRoutes() {
     const theme = useTheme();
@@ -62,12 +54,66 @@ export default function ChangeRoutes() {
         fromTripRecord?: string;
     }>();
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
+    const [remoteRoutes, setRemoteRoutes] = useState<FetchedGeneratedRoute[]>([]);
     const deviationEvents = useRideStore(state => state.deviationEvents);
-    const totalChangeRoutes = Math.max(0, Number(deviationCount || deviationEvents.length || 0));
-    const changeRoutes = useMemo(
-        () => buildChangeRoutes(totalChangeRoutes, deviationEvents),
-        [deviationEvents, totalChangeRoutes]
+    const liveGeneratedRoutes = useRideStore(state => state.generatedRoutes);
+    const liveStartTime = useRideStore(state => state.startTime);
+    const liveDuration = useRideStore(state => state.duration);
+    const liveSuggestedDuration = useRideStore(
+        state => state.suggestedRouteDurationSec || state.activeRouteDurationSec
     );
+    const selectedRide = useRidesStore(state => state.selectedRide);
+    const rides = useRidesStore(state => state.rides);
+    const reviews = useTripReviews(state => state.reviews);
+    const matchedRide = selectedRide?.id === rideId ? selectedRide : rides.find(r => r.id === rideId);
+    const savedReview = rideId ? reviews[rideId] : undefined;
+    const totalChangeRoutes = Math.max(0, Number(deviationCount || deviationEvents.length || 0));
+
+    useEffect(() => {
+        let cancelled = false;
+        if (rideId && deviationEvents.length === 0 && liveGeneratedRoutes.length === 0) {
+            getGeneratedRoutesByRideId(rideId)
+                .then(routes => {
+                    if (!cancelled) setRemoteRoutes(routes);
+                })
+                .catch(() => undefined);
+        }
+        return () => {
+            cancelled = true;
+        };
+    }, [deviationEvents.length, liveGeneratedRoutes.length, rideId]);
+
+    const changeRoutes = useMemo(() => {
+        const tripFallback = matchedRide ?? {
+            startTime: liveStartTime ?? undefined,
+            duration: liveDuration,
+            suggestedRouteDurationSec: liveSuggestedDuration,
+        };
+        const allRoutes = liveGeneratedRoutes.length > 0 ? liveGeneratedRoutes : remoteRoutes;
+        const regeneratedOnly = allRoutes.filter(r => r.sequence > 1 && r.type === 'Regenerated Route');
+        const reroutedList = regeneratedOnly.length > 0 ? regeneratedOnly : allRoutes.filter(r => r.sequence > 1);
+        return Array.from({ length: totalChangeRoutes }, (_, index) => {
+            const event = deviationEvents[index];
+            const savedAnswer = rideId ? savedReview?.answers[`dev-${rideId}-${index}`] : undefined;
+            const metadata = savedAnswer?.metadata;
+            const generatedRoute = reroutedList[index];
+            const impact = getDeviationTimeImpact({
+                metadata,
+                event,
+                trip: tripFallback,
+                generatedRoute,
+            });
+            return {
+                id: `change-route-${index + 1}`,
+                index,
+                time: formatTime(event?.timestamp ?? metadata?.timestamp ?? generatedRoute?.generatedAt ?? undefined),
+                generatedInstruction: event?.previousInstruction ?? metadata?.generatedInstruction ?? undefined,
+                deviationInstruction: event?.newInstruction ?? metadata?.deviationInstruction ?? undefined,
+                streetName: metadata?.streetName ?? undefined,
+                arrivalSummary: impact.formatSummary,
+            };
+        });
+    }, [deviationEvents, liveDuration, liveGeneratedRoutes, liveStartTime, liveSuggestedDuration, matchedRide, remoteRoutes, rideId, savedReview, totalChangeRoutes]);
 
     const startReview = () => {
         if (!rideId || totalChangeRoutes <= 0) return;
@@ -111,7 +157,10 @@ export default function ChangeRoutes() {
                                 <Text style={styles.cardMeta}>{changeRoutesText.suggested[language]}: {formatRouteInstructionSummary(item.generatedInstruction, item.streetName)}</Text>
                             )}
                             {!!item.deviationInstruction && <Text style={styles.cardMeta}>{changeRoutesText.actual[language]}: {formatRouteInstructionSummary(item.deviationInstruction, item.streetName)}</Text>}
-                            {!item.generatedInstruction && !item.deviationInstruction && (
+                            {!!item.arrivalSummary(language) && (
+                                <Text style={styles.cardMeta}>{changeRoutesText.arrivalTime[language]}: {item.arrivalSummary(language)}</Text>
+                            )}
+                            {!item.generatedInstruction && !item.deviationInstruction && !item.arrivalSummary(language) && (
                                 <Text style={styles.cardMeta}>{changeRoutesText.detailsNotAvailable[language]}</Text>
                             )}
                         </View>

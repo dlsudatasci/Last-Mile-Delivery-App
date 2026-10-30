@@ -12,6 +12,7 @@ import {
     formatRouteInstructionSummary,
     getChangeRouteCount,
     getDeviationRows,
+    getDeviationTimeImpact,
     getPostTripRows,
     getReviewStatusLabel,
     hasCompleteTripReview,
@@ -60,7 +61,29 @@ function routeText(answer: DeviationAnswers) {
 }
 
 function sortedDeviations(reviewAnswers?: Record<string, DeviationAnswers>) {
-    return Object.entries(reviewAnswers ?? {}).sort(([, a], [, b]) => (a.metadata?.index ?? 0) - (b.metadata?.index ?? 0));
+    return Object.entries(reviewAnswers ?? {}).sort(([idA, a], [idB, b]) => {
+        if (typeof a.metadata?.index === 'number' && typeof b.metadata?.index === 'number') {
+            return a.metadata.index - b.metadata.index;
+        }
+        if (typeof a.metadata?.timestamp === 'number' && typeof b.metadata?.timestamp === 'number') {
+            return a.metadata.timestamp - b.metadata.timestamp;
+        }
+        return idA.localeCompare(idB, undefined, { numeric: true });
+    });
+}
+
+function findMatchingReroute(
+    generatedRoutes: FetchedGeneratedRoute[],
+    answer: DeviationAnswers,
+    index: number
+): FetchedGeneratedRoute | undefined {
+    const regeneratedOnly = generatedRoutes.filter(r => r.sequence > 1 && r.type === 'Regenerated Route');
+    const reroutedList = regeneratedOnly.length > 0 ? regeneratedOnly : generatedRoutes.filter(r => r.sequence > 1);
+    if (answer.metadata?.routeId) {
+        const byId = reroutedList.find(r => r.routeId === answer.metadata?.routeId);
+        if (byId) return byId;
+    }
+    return index >= 0 ? reroutedList[index] : undefined;
 }
 
 export default function TripRecordDetails() {
@@ -157,7 +180,7 @@ export default function TripRecordDetails() {
     const openQuestionnaire = () => router.push(
         `/main/(tabs)/record/post-trip-questionnaire?rideId=${encodeURIComponent(
             trip.id
-        )}&deviationCount=${detectedDeviationCount}&fromTripRecord=1`
+        )}&deviationCount=${detectedDeviationCount}&fromTripRecord=1${typeof trip.suggestedRouteDurationSec === 'number' ? `&suggestedDurationSec=${trip.suggestedRouteDurationSec}` : ''}${typeof trip.duration === 'number' ? `&actualDurationSec=${trip.duration}` : ''}`
     );
 
     const retryLocalReview = async () => {
@@ -288,25 +311,37 @@ export default function TripRecordDetails() {
                         ) : selectedDeviation ? (
                             <DeviationDetail
                                 deviationId={selectedDeviation[0]}
+                                deviationIndex={deviations.findIndex(([id]) => id === selectedDeviation[0])}
                                 answer={selectedDeviation[1]}
                                 onBack={() => setSelectedDeviationId(null)}
                                 mapboxStyle={mapboxStyle}
                             />
                         ) : (
-                            deviations.map(([deviationId, answer], index) => (
-                                <TouchableOpacity
-                                    key={deviationId}
-                                    style={styles.deviationListCard}
-                                    onPress={() => setSelectedDeviationId(deviationId)}
-                                >
-                                    <View style={styles.deviationListText}>
-                                        <Text style={styles.deviationTitle}>Route Change #{index + 1}</Text>
-                                        <Text style={styles.deviationTime}>{formatClock(answer.metadata?.timestamp)}</Text>
-                                        <Text style={styles.deviationRouteText}>{routeText(answer)}</Text>
-                                    </View>
-                                    <Icon source="chevron-right" size={sizes.size28} color={theme.colors.onSurfaceVariant} />
-                                </TouchableOpacity>
-                            ))
+                            deviations.map(([deviationId, answer], index) => {
+                                const matchedRoute = findMatchingReroute(generatedRoutes, answer, index);
+                                const impact = getDeviationTimeImpact({
+                                    metadata: answer.metadata,
+                                    trip,
+                                    generatedRoute: matchedRoute,
+                                });
+                                return (
+                                    <TouchableOpacity
+                                        key={deviationId}
+                                        style={styles.deviationListCard}
+                                        onPress={() => setSelectedDeviationId(deviationId)}
+                                    >
+                                        <View style={styles.deviationListText}>
+                                            <Text style={styles.deviationTitle}>Route Change #{index + 1}</Text>
+                                            <Text style={styles.deviationTime}>
+                                                {formatClock(answer.metadata?.timestamp)}
+                                                {impact.shortBadgeText ? ` · ${impact.shortBadgeText}` : ''}
+                                            </Text>
+                                            <Text style={styles.deviationRouteText}>{routeText(answer)}</Text>
+                                        </View>
+                                        <Icon source="chevron-right" size={sizes.size28} color={theme.colors.onSurfaceVariant} />
+                                    </TouchableOpacity>
+                                );
+                            })
                         )}
                     </View>
                 )}
@@ -411,17 +446,25 @@ export default function TripRecordDetails() {
     }
 
     function DeviationDetail({
+        deviationIndex,
         answer,
         onBack,
         mapboxStyle,
     }: {
         deviationId: string;
+        deviationIndex: number;
         answer: DeviationAnswers;
         onBack: () => void;
         mapboxStyle: string;
     }) {
         const point = answer.metadata?.gpsLocation ?? answer.metadata?.actualPoint;
         const center: [number, number] = point ? [point.longitude, point.latitude] : [120.9936, 14.5646];
+        const matchedRoute = findMatchingReroute(generatedRoutes, answer, deviationIndex);
+        const impact = getDeviationTimeImpact({
+            metadata: answer.metadata,
+            trip,
+            generatedRoute: matchedRoute,
+        });
         return (
             <Surface style={styles.card}>
                 <TouchableOpacity style={styles.detailBackRow} onPress={onBack}>
@@ -462,6 +505,12 @@ export default function TripRecordDetails() {
                 <Divider style={styles.detailDivider} />
                 <InfoRow label="Suggested route" value={formatRouteInstructionSummary(answer.metadata?.generatedInstruction, answer.metadata?.streetName)} />
                 <InfoRow label="Actual route" value={formatRouteInstructionSummary(answer.metadata?.deviationInstruction, answer.metadata?.streetName)} />
+                {!!impact.expectedRowValue && (
+                    <InfoRow label="Expected remaining time" value={impact.expectedRowValue} />
+                )}
+                {!!impact.actualRowValue && (
+                    <InfoRow label="Actual time to arrival" value={impact.actualRowValue} />
+                )}
             </Surface>
         );
     }

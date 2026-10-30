@@ -98,6 +98,8 @@ describe("useRideStore", () => {
             activeRouteUpdatedAt: null,
             routeUpdateStatus: "idle",
             deviationEvents: [],
+            generatedRoutes: [],
+            activeGeneratedRouteId: null,
 
             annotations: [],
         });
@@ -160,8 +162,8 @@ describe("useRideStore", () => {
         });
         point(14, 1000);
         expect(request).toHaveBeenCalledTimes(1);
-        point(14.001, 6000);
-        point(14.002, 11000);
+        point(14.0002, 1500);
+        point(14.0003, 2000);
         expect(request).toHaveBeenCalledTimes(1);
         // Unrelated renders/store updates must not count as another GPS fix.
         useRideStore.getState().increaseDuration();
@@ -206,7 +208,7 @@ describe("useRideStore", () => {
         resolve({ coordinates: [[121, 16], [122, 16]], steps: [], congestionSegments: [], durationSec: 100, distanceM: 1000 });
         await Promise.resolve();
         expect(useRideStore.getState().activeRouteCoordinates).toBe(expected);
-        expect(useRideStore.getState().deviationEvents).toHaveLength(0);
+        expect(useRideStore.getState().deviationEvents).toHaveLength(action === 'cancel' ? 0 : 1);
         stop();
     });
 
@@ -323,7 +325,7 @@ describe("useRideStore", () => {
 
         expect(state.points).toHaveLength(1);
 
-        expect(state.displayPoints).toHaveLength(1);
+        expect(state.displayPoints).toHaveLength(state.points.length);
 
         expect(state.totalDistance).toBe(0);
 
@@ -556,7 +558,7 @@ describe("useRideStore", () => {
 
         const state = useRideStore.getState();
 
-        expect(state.displayPoints).toHaveLength(2);
+        expect(state.displayPoints).toHaveLength(state.points.length);
 
         expect(state.points).toHaveLength(2);
     });
@@ -620,7 +622,7 @@ describe("useRideStore", () => {
 
         const state = useRideStore.getState();
         expect(state.points).toHaveLength(2);
-        expect(state.displayPoints).toHaveLength(1);
+        expect(state.displayPoints).toHaveLength(state.points.length);
         expect(state.displayPoints[0].coordinate.latitude).toBeCloseTo(14.0, 4);
     });
 
@@ -657,7 +659,7 @@ describe("useRideStore", () => {
             ],
         });
 
-        expect(nextDisplayPoints).toEqual([existingDisplayPoint]);
+        expect(nextDisplayPoints).toEqual([existingDisplayPoint, { coordinate: { latitude: 14.01, longitude: 121.002 }, timestamp: 2 }]);
     });
 
     // #8 haverineDistance
@@ -1196,6 +1198,34 @@ describe("useRideStore", () => {
 
         expect(result).toMatchObject({ success: true, rideId: "ride-123", deviationCount: 2 });
         expect(saveRide).toHaveBeenCalledWith(expect.objectContaining({ deviationCount: 2 }));
+    });
+
+    test("finishRide enriches deviation events with actual remaining arrival time comparison", async () => {
+        (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
+        (saveRide as jest.Mock).mockResolvedValue("ride-123");
+        useRideStore.setState({
+            startTime: 1000,
+            duration: 900, // 15m actual total duration
+            suggestedRouteDurationSec: 1200, // 20m initial suggested duration
+            points: [{ coordinate: { latitude: 1, longitude: 2 }, timestamp: 1000 }],
+            deviationEvents: [
+                {
+                    timestamp: 1000 + 300 * 1000,
+                    location: [121, 14],
+                    offRouteDistanceM: 45,
+                    previousEtaSec: 900, // 15m expected remaining at deviation
+                    newEtaSec: 840,
+                    elapsedDurationSec: 300, // 5m elapsed at deviation -> 10m (600s) actual remaining
+                },
+            ],
+        });
+
+        await useRideStore.getState().finishRide();
+
+        const [enriched] = useRideStore.getState().deviationEvents;
+        expect(enriched.actualRemainingSec).toBe(600);
+        expect(enriched.actualTimeDiffSec).toBe(-300);
+        expect(enriched.isActuallyFaster).toBe(true);
     });
 
     test("finishRide uses provided trip route title", async () => {

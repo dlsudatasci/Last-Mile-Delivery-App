@@ -26,6 +26,11 @@ export interface DeviationMetadata {
     index?: number | null;
     dateTime?: string | null;
     isFaster?: boolean | null;
+    isActuallyFaster?: boolean | null;
+    previousEtaSec?: number | null;
+    newEtaSec?: number | null;
+    actualRemainingSec?: number | null;
+    actualTimeDiffSec?: number | null;
     timestamp?: number | null;
     hour?: number | null;
     dayOfWeek?: string | null;

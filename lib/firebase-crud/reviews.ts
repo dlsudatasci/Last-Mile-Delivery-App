@@ -62,6 +62,11 @@ export const submitTripReview = async (rideId: string) => {
                         userId: userId,
                         dateTime: answer.metadata.dateTime || Date.now(),
                         isFaster: answer.metadata.isFaster ?? null,
+                        ...(answer.metadata.isActuallyFaster !== undefined ? { isActuallyFaster: answer.metadata.isActuallyFaster } : {}),
+                        ...(answer.metadata.previousEtaSec !== undefined ? { previousEtaSec: answer.metadata.previousEtaSec } : {}),
+                        ...(answer.metadata.newEtaSec !== undefined ? { newEtaSec: answer.metadata.newEtaSec } : {}),
+                        ...(answer.metadata.actualRemainingSec !== undefined ? { actualRemainingSec: answer.metadata.actualRemainingSec } : {}),
+                        ...(answer.metadata.actualTimeDiffSec !== undefined ? { actualTimeDiffSec: answer.metadata.actualTimeDiffSec } : {}),
                         gpsLocation: answer.metadata.gpsLocation 
                             ? `${answer.metadata.gpsLocation.latitude},${answer.metadata.gpsLocation.longitude}` 
                             : null,
@@ -161,6 +166,11 @@ export const fetchTripReview = async (rideId: string): Promise<TripReview | null
                     userId: data.userId,
                     dateTime: data.dateTime,
                     isFaster: data.isFaster,
+                    ...(data.isActuallyFaster !== undefined ? { isActuallyFaster: data.isActuallyFaster } : {}),
+                    ...(data.previousEtaSec !== undefined ? { previousEtaSec: data.previousEtaSec } : {}),
+                    ...(data.newEtaSec !== undefined ? { newEtaSec: data.newEtaSec } : {}),
+                    ...(data.actualRemainingSec !== undefined ? { actualRemainingSec: data.actualRemainingSec } : {}),
+                    ...(data.actualTimeDiffSec !== undefined ? { actualTimeDiffSec: data.actualTimeDiffSec } : {}),
                     gpsLocation,
                     originalRouteEdge: data.originalRouteEdge,
                     deviatedEdge: data.deviatedEdge,

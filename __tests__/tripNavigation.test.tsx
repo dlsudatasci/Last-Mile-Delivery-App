@@ -84,7 +84,7 @@ test.each(['home', 'community', 'map', 'profile', 'record'])('%s preserves activ
     act(() => { tree = create(<TabLayout />); });
     const destination = mockRide.activeRouteDestination;
     act(() => pressTab(name));
-    expect(lastAlert()[0]).toBe('Trip in Progress');
+    expect(lastAlert()[0]).toBe('Trip in progress');
     expect(mockRide.resetRide).not.toHaveBeenCalled();
     act(() => lastAlert()[2][0].onPress());
     expect(mockRide.isRecording).toBe(true);
@@ -144,8 +144,8 @@ test('header, form, system and removal back preserve answers; failure retries; s
     expect(submitTripReview).toHaveBeenCalledTimes(2);
     await act(async () => { resolve(); await pending; });
     expect(mockPrevented).toBe(false);
-    expect(router.replace).toHaveBeenCalledTimes(1);
-    expect(router.replace).toHaveBeenCalledWith('/main/(tabs)/map');
+    expect(router.navigate).toHaveBeenCalledTimes(1);
+    expect(router.navigate).toHaveBeenCalledWith('/main/(tabs)/map');
     expect(mockRide.resetRide).not.toHaveBeenCalled();
 });
 test('deviation continuation keeps the root required and does not submit prematurely', async () => {
@@ -177,7 +177,7 @@ test('failed cancellation does not navigate and permits another attempt', async 
     expect(router.push).not.toHaveBeenCalled();
     expect(mockRide.isRecording).toBe(true);
     act(() => pressTab('record'));
-    expect(lastAlert()[0]).toBe('Trip in Progress');
+    expect(lastAlert()[0]).toBe('Trip in progress');
 });
 test('reviewed questionnaire allows ordinary Back without a new submission', () => {
     useTripReviews.getState().markReviewed('ride-1');
@@ -202,7 +202,7 @@ test.each(['header', 'hardware', 'gesture'])('recording %s Back confirms before 
         if (source === 'gesture') mockRemove({ data: { action } });
     };
     act(attempt);
-    expect(lastAlert()[0]).toBe('Trip in Progress');
+    expect(lastAlert()[0]).toBe('Trip in progress');
     expect(mockRide.resetRide).not.toHaveBeenCalled();
     expect(mockNavigation.dispatch).not.toHaveBeenCalled();
     act(() => lastAlert()[2][0].onPress());
@@ -230,6 +230,6 @@ test('Trip Recording renders no Reset control and its actual header opens cancel
     expect(header.headerRight()).toBeNull();
     expect(tree.root.findAllByType('Button').some((b: any) => b.props.children === 'Reset')).toBe(false);
     act(() => header.headerLeft().props.onPress());
-    expect(lastAlert()[0]).toBe('Trip in Progress');
+    expect(lastAlert()[0]).toBe('Trip in progress');
     mockRide.points = [1, 2];
 });

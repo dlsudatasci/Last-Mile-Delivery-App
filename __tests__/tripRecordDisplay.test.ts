@@ -1,10 +1,13 @@
 import { LANGUAGE_LABELS } from "@/lib/deviation-questionnaire";
 import {
+    formatCompactDuration,
     formatPoint,
     formatRideRouteTitle,
     formatRouteInstructionSummary,
+    formatTripTimeSummary,
     getChangeRouteCount,
     getDeviationRows,
+    getDeviationTimeImpact,
     getPostTripRows,
     getReviewStatusLabel,
     hasCompleteTripReview,
@@ -538,5 +541,79 @@ describe("summarizeDeviation()", () => {
             street: "Street not available",
             description: "Route changed from the suggested path.",
         });
+    });
+});
+
+describe("formatCompactDuration() & formatTripTimeSummary()", () => {
+    test("formats durations cleanly across seconds, minutes, and hours", () => {
+        expect(formatCompactDuration(45)).toBe("45s");
+        expect(formatCompactDuration(195)).toBe("3m 15s");
+        expect(formatCompactDuration(900)).toBe("15m");
+        expect(formatCompactDuration(3900)).toBe("1h 5m");
+    });
+
+    test("formats whole-trip time summary in English and Tagalog", () => {
+        expect(
+            formatTripTimeSummary({
+                suggestedDurationSec: 1080,
+                actualDurationSec: 900,
+                language: "en",
+            })
+        ).toBe("Suggested: 18m · Actual: 15m (3m shorter)");
+
+        expect(
+            formatTripTimeSummary({
+                suggestedDurationSec: 900,
+                actualDurationSec: 1080,
+                language: "tl",
+            })
+        ).toBe("Suggested: 15m · Aktuwal: 18m (3m mas matagal)");
+    });
+});
+
+describe("getDeviationTimeImpact()", () => {
+    test("computes shorter/longer actual arrival from new ride deviation telemetry", () => {
+        const impact = getDeviationTimeImpact({
+            event: {
+                timestamp: 1000000,
+                previousEtaSec: 900,
+                newEtaSec: 780,
+                actualRemainingSec: 720,
+                actualTimeDiffSec: -180,
+                isActuallyFaster: true,
+            },
+        });
+
+        expect(impact.isActuallyFaster).toBe(true);
+        expect(impact.isEtaFaster).toBe(true);
+        expect(impact.shortBadgeText).toBe("3m shorter arrival");
+        expect(impact.expectedRowValue).toBe("15m (Rerouted ETA: 13m)");
+        expect(impact.actualRowValue).toBe("12m (3m shorter)");
+        expect(impact.formatSummary("en")).toBe("3m shorter (12m actual vs 15m expected)");
+        expect(impact.formatSummary("tl")).toBe("3m mas mabilis (12m aktuwal vs 15m inaasahan)");
+    });
+
+    test("falls back to trip timestamps and durations for old rides without explicit ETA fields", () => {
+        const impact = getDeviationTimeImpact({
+            metadata: {
+                timestamp: 1000 + 300 * 1000, // 5m into trip
+                isFaster: false,
+            },
+            trip: {
+                startTime: 1000,
+                endTime: 1000 + 1020 * 1000,
+                duration: 1020, // 17m total actual active duration (12m remaining after deviation)
+                suggestedRouteDurationSec: 1200, // 20m initial route (15m remaining after 5m)
+            },
+            generatedRoute: {
+                remainingTravelTimeNew: 960, // 16m rerouted ETA
+            },
+        });
+
+        expect(impact.previousEtaSec).toBe(900);
+        expect(impact.actualRemainingSec).toBe(720);
+        expect(impact.actualTimeDiffSec).toBe(-180);
+        expect(impact.isActuallyFaster).toBe(true);
+        expect(impact.shortBadgeText).toBe("3m shorter arrival");
     });
 });

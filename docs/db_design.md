@@ -22,7 +22,7 @@ Firestore documents have a maximum size limit of **1MB**. A GPS log for a long d
 ---
 
 ## 2. Entity-Relationship Diagram (ERD) 
-Last changed: 15/09/2026
+Last changed: 30/10/2026
 Although Firestore is NoSQL, the logical relationships between data models can be visualized using a relational ERD.
 
 ```mermaid
@@ -104,7 +104,12 @@ erDiagram
         string routeId FK "Points to generatedRoutes document ID"
         string rideId FK "Points to rides document ID"
         string userId FK "Points to users document ID"
-        boolean isFaster
+        boolean isFaster "ETA comparison (newEtaSec < previousEtaSec)"
+        boolean isActuallyFaster "Actual arrival comparison (actualRemainingSec < previousEtaSec)"
+        number previousEtaSec "Remaining ETA on previous route at deviation (seconds)"
+        number newEtaSec "Estimated duration of regenerated route (seconds)"
+        number actualRemainingSec "Actual active travel time from deviation to arrival (seconds)"
+        number actualTimeDiffSec "Actual remaining time minus previousEtaSec (seconds)"
         string dateTime "ISO 8601 string"
         string gpsLocation
         string originalRouteEdge
@@ -288,19 +293,19 @@ RidePoint Object
 * **Document ID:** Auto-generated UUID. The `routeId` field is also written into the document body.
 * **Purpose:** Stores each generated route during a trip. A new route is generated every time a rider deviates from the previous one — multiple generated routes are expected per trip (e.g., initial route → deviation → route 2 → deviation → route 3, and so on).
 
-Last changed: 22/07/2026
+Last changed: 30/10/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `routeId` | String | Yes | Same as the document ID |
 | `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
-| `type` | Enum | Yes | Type of generated route (Initial Route or Regenerated Route) |
+| `type` | Enum | Yes | Type of generated route (`Initial Route`, `Regenerated Route`, or `Traffic Update`) |
 | `routePoints` | Array | Yes | Ordered list of RoutePoint objects representing the generated navigation route |
 | `sequence` | Number| Yes | Route generation order index (1 = initial route, 2 = first regenerated route, etc.) |
 | `generatedAt` | Number | Yes | Unix timestamp (ms) when the route was generated |
-| `remainingTravelTimeOriginal` | Number | Yes | in seconds |
-| `remainingTravelTimeNew` | Number | Yes | in seconds |
-| `remainingDistanceOriginal` | Number | Yes | in meters |
-| `remainingDistanceNew` | Number | Yes | in meters |
+| `remainingTravelTimeOriginal` | Number | No | Progress-scaled remaining travel time on the previous route at the moment of regeneration, in seconds (`null` for `sequence = 1`) |
+| `remainingTravelTimeNew` | Number | Yes | Estimated travel duration of the newly generated route, in seconds |
+| `remainingDistanceOriginal` | Number | No | Remaining distance on the previous route, in meters (`null` for `sequence = 1`) |
+| `remainingDistanceNew` | Number | Yes | Distance of the newly generated route, in meters |
 ---
 
 ### 3.5. Collection: `deviations`
@@ -308,14 +313,19 @@ Last changed: 22/07/2026
 * **Document ID:** Auto-generated UUID. The `deviationId` field is also written into the document body.
 * **Purpose:** Stores each deviation marker the rider tagged during or after the trip, linked to the specific generated route that was active when the deviation occurred.
 
-Last changed: 30/07/2026
+Last changed: 30/10/2026
 | Field Name | Data Type | Required | Description / Constraints |
 | :--- | :--- | :--- | :--- |
 | `deviationId` | String | Yes | Same as the document ID |
 | `routeId` | String | Yes | Parent route document ID (foreign key referencing generatedRoutes.routeId) |
 | `rideId` | String | Yes | Parent ride document ID (foreign key referencing rides.rideId) |
 | `userId` | String | Yes | Foreign key referencing users.userId (Firebase Auth UID of the rider) |
-| `isFaster` | Boolean | Yes | Indicates if the deviation resulted in a faster route |
+| `isFaster` | Boolean | Yes | Indicates if the regenerated route had a shorter estimated duration (ETA) than the previous route (`newEtaSec < previousEtaSec`) |
+| `isActuallyFaster` | Boolean | No | Indicates if the rider's actual travel time from the deviation to arrival was shorter than the previous route's remaining ETA (`actualRemainingSec < previousEtaSec`) |
+| `previousEtaSec` | Number | No | Remaining estimated travel time (in seconds) on the previous route at the moment the deviation occurred |
+| `newEtaSec` | Number | No | Estimated travel duration (in seconds) of the newly regenerated route from the deviation point to the destination |
+| `actualRemainingSec` | Number | No | Actual active travel time (in seconds, excluding pauses) from the deviation until trip completion |
+| `actualTimeDiffSec` | Number | No | Difference in seconds between actual remaining travel time and previous remaining ETA (`actualRemainingSec - previousEtaSec`; negative means shorter/faster arrival) |
 | `dateTime` | String | Yes | ISO 8601 string indicating when the deviation occurred |
 | `gpsLocation` | String | Yes | GPS coordinate where the rider first deviated from the generated route |
 | `originalRouteEdge` | String | Yes | |

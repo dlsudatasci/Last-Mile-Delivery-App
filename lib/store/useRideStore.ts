@@ -81,6 +81,10 @@ export interface RideDeviationEvent {
     previousEtaSec?: number;
     newEtaSec?: number;
     activeRouteId?: string;
+    elapsedDurationSec?: number;
+    actualRemainingSec?: number;
+    actualTimeDiffSec?: number;
+    isActuallyFaster?: boolean | null;
 }
 
 export interface FinishRideResult {
@@ -136,7 +140,7 @@ interface RideState {
     addAnnotation: (annotation: Omit<Annotation, 'id' | 'timestamp' | 'userId' | 'createdAt' | 'rideId'>) => void;
     setRecording: (isRecording: boolean) => void;
     setActiveRouteSteps: (steps: RouteStep[]) => void;
-    setActiveRoute: (route: RouteResult, destination?: LngLat | null, updateType?: 'Regenerated Route' | 'Traffic Update') => void;
+    setActiveRoute: (route: RouteResult, destination?: LngLat | null, updateType?: 'Regenerated Route' | 'Traffic Update', remainingTravelTimeOriginalOverride?: number) => void;
     setRouteUpdateStatus: (status: RideState['routeUpdateStatus']) => void;
     addDeviationEvent: (event: RideDeviationEvent) => void;
 }
@@ -330,6 +334,34 @@ export const useRideStore = create<RideState>((set, get) => ({
                 throw new Error('No valid GPS points recorded');
             }
 
+            const effectiveSuggestedDurationSec = suggestedRouteDurationSec || activeRouteDurationSec || undefined;
+            const enrichedDeviationEvents = deviationEvents.map(event => {
+                const elapsedSec =
+                    typeof event.elapsedDurationSec === 'number'
+                        ? event.elapsedDurationSec
+                        : startTime && event.timestamp >= startTime
+                            ? Math.min(duration, Math.max(0, Math.floor((event.timestamp - startTime) / 1000)))
+                            : 0;
+                const actualRemainingSec = Math.max(0, duration - elapsedSec);
+                const expectedRemainingSec =
+                    typeof event.previousEtaSec === 'number' && event.previousEtaSec > 0
+                        ? event.previousEtaSec
+                        : typeof effectiveSuggestedDurationSec === 'number' && effectiveSuggestedDurationSec > 0
+                            ? Math.max(0, effectiveSuggestedDurationSec - elapsedSec)
+                            : undefined;
+                const actualTimeDiffSec =
+                    typeof expectedRemainingSec === 'number' ? actualRemainingSec - expectedRemainingSec : undefined;
+                const isActuallyFaster =
+                    typeof actualTimeDiffSec === 'number' ? actualTimeDiffSec < 0 : null;
+                return {
+                    ...event,
+                    elapsedDurationSec: elapsedSec,
+                    actualRemainingSec,
+                    ...(typeof actualTimeDiffSec === 'number' ? { actualTimeDiffSec } : {}),
+                    isActuallyFaster,
+                };
+            });
+
             const rideData: NewRideData = {
                 points: pointsForSave,
                 distance: totalDistance,
@@ -340,11 +372,11 @@ export const useRideStore = create<RideState>((set, get) => ({
                 endTime: Date.now(),
                 duration: duration,
                 suggestedRouteDistanceM: suggestedRouteDistanceM || activeRouteDistanceM || undefined,
-                suggestedRouteDurationSec: suggestedRouteDurationSec || activeRouteDurationSec || undefined,
+                suggestedRouteDurationSec: effectiveSuggestedDurationSec,
                 rideName: tripName?.trim() || 'Metro Manila Trip',
                 annotations,
                 generatedRoutes,
-                deviationCount: deviationEvents.length,
+                deviationCount: enrichedDeviationEvents.length,
             };
 
             const rideId = await saveRide(rideData);
@@ -352,13 +384,14 @@ export const useRideStore = create<RideState>((set, get) => ({
             set({
                 isRecording: false,
                 isPaused: false,
+                deviationEvents: enrichedDeviationEvents,
             });
             await setAsyncFlag('isPaused', false);
             await setAsyncFlag('isRecording', false);
             // Return the same snapshot used for the persisted ride. The recording
             // screen can otherwise continue with an older render whose
             // `deviationEvents` value predates a late reroute.
-            return { success: true, rideId, deviationCount: deviationEvents.length };
+            return { success: true, rideId, deviationCount: enrichedDeviationEvents.length };
         } catch (error) {
             // The record screen shows a retry state on failure and the ride data stays
             // in this store, so an offline/transient failure is expected, not a crash.
@@ -556,7 +589,7 @@ export const useRideStore = create<RideState>((set, get) => ({
     setActiveRouteSteps: (steps: RouteStep[]) => {
         set({ activeRouteSteps: steps });
     },
-    setActiveRoute: (route: RouteResult, destination = get().activeRouteDestination, updateType?: 'Regenerated Route' | 'Traffic Update') => {
+    setActiveRoute: (route: RouteResult, destination = get().activeRouteDestination, updateType?: 'Regenerated Route' | 'Traffic Update', remainingTravelTimeOriginalOverride?: number) => {
         const state = get();
         const shouldRefreshSuggestedRoute =
             !state.isRecording || state.suggestedRouteDistanceM <= 0 || state.suggestedRouteDurationSec <= 0;
@@ -576,7 +609,7 @@ export const useRideStore = create<RideState>((set, get) => ({
                 routePoints: route.coordinates,
                 sequence,
                 generatedAt: Date.now(),
-                remainingTravelTimeOriginal: sequence === 1 ? null : state.activeRouteDurationSec,
+                remainingTravelTimeOriginal: sequence === 1 ? null : (remainingTravelTimeOriginalOverride ?? state.activeRouteDurationSec),
                 remainingTravelTimeNew: route.durationSec,
                 remainingDistanceOriginal: sequence === 1 ? null : state.activeRouteDistanceM,
                 remainingDistanceNew: route.distanceM,
@@ -643,7 +676,7 @@ export function subscribeLiveRouteUpdates(
     const update = () => {
         const state = useRideStore.getState();
         if (pending && (!state.isRecording || state.isPaused ||
-            state.startTime !== pending.startTime ||
+            state.startTime !== pending.startTime || state.activeRouteCoordinates !== pending.state.activeRouteCoordinates ||
             state.activeRouteDestination !== pending.state.activeRouteDestination)) {
             pending = null;
             state.setRouteUpdateStatus('idle');
@@ -684,30 +717,37 @@ export function subscribeLiveRouteUpdates(
         const destination = state.activeRouteDestination;
         // Record the deviation immediately to ensure post-trip questions appear even if the network fails.
         const lastEvent = state.deviationEvents[state.deviationEvents.length - 1];
-        const isNewDeviation = !lastEvent || lastEvent.activeRouteId !== state.activeGeneratedRouteId;
+        const isNewDeviation = !lastEvent || lastEvent.activeRouteId !== (state.activeGeneratedRouteId ?? undefined);
         if (deviation && isNewDeviation) {
+            const pausedSoFar = state.isPaused && state.pausedAt
+                ? state.pausedDurationMs + Math.max(0, now - state.pausedAt)
+                : state.pausedDurationMs;
+            const elapsedDurationSec = state.startTime
+                ? Math.max(0, Math.floor((now - state.startTime - pausedSoFar) / 1000))
+                : state.duration;
             state.addDeviationEvent({
                 timestamp: now,
                 location: from,
                 offRouteDistanceM: distance,
                 previousInstruction: getNextNavigationInstruction(point, state.activeRouteSteps)?.text,
                 previousEtaSec,
+                elapsedDurationSec,
             });
         }
         void requestRoute(from, destination).then(route => {
             const latest = useRideStore.getState();
             // Only discard the route if the trip restarted or destination changed.
             if (disposed || pending !== request || !route || !latest.isRecording || latest.isPaused ||
-                latest.startTime !== request.startTime ||
+                latest.startTime !== request.startTime || latest.activeRouteCoordinates !== request.state.activeRouteCoordinates ||
                 latest.activeRouteDestination?.[0] !== destination?.[0] ||
                 latest.activeRouteDestination?.[1] !== destination?.[1]) return;
             pending = null;
-            latest.setActiveRoute(route, destination, deviation ? 'Regenerated Route' : 'Traffic Update');
+            latest.setActiveRoute(route, destination, deviation ? 'Regenerated Route' : 'Traffic Update', previousEtaSec);
             // Enrich the initial deviation event with the new route details.
             if (deviation) {
                 const events = [...latest.deviationEvents];
                 const lastEventToEnrich = events.length > 0 ? { ...events[events.length - 1] } : null;
-                if (lastEventToEnrich && lastEventToEnrich.activeRouteId === state.activeGeneratedRouteId) {
+                if (lastEventToEnrich && lastEventToEnrich.activeRouteId === (state.activeGeneratedRouteId ?? undefined)) {
                     lastEventToEnrich.newInstruction = route.steps[0]?.instruction;
                     lastEventToEnrich.newEtaSec = route.durationSec;
                     events[events.length - 1] = lastEventToEnrich;

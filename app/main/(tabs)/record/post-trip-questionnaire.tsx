@@ -7,8 +7,10 @@ import { CommonActions, useNavigation } from '@react-navigation/native';
 import { Button, MD3Theme, SegmentedButtons, Surface, Text, useTheme, ActivityIndicator } from 'react-native-paper';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { LANGUAGE_LABELS, QuestionnaireLanguage } from '@/lib/deviation-questionnaire';
+import { useRideStore } from '@/lib/store/useRideStore';
 import { useTripReviews } from '@/lib/store/useTripReviews';
 import { submitTripReview } from '@/lib/firebase-crud/reviews';
+import { formatTripTimeSummary } from '@/lib/trip-record-display';
 
 const arrivalOptions = ['Early', 'On time', 'Late'];
 const ratingOptions = [1, 2, 3, 4, 5];
@@ -34,7 +36,13 @@ const arrivalLabels: Record<string, Record<QuestionnaireLanguage, string>> = {
 };
 
 export default function PostTripQuestionnaire() {
-    const { rideId, deviationCount, fromTripRecord } = useLocalSearchParams<{ rideId?: string; deviationCount?: string; fromTripRecord?: string }>();
+    const { rideId, deviationCount, fromTripRecord, suggestedDurationSec, actualDurationSec } = useLocalSearchParams<{
+        rideId?: string;
+        deviationCount?: string;
+        fromTripRecord?: string;
+        suggestedDurationSec?: string;
+        actualDurationSec?: string;
+    }>();
     const isFromTripRecord = fromTripRecord === '1';
     const navigation = useNavigation();
     // Only enforce the navigation guard during the normal end-of-trip flow.
@@ -45,13 +53,15 @@ export default function PostTripQuestionnaire() {
     useEffect(() => {
         if (submitted) {
             // Reset the record tab's stack so this questionnaire doesn't linger
-            navigation.dispatch(
-                CommonActions.reset({
-                    index: 0,
-                    routes: [{ name: 'index' }],
-                })
-            );
-            
+            if (CommonActions?.reset) {
+                navigation.dispatch(
+                    CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'index' }],
+                    })
+                );
+            }
+
             if (isFromTripRecord) {
                 // Return to the trip record screen so the user sees their new responses.
                 router.navigate({
@@ -72,6 +82,23 @@ export default function PostTripQuestionnaire() {
     const styles = getStyles(theme);
     const savePostTrip = useTripReviews(state => state.savePostTrip);
     const markReviewed = useTripReviews(state => state.markReviewed);
+    const liveDuration = useRideStore(state => state.duration);
+    const liveSuggestedDuration = useRideStore(
+        state => state.suggestedRouteDurationSec || state.activeRouteDurationSec
+    );
+    const parsedSuggestedDuration = suggestedDurationSec ? Number(suggestedDurationSec) : undefined;
+    const parsedActualDuration = actualDurationSec ? Number(actualDurationSec) : undefined;
+    const tripTimeSummary = formatTripTimeSummary({
+        suggestedDurationSec:
+            typeof parsedSuggestedDuration === 'number' && Number.isFinite(parsedSuggestedDuration) && parsedSuggestedDuration > 0
+                ? parsedSuggestedDuration
+                : liveSuggestedDuration,
+        actualDurationSec:
+            typeof parsedActualDuration === 'number' && Number.isFinite(parsedActualDuration) && parsedActualDuration > 0
+                ? parsedActualDuration
+                : liveDuration,
+        language,
+    });
     const handleBack = () => {
         if (isFromTripRecord) {
             router.back();
@@ -140,6 +167,7 @@ export default function PostTripQuestionnaire() {
                         ]}
                         style={styles.languageToggle}
                     />
+                    {!!tripTimeSummary && <Text style={styles.tripSummary}>{tripTimeSummary}</Text>}
 
                     <Text style={styles.question}>{postTripText.arrival[language]}</Text>
                     <View style={styles.optionsRow}>
@@ -223,6 +251,12 @@ const getStyles = (theme?: MD3Theme) =>
         },
         languageToggle: {
             marginBottom: sizes.medium,
+        },
+        tripSummary: {
+            fontFamily: 'LGEIText-Regular',
+            fontSize: fontSizes.tinyPlus,
+            color: theme?.colors.onSurfaceVariant,
+            marginBottom: sizes.small,
         },
         question: {
             marginTop: sizes.medium,

@@ -19,9 +19,11 @@ import {
     YES_NO_UNSURE_OPTIONS,
 } from '@/lib/deviation-questionnaire';
 import { submitTripReview } from '@/lib/firebase-crud/reviews';
+import { FetchedGeneratedRoute, FetchRideData, getGeneratedRoutesByRideId } from '@/lib/firebase-crud/rides';
 import { RideDeviationEvent, useRideStore } from '@/lib/store/useRideStore';
+import { useRidesStore } from '@/lib/store/useRidesStore';
 import { DeviationMetadata, useTripReviews } from '@/lib/store/useTripReviews';
-import { formatRouteInstructionSummary } from '@/lib/trip-record-display';
+import { formatRouteInstructionSummary, getDeviationTimeImpact } from '@/lib/trip-record-display';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import Mapbox from '@rnmapbox/maps';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -58,40 +60,64 @@ function extractStreetName(instruction?: string) {
 function buildDeviationMetadata(
     deviationIndex: number,
     rideId?: string,
-    event?: RideDeviationEvent
+    event?: RideDeviationEvent,
+    trip?: Partial<Pick<FetchRideData, 'startTime' | 'endTime' | 'duration' | 'suggestedRouteDurationSec'>> | null,
+    existingMetadata?: DeviationMetadata | null,
+    generatedRoute?: Partial<FetchedGeneratedRoute> | null
 ): DeviationMetadata {
-    const now = new Date(event?.timestamp ?? Date.now());
+    const timestamp = event?.timestamp ?? existingMetadata?.timestamp ?? generatedRoute?.generatedAt ?? Date.now();
+    const now = new Date(timestamp);
     const dayOfWeek = dayName(now);
+    const impact = getDeviationTimeImpact({
+        metadata: existingMetadata,
+        event,
+        trip,
+        generatedRoute,
+    });
     const isFaster =
         typeof event?.previousEtaSec === 'number' && typeof event?.newEtaSec === 'number'
             ? event.newEtaSec < event.previousEtaSec
-            : null;
-    const generatedInstruction = event?.previousInstruction ?? null;
-    const deviationInstruction = event?.newInstruction ?? null;
-    const streetName = extractStreetName(generatedInstruction ?? undefined) ?? extractStreetName(deviationInstruction ?? undefined);
+            : impact.isEtaFaster;
+    const generatedInstruction = event?.previousInstruction ?? existingMetadata?.generatedInstruction ?? null;
+    const deviationInstruction = event?.newInstruction ?? existingMetadata?.deviationInstruction ?? null;
+    const streetName =
+        extractStreetName(generatedInstruction ?? undefined) ??
+        extractStreetName(deviationInstruction ?? undefined) ??
+        existingMetadata?.streetName ??
+        null;
+    const fallbackCoord = generatedRoute?.routePoints?.[0];
+    const gpsLocation = event
+        ? { latitude: event.location[1], longitude: event.location[0] }
+        : existingMetadata?.gpsLocation ??
+          (fallbackCoord ? { latitude: fallbackCoord[1], longitude: fallbackCoord[0] } : null);
     return {
         deviationId: rideId ? `dev-${rideId}-${deviationIndex}` : null,
-        routeId: event?.activeRouteId ?? null,
+        routeId: generatedRoute?.routeId ?? event?.activeRouteId ?? existingMetadata?.routeId ?? null,
         rideId: rideId ?? null,
-        userId: null,
+        userId: existingMetadata?.userId ?? null,
         index: deviationIndex,
         dateTime: now.toISOString(),
         isFaster,
+        isActuallyFaster: impact.isActuallyFaster,
+        previousEtaSec: impact.previousEtaSec,
+        newEtaSec: impact.newEtaSec,
+        actualRemainingSec: impact.actualRemainingSec,
+        actualTimeDiffSec: impact.actualTimeDiffSec,
         timestamp: now.getTime(),
         hour: now.getHours(),
         dayOfWeek,
         dayType: ['Saturday', 'Sunday'].includes(dayOfWeek) ? 'Weekend' : 'Weekday',
-        gpsLocation: event ? { latitude: event.location[1], longitude: event.location[0] } : null,
+        gpsLocation,
         suggestedPoint: null,
-        actualPoint: event ? { latitude: event.location[1], longitude: event.location[0] } : null,
+        actualPoint: gpsLocation,
         originalRouteEdge: generatedInstruction,
         deviatedEdge: deviationInstruction,
         streetName,
         generatedInstruction,
         deviationInstruction,
-        points: event ? [{ latitude: event.location[1], longitude: event.location[0] }] : null,
-        start_timestamp: event?.timestamp ?? null,
-        end_timestamp: event?.timestamp ?? null,
+        points: gpsLocation ? [gpsLocation] : null,
+        start_timestamp: event?.timestamp ?? existingMetadata?.start_timestamp ?? null,
+        end_timestamp: event?.timestamp ?? existingMetadata?.end_timestamp ?? null,
         createdAt: now.getTime(),
         mapMatchedEdge: null,
         imageUri: null,
@@ -139,16 +165,79 @@ export default function ReasonForDeviation() {
         }
     }, [submitted, reviewed, navigation, isFromTripRecord, rideId]);
     const markReviewed = useTripReviews(state => state.markReviewed);
+    const reviews = useTripReviews(state => state.reviews);
     const deviationEvents = useRideStore(state => state.deviationEvents);
+    const liveGeneratedRoutes = useRideStore(state => state.generatedRoutes);
+    const liveStartTime = useRideStore(state => state.startTime);
+    const liveDuration = useRideStore(state => state.duration);
+    const liveSuggestedDuration = useRideStore(
+        state => state.suggestedRouteDurationSec || state.activeRouteDurationSec
+    );
+    const selectedRide = useRidesStore(state => state.selectedRide);
+    const rides = useRidesStore(state => state.rides);
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
     const [answers, setAnswers] = useState<DeviationQuestionnaireAnswers>(emptyAnswers);
     const [submitting, setSubmitting] = useState(false);
+    const [remoteRoutes, setRemoteRoutes] = useState<FetchedGeneratedRoute[]>([]);
     const currentDeviationIndex = Math.max(0, Number(deviationIndex || 0));
     const totalDeviationCount = Math.max(1, Number(deviationCount || 1));
     const currentEvent = deviationEvents[currentDeviationIndex];
+    const matchedRide = selectedRide?.id === rideId ? selectedRide : rides.find(r => r.id === rideId);
+    const existingMetadata = rideId
+        ? reviews[rideId]?.answers[`dev-${rideId}-${currentDeviationIndex}`]?.metadata
+        : undefined;
+
+    useEffect(() => {
+        let cancelled = false;
+        if (rideId && deviationEvents.length === 0 && liveGeneratedRoutes.length === 0) {
+            getGeneratedRoutesByRideId(rideId)
+                .then(routes => {
+                    if (!cancelled) setRemoteRoutes(routes);
+                })
+                .catch(() => undefined);
+        }
+        return () => {
+            cancelled = true;
+        };
+    }, [deviationEvents.length, liveGeneratedRoutes.length, rideId]);
+
+    const matchedGeneratedRoute = useMemo(() => {
+        const allRoutes = liveGeneratedRoutes.length > 0 ? liveGeneratedRoutes : remoteRoutes;
+        const regeneratedOnly = allRoutes.filter(r => r.sequence > 1 && r.type === 'Regenerated Route');
+        const reroutedList = regeneratedOnly.length > 0 ? regeneratedOnly : allRoutes.filter(r => r.sequence > 1);
+        return reroutedList[currentDeviationIndex];
+    }, [currentDeviationIndex, liveGeneratedRoutes, remoteRoutes]);
+
+    const tripFallback = useMemo(
+        () =>
+            matchedRide ?? {
+                startTime: liveStartTime ?? undefined,
+                duration: liveDuration,
+                suggestedRouteDurationSec: liveSuggestedDuration,
+            },
+        [liveDuration, liveStartTime, liveSuggestedDuration, matchedRide]
+    );
     const metadata = useMemo(
-        () => buildDeviationMetadata(currentDeviationIndex, rideId, currentEvent),
-        [currentDeviationIndex, currentEvent, rideId]
+        () =>
+            buildDeviationMetadata(
+                currentDeviationIndex,
+                rideId,
+                currentEvent,
+                tripFallback,
+                existingMetadata,
+                matchedGeneratedRoute
+            ),
+        [currentDeviationIndex, currentEvent, existingMetadata, matchedGeneratedRoute, rideId, tripFallback]
+    );
+    const arrivalSummary = useMemo(
+        () =>
+            getDeviationTimeImpact({
+                metadata,
+                event: currentEvent,
+                trip: tripFallback,
+                generatedRoute: matchedGeneratedRoute,
+            }).formatSummary(language),
+        [currentEvent, language, matchedGeneratedRoute, metadata, tripFallback]
     );
     const contextPoint = metadata.gpsLocation ?? metadata.actualPoint;
     const contextCenter: [number, number] | null = contextPoint
@@ -283,6 +372,11 @@ export default function ReasonForDeviation() {
                             </Text>
                         </View>
                         <Text style={styles.contextLine}>Time: {formatDateTime(metadata.timestamp ?? undefined)}</Text>
+                        {!!arrivalSummary && (
+                            <Text style={styles.contextLine}>
+                                {language === 'tl' ? 'Oras ng dating' : 'Arrival time'}: {arrivalSummary}
+                            </Text>
+                        )}
                         <Text style={styles.contextLine}>GPS location: {metadata.gpsLocation ? `${metadata.gpsLocation.latitude.toFixed(5)}, ${metadata.gpsLocation.longitude.toFixed(5)}` : 'Not available yet'}</Text>
                     </View>
 
