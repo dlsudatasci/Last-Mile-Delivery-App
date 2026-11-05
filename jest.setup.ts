@@ -57,7 +57,7 @@ jest.mock("expo-sqlite", () => ({
                 rows.push({
                     phone: params[0],
                     rider_code: params[1],
-                    full_name: params[2],
+                    preferred_name: params[2],
                     gender: params[3],
                     age_range: params[4],
                     city: params[5],

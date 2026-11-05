@@ -137,8 +137,7 @@ describe("useCommunityRidesStore", () => {
             {
                 limit: 5,
                 startAfter: undefined,
-            },
-            true
+            }
         );
 
         expect(useCommunityRidesStore.getState().rides).toHaveLength(2);
@@ -178,8 +177,7 @@ describe("useCommunityRidesStore", () => {
             {
                 limit: 5,
                 startAfter: null,
-            },
-            true
+            }
         );
 
         expect(useCommunityRidesStore.getState().rides).toHaveLength(1);
@@ -298,8 +296,7 @@ describe("useCommunityRidesStore", () => {
             {
                 limit: 5,
                 startAfter: "ride1",
-            },
-            true
+            }
         );
 
         expect(useCommunityRidesStore.getState().rides).toHaveLength(2);

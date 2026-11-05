@@ -148,68 +148,88 @@ describe("useRideStore", () => {
         expect(Location.startLocationUpdatesAsync).not.toHaveBeenCalled();
     });
 
-    test('three raw off-route fixes supersede traffic and update map without a refresh; stale traffic is ignored', async () => {
+    test('two moderate off-route fixes supersede traffic and update map without a refresh; stale traffic is ignored', async () => {
         const { create, act } = require('react-test-renderer');
         const original: [number, number][] = [[121, 14], [121.01, 14]];
         const destination: [number, number] = [121.01, 14];
         useRideStore.setState({ isRecording: true, startTime: 123, activeRouteCoordinates: original,
-            activeRouteDestination: destination, activeRouteUpdatedAt: Date.now() - 200000 });
+            activeRouteDestination: destination, activeRouteUpdatedAt: Date.now() - 200000, activeGeneratedRouteId: null });
         const resolvers: ((route: any) => void)[] = [];
         const request = jest.fn(() => new Promise<any>(resolve => resolvers.push(resolve)));
         const stop = subscribeLiveRouteUpdates(request);
         const point = (lat: number, timestamp: number) => useRideStore.getState().addPoint({
             coords: { latitude: lat, longitude: 121, altitude: 0, accuracy: 5, altitudeAccuracy: 0, heading: 0, speed: 5 }, timestamp,
         });
-        point(14, 1000);
-        expect(request).toHaveBeenCalledTimes(1);
-        point(14.001, 6000);
-        point(14.002, 11000);
-        expect(request).toHaveBeenCalledTimes(1);
-        // Unrelated renders/store updates must not count as another GPS fix.
-        useRideStore.getState().increaseDuration();
-        expect(request).toHaveBeenCalledTimes(1);
-        point(14.003, 16000);
-        expect(request).toHaveBeenCalledTimes(2);
-        expect(request).toHaveBeenLastCalledWith([121, 14.003], destination);
-        expect(useRideStore.getState().routeUpdateStatus).toBe('rerouting');
-        expect(useRideStore.getState().isRecording).toBe(true);
-        useRideStore.setState({ displayPoints: [] });
         let tree: any;
-        act(() => { tree = create(React.createElement(MapRender)); });
-        const route = { coordinates: [[121, 14.003], destination], steps: [], congestionSegments: [], durationSec: 100, distanceM: 1000 };
-        await act(async () => { resolvers[1](route); });
-        expect(useRideStore.getState().activeRouteCoordinates).toEqual(route.coordinates);
-        const shape = tree.root.findAllByType('ShapeSource').find((node: any) => node.props.id === 'recordingUpcomingRouteSource');
-        expect(shape.props.shape.geometry.coordinates).toEqual(route.coordinates);
-        await act(async () => { resolvers[0]({ ...route, coordinates: original }); });
-        expect(useRideStore.getState().activeRouteCoordinates).toEqual(route.coordinates);
-        expect(useRideStore.getState().deviationEvents).toHaveLength(1);
-        expect(useRideStore.getState().isRecording).toBe(true);
-        expect(Location.stopLocationUpdatesAsync).not.toHaveBeenCalled();
-        act(() => tree.unmount());
-        stop();
+        try {
+            point(14, 1000);
+            expect(request).toHaveBeenCalledTimes(1);
+            // ~56 m off-route: one moderate fix alone does not trigger a reroute.
+            point(14.0005, 6000);
+            expect(request).toHaveBeenCalledTimes(1);
+            // Unrelated renders/store updates must not count as another GPS fix.
+            useRideStore.getState().increaseDuration();
+            expect(request).toHaveBeenCalledTimes(1);
+            // Second consecutive moderate off-route fix triggers the reroute.
+            point(14.0006, 11000);
+            expect(request).toHaveBeenCalledTimes(2);
+            expect(request).toHaveBeenLastCalledWith([121, 14.0006], destination);
+            expect(useRideStore.getState().routeUpdateStatus).toBe('rerouting');
+            expect(useRideStore.getState().isRecording).toBe(true);
+            // The deviation is recorded immediately, before the reroute response arrives.
+            expect(useRideStore.getState().deviationEvents).toHaveLength(1);
+            useRideStore.setState({ displayPoints: [] });
+            act(() => { tree = create(React.createElement(MapRender)); });
+            const route = { coordinates: [[121, 14.0006], destination], steps: [], congestionSegments: [], durationSec: 100, distanceM: 1000 };
+            await act(async () => { resolvers[1](route); });
+            expect(useRideStore.getState().activeRouteCoordinates).toEqual(route.coordinates);
+            const shape = tree.root.findAllByType('ShapeSource').find((node: any) => node.props.id === 'recordingUpcomingRouteSource');
+            expect(shape.props.shape.geometry.coordinates).toEqual(route.coordinates);
+            await act(async () => { resolvers[0]({ ...route, coordinates: original }); });
+            expect(useRideStore.getState().activeRouteCoordinates).toEqual(route.coordinates);
+            expect(useRideStore.getState().deviationEvents).toHaveLength(1);
+            // The recorded deviation is enriched with the new route even without a prior generated route id.
+            expect(useRideStore.getState().deviationEvents[0].newEtaSec).toBe(100);
+            expect(useRideStore.getState().isRecording).toBe(true);
+            expect(Location.stopLocationUpdatesAsync).not.toHaveBeenCalled();
+        } finally {
+            if (tree) act(() => tree.unmount());
+            stop();
+        }
     });
 
-    test.each(['cancel', 'pause', 'route change', 'unmount'])('pending reroute cannot apply after %s', async action => {
+    test.each(['cancel', 'pause', 'destination change', 'unmount'])('pending reroute cannot apply after %s', async action => {
         useRideStore.setState({ isRecording: true, startTime: 123,
             activeRouteCoordinates: [[121, 14], [121.01, 14]], activeRouteDestination: [121.01, 14], activeRouteUpdatedAt: Date.now() });
         let resolve!: (route: any) => void;
         const request = jest.fn(() => new Promise<any>(r => { resolve = r; }));
         const stop = subscribeLiveRouteUpdates(request);
-        for (let i = 1; i <= 3; i++) useRideStore.getState().addPoint({
-            coords: { latitude: 14.001 + i * 0.001, longitude: 121, altitude: 0, accuracy: 5, altitudeAccuracy: 0, heading: 0, speed: 5 }, timestamp: 1000 + (i - 1) * 5000,
-        });
-        expect(request).toHaveBeenCalledTimes(1);
-        if (action === 'cancel') await useRideStore.getState().resetRide();
-        if (action === 'pause') await useRideStore.getState().pauseRide();
-        if (action === 'route change') useRideStore.setState({ activeRouteCoordinates: [[121, 15], [122, 15]] });
-        if (action === 'unmount') stop();
-        const expected = useRideStore.getState().activeRouteCoordinates;
-        resolve({ coordinates: [[121, 16], [122, 16]], steps: [], congestionSegments: [], durationSec: 100, distanceM: 1000 });
-        await Promise.resolve();
-        expect(useRideStore.getState().activeRouteCoordinates).toBe(expected);
-        expect(useRideStore.getState().deviationEvents).toHaveLength(0);
-        stop();
+        try {
+            for (let i = 1; i <= 3; i++) useRideStore.getState().addPoint({
+                coords: { latitude: 14.001 + i * 0.001, longitude: 121, altitude: 0, accuracy: 5, altitudeAccuracy: 0, heading: 0, speed: 5 }, timestamp: 1000 + (i - 1) * 5000,
+            });
+            // The first far off-route fix (>100 m) reroutes immediately; later fixes are throttled.
+            expect(request).toHaveBeenCalledTimes(1);
+            expect(useRideStore.getState().deviationEvents).toHaveLength(1);
+            if (action === 'cancel') await useRideStore.getState().resetRide();
+            if (action === 'pause') await useRideStore.getState().pauseRide();
+            if (action === 'destination change') useRideStore.setState({ activeRouteDestination: [122, 15] });
+            if (action === 'unmount') stop();
+            const expected = useRideStore.getState().activeRouteCoordinates;
+            resolve({ coordinates: [[121, 16], [122, 16]], steps: [], congestionSegments: [], durationSec: 100, distanceM: 1000 });
+            await Promise.resolve();
+            expect(useRideStore.getState().activeRouteCoordinates).toBe(expected);
+            const events = useRideStore.getState().deviationEvents;
+            if (action === 'cancel') {
+                expect(events).toHaveLength(0);
+            } else {
+                // The deviation stays recorded, but the discarded route must not enrich it.
+                expect(events).toHaveLength(1);
+                expect(events[0].newEtaSec).toBeUndefined();
+            }
+        } finally {
+            stop();
+        }
     });
 
     // #1 increaseDuration
@@ -591,7 +611,7 @@ describe("useRideStore", () => {
         expect(snapped).toBeNull();
     });
 
-    test("addPoint keeps a plausible off-route GPS point but only moves display trace when near the active route", () => {
+    test("addPoint keeps a plausible off-route GPS point and shows the raw position when off the active route", () => {
         useRideStore.setState({
             activeRouteCoordinates: [
                 [121.0, 14.0],
@@ -622,8 +642,10 @@ describe("useRideStore", () => {
 
         const state = useRideStore.getState();
         expect(state.points).toHaveLength(2);
-        expect(state.displayPoints).toHaveLength(1);
+        // First point snaps onto the route; the off-route point is shown at its raw GPS position.
+        expect(state.displayPoints).toHaveLength(2);
         expect(state.displayPoints[0].coordinate.latitude).toBeCloseTo(14.0, 4);
+        expect(state.displayPoints[1].coordinate.latitude).toBeCloseTo(14.00065, 5);
     });
 
     test("addPoint drops an implausible GPS jump before it reaches the saved path", () => {
@@ -641,16 +663,17 @@ describe("useRideStore", () => {
         expect(useRideStore.getState().points).toHaveLength(1);
     });
 
-    test("display trace remains still when a raw GPS point is far off-route", () => {
+    test("display trace follows the raw GPS point when far off-route", () => {
         const existingDisplayPoint = {
             coordinate: { latitude: 14.0, longitude: 121.001 },
             timestamp: 1,
         };
+        const rawPoint = {
+            coordinate: { latitude: 14.01, longitude: 121.002 },
+            timestamp: 2,
+        };
         const nextDisplayPoints = getNextDisplayPoints({
-            rawPoint: {
-                coordinate: { latitude: 14.01, longitude: 121.002 },
-                timestamp: 2,
-            },
+            rawPoint,
             rawPoints: [],
             displayPoints: [existingDisplayPoint],
             routeCoordinates: [
@@ -659,7 +682,7 @@ describe("useRideStore", () => {
             ],
         });
 
-        expect(nextDisplayPoints).toEqual([existingDisplayPoint]);
+        expect(nextDisplayPoints).toEqual([existingDisplayPoint, rawPoint]);
     });
 
     // #8 haverineDistance

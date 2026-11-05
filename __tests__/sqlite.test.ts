@@ -74,7 +74,7 @@ describe("getLocalDb()", () => {
         expect(account).toEqual({
             phone: "09171234567",
             rider_code: "123456",
-            full_name: "Juan Dela Cruz",
+            preferred_name: "Juan Dela Cruz",
             gender: "Male",
             age_range: "25-34",
             city: "Pasig",

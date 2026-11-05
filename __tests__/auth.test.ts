@@ -543,7 +543,7 @@ describe("resolveAuthenticatedSession()", () => {
         const result = await resolveAuthenticatedSession(user as any);
 
         expect(result.destination).toBe("/main/(tabs)/home");
-        expect(result.profile?.preferredName).toBe("Juan");
+        expect(result.profile?.preferredName).toBe("Juan Dela Cruz");
     });
 
     test("uses the persisted profile when Firestore lookup fails", async () => {

@@ -423,7 +423,8 @@ describe("geocode()", () => {
 describe("getRoute()", () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        jest.useFakeTimers().setSystemTime(new Date("2026-07-17T10:00:00+08:00"));
+        // Construct in local time so getHours() === 10 (peak) regardless of the machine's timezone.
+        jest.useFakeTimers().setSystemTime(new Date(2026, 6, 17, 10, 0, 0));
     });
 
     afterEach(() => {

@@ -12,7 +12,8 @@ jest.mock("expo-localization", () => ({
 describe("startOfWeek()", () => {
 
     test("returns the same date when given a Monday", () => {
-        const date = new Date("2026-07-06");
+        // Local-time constructor (month is 0-based) so results don't depend on the machine timezone.
+        const date = new Date(2026, 6, 6);
         const result = startOfWeek(new Date(date));
 
         expect(result.getFullYear()).toBe(2026);
@@ -21,7 +22,7 @@ describe("startOfWeek()", () => {
     });
 
     test("returns Monday when given a Wednesday", () => {
-        const date = new Date("2026-07-08");
+        const date = new Date(2026, 6, 8);
         const result = startOfWeek(new Date(date));
 
         expect(result.getFullYear()).toBe(2026);
@@ -30,7 +31,7 @@ describe("startOfWeek()", () => {
     });
 
     test("returns the previous Monday when given a Sunday", () => {
-        const date = new Date("2026-07-12");
+        const date = new Date(2026, 6, 12);
         const result = startOfWeek(new Date(date));
 
         expect(result.getFullYear()).toBe(2026);
@@ -40,7 +41,7 @@ describe("startOfWeek()", () => {
 
     // Month test
     test("handles crossing into the previous month", () => {
-        const date = new Date("2026-08-01");
+        const date = new Date(2026, 7, 1);
         const result = startOfWeek(new Date(date));
 
         expect(result.getFullYear()).toBe(2026);
@@ -50,7 +51,7 @@ describe("startOfWeek()", () => {
 
     // Year test
     test("handles crossing into the previous year", () => {
-        const date = new Date("2027-01-01");
+        const date = new Date(2027, 0, 1);
         const result = startOfWeek(new Date(date));
 
         expect(result.getFullYear()).toBe(2026);
@@ -63,7 +64,7 @@ describe("startOfWeek()", () => {
 describe("startOfMonth()", () => {
 
     test("returns the same date when already the first day of the month", () => {
-        const date = new Date("2026-07-01");
+        const date = new Date(2026, 6, 1);
         const result = startOfMonth(date);
 
         expect(result.getFullYear()).toBe(2026);
@@ -72,7 +73,7 @@ describe("startOfMonth()", () => {
     });
 
     test("returns the first day when given a middle date", () => {
-        const date = new Date("2026-07-17");
+        const date = new Date(2026, 6, 17);
         const result = startOfMonth(date);
 
         expect(result.getFullYear()).toBe(2026);
@@ -81,7 +82,7 @@ describe("startOfMonth()", () => {
     });
 
     test("returns the first day when given the last day of the month", () => {
-        const date = new Date("2026-07-31");
+        const date = new Date(2026, 6, 31);
         const result = startOfMonth(date);
 
         expect(result.getFullYear()).toBe(2026);
@@ -90,7 +91,7 @@ describe("startOfMonth()", () => {
     });
 
     test("returns January 1 when given a date in January", () => {
-        const date = new Date("2026-01-15");
+        const date = new Date(2026, 0, 15);
         const result = startOfMonth(date);
 
         expect(result.getFullYear()).toBe(2026);
@@ -99,7 +100,7 @@ describe("startOfMonth()", () => {
     });
 
     test("handles leap year dates correctly", () => {
-        const date = new Date("2028-02-29");
+        const date = new Date(2028, 1, 29);
         const result = startOfMonth(date);
 
         expect(result.getFullYear()).toBe(2028);
