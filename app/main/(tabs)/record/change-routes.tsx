@@ -1,6 +1,7 @@
 import HeaderBackButton from '@/components/common/HeaderBackButton';
 import { LANGUAGE_LABELS, QuestionnaireLanguage } from '@/lib/deviation-questionnaire';
 import { RideDeviationEvent, useRideStore } from '@/lib/store/useRideStore';
+import { useTripReviews } from '@/lib/store/useTripReviews';
 import { formatRouteInstructionSummary } from '@/lib/trip-record-display';
 import { fontSizes, sizes } from '@/lib/utils/responsive-sizing';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -61,12 +62,19 @@ export default function ChangeRoutes() {
         language?: QuestionnaireLanguage;
         fromTripRecord?: string;
     }>();
+    const isFromTripRecord = fromTripRecord === '1';
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
     const deviationEvents = useRideStore(state => state.deviationEvents);
-    const totalChangeRoutes = Math.max(0, Number(deviationCount || deviationEvents.length || 0));
+    const persistedDeviationEvents = useTripReviews(state => (rideId ? state.deviationEventsByRide?.[rideId] : undefined));
+    const activeDeviationEvents = persistedDeviationEvents?.length
+        ? persistedDeviationEvents
+        : isFromTripRecord
+            ? []
+            : deviationEvents;
+    const totalChangeRoutes = Math.max(0, Number(deviationCount || activeDeviationEvents.length || 0));
     const changeRoutes = useMemo(
-        () => buildChangeRoutes(totalChangeRoutes, deviationEvents),
-        [deviationEvents, totalChangeRoutes]
+        () => buildChangeRoutes(totalChangeRoutes, activeDeviationEvents),
+        [activeDeviationEvents, totalChangeRoutes]
     );
 
     const startReview = () => {

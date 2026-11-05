@@ -70,8 +70,21 @@ export interface TripReview {
     incompleteFeedback?: IncompleteFeedback; // for trips that didn't reach the destination
 }
 
+export interface PersistedDeviationEvent {
+    timestamp: number;
+    location: [number, number];
+    offRouteDistanceM: number;
+    previousInstruction?: string;
+    newInstruction?: string;
+    previousEtaSec?: number;
+    newEtaSec?: number;
+    activeRouteId?: string;
+}
+
 interface TripReviewsState {
     reviews: Record<string, TripReview>;
+    deviationEventsByRide: Record<string, PersistedDeviationEvent[]>;
+    saveDeviationEvents: (tripId: string, events: PersistedDeviationEvent[]) => void;
     saveDeviation: (tripId: string, deviationId: string, answers: DeviationAnswers) => void;
     savePostTrip: (tripId: string, answers: PostTripAnswers) => void;
     saveRouteFeedback: (tripId: string, feedback: RouteFeedback) => void;
@@ -81,11 +94,20 @@ interface TripReviewsState {
 }
 
 const INITIAL_REVIEWS: Record<string, TripReview> = {};
+const INITIAL_DEVIATION_EVENTS: Record<string, PersistedDeviationEvent[]> = {};
 
 export const useTripReviews = create<TripReviewsState>()(
     persist(
         set => ({
             reviews: INITIAL_REVIEWS,
+            deviationEventsByRide: INITIAL_DEVIATION_EVENTS,
+            saveDeviationEvents: (tripId, events) =>
+                set(state => ({
+                    deviationEventsByRide: {
+                        ...state.deviationEventsByRide,
+                        [tripId]: events,
+                    },
+                })),
             saveDeviation: (tripId, deviationId, answers) =>
                 set(state => {
                     const existing = state.reviews[tripId] ?? { status: 'pending' as ReviewStatus, answers: {} };
@@ -156,7 +178,10 @@ export const useTripReviews = create<TripReviewsState>()(
         {
             name: 'devia-trip-reviews',
             storage: createJSONStorage(() => AsyncStorage),
-            partialize: state => ({ reviews: state.reviews }),
+            partialize: state => ({
+                reviews: state.reviews,
+                deviationEventsByRide: state.deviationEventsByRide,
+            }),
         }
     )
 );

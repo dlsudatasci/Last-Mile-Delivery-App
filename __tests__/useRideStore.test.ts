@@ -21,6 +21,7 @@ import {
     useRideStore,
 } from "../lib/store/useRideStore";
 import { snapLngLatToRoute } from "../lib/utils/routeSnapping";
+import { useTripReviews } from "../lib/store/useTripReviews";
 
 // Mocks
 jest.mock("../lib/utils/firebaseConfig", () => ({
@@ -101,6 +102,7 @@ describe("useRideStore", () => {
 
             annotations: [],
         });
+        useTripReviews.setState({ reviews: {}, deviationEventsByRide: {} });
         jest.clearAllMocks();
 
         (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);
@@ -1196,6 +1198,10 @@ describe("useRideStore", () => {
 
         expect(result).toMatchObject({ success: true, rideId: "ride-123", deviationCount: 2 });
         expect(saveRide).toHaveBeenCalledWith(expect.objectContaining({ deviationCount: 2 }));
+        expect(useTripReviews.getState().deviationEventsByRide["ride-123"]).toEqual([
+            { timestamp: 1, location: [121, 14], offRouteDistanceM: 40 },
+            { timestamp: 2, location: [121.01, 14.01], offRouteDistanceM: 42 },
+        ]);
     });
 
     test("finishRide uses provided trip route title", async () => {

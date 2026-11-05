@@ -140,15 +140,27 @@ export default function ReasonForDeviation() {
     }, [submitted, reviewed, navigation, isFromTripRecord, rideId]);
     const markReviewed = useTripReviews(state => state.markReviewed);
     const deviationEvents = useRideStore(state => state.deviationEvents);
+    const persistedDeviationEvents = useTripReviews(state => (rideId ? state.deviationEventsByRide?.[rideId] : undefined));
     const [language, setLanguage] = useState<QuestionnaireLanguage>(languageParam === 'tl' ? 'tl' : 'en');
     const [answers, setAnswers] = useState<DeviationQuestionnaireAnswers>(emptyAnswers);
     const [submitting, setSubmitting] = useState(false);
     const currentDeviationIndex = Math.max(0, Number(deviationIndex || 0));
     const totalDeviationCount = Math.max(1, Number(deviationCount || 1));
-    const currentEvent = deviationEvents[currentDeviationIndex];
+    const existingMetadata = useTripReviews(state =>
+        rideId ? state.reviews[rideId]?.answers?.[`dev-${rideId}-${currentDeviationIndex}`]?.metadata : undefined
+    );
+    const activeDeviationEvents = persistedDeviationEvents?.length
+        ? persistedDeviationEvents
+        : isFromTripRecord
+            ? []
+            : deviationEvents;
+    const currentEvent = activeDeviationEvents[currentDeviationIndex];
     const metadata = useMemo(
-        () => buildDeviationMetadata(currentDeviationIndex, rideId, currentEvent),
-        [currentDeviationIndex, currentEvent, rideId]
+        () =>
+            currentEvent
+                ? buildDeviationMetadata(currentDeviationIndex, rideId, currentEvent)
+                : existingMetadata ?? buildDeviationMetadata(currentDeviationIndex, rideId, undefined),
+        [currentDeviationIndex, currentEvent, existingMetadata, rideId]
     );
     const contextPoint = metadata.gpsLocation ?? metadata.actualPoint;
     const contextCenter: [number, number] | null = contextPoint

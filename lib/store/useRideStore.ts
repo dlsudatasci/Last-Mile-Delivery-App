@@ -8,6 +8,7 @@ import { isTransientFirestoreError, NewRideData, saveRide } from '../firebase-cr
 import { getDistanceToRouteM, getRoute, LngLat, RouteCongestionSegment, RouteResult, RouteStep } from '../utils/directions';
 import { sanitizeRidePoints, shouldRecordRidePoint } from '../utils/gpsPath';
 import { snapLngLatToRoute } from '../utils/routeSnapping';
+import { useTripReviews } from './useTripReviews';
 
 const setAsyncFlag = async (key: string, value: boolean) => {
     try {
@@ -348,6 +349,9 @@ export const useRideStore = create<RideState>((set, get) => ({
             };
 
             const rideId = await saveRide(rideData);
+            if (rideId && deviationEvents.length > 0) {
+                useTripReviews.getState().saveDeviationEvents?.(rideId, deviationEvents);
+            }
 
             set({
                 isRecording: false,
@@ -684,7 +688,7 @@ export function subscribeLiveRouteUpdates(
         const destination = state.activeRouteDestination;
         // Record the deviation immediately to ensure post-trip questions appear even if the network fails.
         const lastEvent = state.deviationEvents[state.deviationEvents.length - 1];
-        const isNewDeviation = !lastEvent || lastEvent.activeRouteId !== state.activeGeneratedRouteId;
+        const isNewDeviation = !lastEvent || (lastEvent.activeRouteId ?? null) !== (state.activeGeneratedRouteId ?? null);
         if (deviation && isNewDeviation) {
             state.addDeviationEvent({
                 timestamp: now,
@@ -707,7 +711,7 @@ export function subscribeLiveRouteUpdates(
             if (deviation) {
                 const events = [...latest.deviationEvents];
                 const lastEventToEnrich = events.length > 0 ? { ...events[events.length - 1] } : null;
-                if (lastEventToEnrich && lastEventToEnrich.activeRouteId === state.activeGeneratedRouteId) {
+                if (lastEventToEnrich && (lastEventToEnrich.activeRouteId ?? null) === (state.activeGeneratedRouteId ?? null)) {
                     lastEventToEnrich.newInstruction = route.steps[0]?.instruction;
                     lastEventToEnrich.newEtaSec = route.durationSec;
                     events[events.length - 1] = lastEventToEnrich;
